@@ -6,6 +6,46 @@ option go_package = "github.com/drewfead/proto-cli/simple";
 
 import "internal/clipb/cli.proto";
 
+// DatabaseConfig is a nested configuration message
+message DatabaseConfig {
+  string url = 1 [(cli.flag) = {
+    name: "url",
+    usage: "Database connection URL"
+  }];
+  int32 max_connections = 2 [(cli.flag) = {
+    name: "max-connections",
+    usage: "Maximum database connections"
+  }];
+  int32 timeout_seconds = 3 [(cli.flag) = {
+    name: "timeout",
+    usage: "Connection timeout in seconds"
+  }];
+}
+
+// LogLevel enum for configuration
+enum LogLevel {
+  LOG_LEVEL_UNSPECIFIED = 0;
+  DEBUG = 1;
+  INFO = 2;
+  WARN = 3;
+  ERROR = 4;
+}
+
+// PostgresBackend configuration
+message PostgresBackend {
+  string host = 1;
+  int32 port = 2;
+  string database = 3;
+}
+
+// MySQLBackend configuration
+message MySQLBackend {
+  string host = 1;
+  int32 port = 2;
+  string database = 3;
+  bool enable_ssl = 4;
+}
+
 // UserServiceConfig defines configuration for UserService
 message UserServiceConfig {
   string database_url = 1 [(cli.flag) = {
@@ -17,6 +57,33 @@ message UserServiceConfig {
     name: "max-conns",
     usage: "Maximum database connections"
   }];
+
+  // Nested message field
+  DatabaseConfig database = 3 [(cli.flag) = {
+    name: "database",
+    usage: "Database configuration"
+  }];
+
+  // Enum field
+  LogLevel log_level = 4 [(cli.flag) = {
+    name: "log-level",
+    usage: "Logging level"
+  }];
+
+  // Repeated field
+  repeated string allowed_origins = 5 [(cli.flag) = {
+    name: "allowed-origins",
+    usage: "CORS allowed origins"
+  }];
+
+  // Map field
+  map<string, string> feature_flags = 6;
+
+  // Oneof (union type)
+  oneof backend {
+    PostgresBackend postgres = 7;
+    MySQLBackend mysql = 8;
+  }
 }
 
 // Address is a nested message type for demonstrating recursive deserializers

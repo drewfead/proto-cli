@@ -62,6 +62,10 @@ func UserServiceServiceCommand(ctx context.Context, implOrFactory interface{}, o
 		Name:  "max-conns",
 		Usage: "Maximum database connections",
 	})
+	flags_getuser = append(flags_getuser, &v3.StringFlag{
+		Name:  "allowed-origins",
+		Usage: "CORS allowed origins",
+	})
 
 	// Add format-specific flags from registered formats
 	for _, outputFmt := range options.OutputFormats() {
@@ -224,6 +228,10 @@ func UserServiceServiceCommand(ctx context.Context, implOrFactory interface{}, o
 	flags_createuser = append(flags_createuser, &v3.IntFlag{
 		Name:  "max-conns",
 		Usage: "Maximum database connections",
+	})
+	flags_createuser = append(flags_createuser, &v3.StringFlag{
+		Name:  "allowed-origins",
+		Usage: "CORS allowed origins",
 	})
 
 	// Add format-specific flags from registered formats

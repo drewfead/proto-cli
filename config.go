@@ -196,7 +196,21 @@ func (l *ConfigLoader) mergeConfig(data map[string]interface{}, target proto.Mes
 
 // setFieldValue sets a proto field value based on type
 func (l *ConfigLoader) setFieldValue(msg protoreflect.Message, field protoreflect.FieldDescriptor, value interface{}) error {
+	// Handle repeated fields (lists)
+	if field.IsList() {
+		return l.setListField(msg, field, value)
+	}
+
+	// Handle map fields
+	if field.IsMap() {
+		return l.setMapField(msg, field, value)
+	}
+
 	switch field.Kind() {
+	case protoreflect.MessageKind:
+		// Handle nested message types
+		return l.setMessageField(msg, field, value)
+
 	case protoreflect.StringKind:
 		str, ok := value.(string)
 		if !ok {
@@ -259,8 +273,237 @@ func (l *ConfigLoader) setFieldValue(msg protoreflect.Message, field protoreflec
 		}
 		msg.Set(field, protoreflect.ValueOfFloat64(floatVal))
 
+	case protoreflect.EnumKind:
+		return l.setEnumField(msg, field, value)
+
 	default:
 		return fmt.Errorf("unsupported field type: %s", field.Kind())
+	}
+
+	return nil
+}
+
+// setMessageField handles nested message types
+func (l *ConfigLoader) setMessageField(msg protoreflect.Message, field protoreflect.FieldDescriptor, value interface{}) error {
+	// Value should be a map for nested messages
+	nestedMap, ok := value.(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("expected map for message field, got %T", value)
+	}
+
+	// Check if this field belongs to a oneof
+	if oneof := field.ContainingOneof(); oneof != nil {
+		return l.setOneofField(msg, field, oneof, nestedMap)
+	}
+
+	// Create new message instance
+	nestedMsg := msg.NewField(field).Message()
+
+	// Recursively merge config into nested message
+	if err := l.mergeConfig(nestedMap, nestedMsg.Interface()); err != nil {
+		return fmt.Errorf("failed to merge nested message: %w", err)
+	}
+
+	// Set the nested message on the parent
+	msg.Set(field, protoreflect.ValueOfMessage(nestedMsg))
+
+	return nil
+}
+
+// setOneofField handles oneof (union) types
+func (l *ConfigLoader) setOneofField(msg protoreflect.Message, field protoreflect.FieldDescriptor, oneof protoreflect.OneofDescriptor, value map[string]interface{}) error {
+	// Clear any currently set field in this oneof
+	msg.Clear(field)
+
+	// Create new message instance for the oneof variant
+	nestedMsg := msg.NewField(field).Message()
+
+	// Recursively merge config into nested message
+	if err := l.mergeConfig(value, nestedMsg.Interface()); err != nil {
+		return fmt.Errorf("failed to merge oneof field: %w", err)
+	}
+
+	// Set the oneof field
+	msg.Set(field, protoreflect.ValueOfMessage(nestedMsg))
+
+	return nil
+}
+
+// setListField handles repeated fields
+func (l *ConfigLoader) setListField(msg protoreflect.Message, field protoreflect.FieldDescriptor, value interface{}) error {
+	// Value should be a slice
+	slice, ok := value.([]interface{})
+	if !ok {
+		return fmt.Errorf("expected slice for list field, got %T", value)
+	}
+
+	list := msg.Mutable(field).List()
+
+	// Clear existing values
+	for list.Len() > 0 {
+		list.Truncate(0)
+	}
+
+	// Append each element
+	for i, elem := range slice {
+		if err := l.appendListElement(list, field, elem); err != nil {
+			return fmt.Errorf("failed to append element %d: %w", i, err)
+		}
+	}
+
+	return nil
+}
+
+// appendListElement appends a single element to a list field
+func (l *ConfigLoader) appendListElement(list protoreflect.List, field protoreflect.FieldDescriptor, value interface{}) error {
+	switch field.Kind() {
+	case protoreflect.MessageKind:
+		// Nested message in list
+		nestedMap, ok := value.(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("expected map for message element, got %T", value)
+		}
+
+		// Create new message
+		elemMsg := list.NewElement().Message()
+		if err := l.mergeConfig(nestedMap, elemMsg.Interface()); err != nil {
+			return err
+		}
+		list.Append(protoreflect.ValueOfMessage(elemMsg))
+
+	case protoreflect.StringKind:
+		str, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("expected string, got %T", value)
+		}
+		list.Append(protoreflect.ValueOfString(str))
+
+	case protoreflect.Int32Kind, protoreflect.Int64Kind:
+		var intVal int64
+		switch v := value.(type) {
+		case int:
+			intVal = int64(v)
+		case int64:
+			intVal = v
+		case float64:
+			intVal = int64(v)
+		default:
+			return fmt.Errorf("expected int, got %T", value)
+		}
+		list.Append(protoreflect.ValueOfInt64(intVal))
+
+	case protoreflect.BoolKind:
+		boolVal, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("expected bool, got %T", value)
+		}
+		list.Append(protoreflect.ValueOfBool(boolVal))
+
+	default:
+		return fmt.Errorf("unsupported list element type: %s", field.Kind())
+	}
+
+	return nil
+}
+
+// setMapField handles map fields
+func (l *ConfigLoader) setMapField(msg protoreflect.Message, field protoreflect.FieldDescriptor, value interface{}) error {
+	// Value should be a map
+	yamlMap, ok := value.(map[string]interface{})
+	if !ok {
+		return fmt.Errorf("expected map for map field, got %T", value)
+	}
+
+	mapValue := msg.Mutable(field).Map()
+
+	// Clear existing entries
+	mapValue.Range(func(k protoreflect.MapKey, v protoreflect.Value) bool {
+		mapValue.Clear(k)
+		return true
+	})
+
+	// Add each entry
+	valueField := field.MapValue()
+	for k, v := range yamlMap {
+		mapKey := protoreflect.ValueOfString(k).MapKey()
+
+		var mapVal protoreflect.Value
+		switch valueField.Kind() {
+		case protoreflect.MessageKind:
+			// Nested message as map value
+			nestedMap, ok := v.(map[string]interface{})
+			if !ok {
+				return fmt.Errorf("expected map for message value, got %T", v)
+			}
+
+			elemMsg := mapValue.NewValue().Message()
+			if err := l.mergeConfig(nestedMap, elemMsg.Interface()); err != nil {
+				return fmt.Errorf("failed to merge map value for key %s: %w", k, err)
+			}
+			mapVal = protoreflect.ValueOfMessage(elemMsg)
+
+		case protoreflect.StringKind:
+			str, ok := v.(string)
+			if !ok {
+				return fmt.Errorf("expected string, got %T", v)
+			}
+			mapVal = protoreflect.ValueOfString(str)
+
+		case protoreflect.Int32Kind, protoreflect.Int64Kind:
+			var intVal int64
+			switch val := v.(type) {
+			case int:
+				intVal = int64(val)
+			case int64:
+				intVal = val
+			case float64:
+				intVal = int64(val)
+			default:
+				return fmt.Errorf("expected int, got %T", v)
+			}
+			mapVal = protoreflect.ValueOfInt64(intVal)
+
+		default:
+			return fmt.Errorf("unsupported map value type: %s", valueField.Kind())
+		}
+
+		mapValue.Set(mapKey, mapVal)
+	}
+
+	return nil
+}
+
+// setEnumField handles enum fields
+func (l *ConfigLoader) setEnumField(msg protoreflect.Message, field protoreflect.FieldDescriptor, value interface{}) error {
+	enumDesc := field.Enum()
+
+	// Value can be string (enum name) or int (enum number)
+	switch v := value.(type) {
+	case string:
+		// Look up enum by name
+		enumVal := enumDesc.Values().ByName(protoreflect.Name(v))
+		if enumVal == nil {
+			return fmt.Errorf("unknown enum value: %s", v)
+		}
+		msg.Set(field, protoreflect.ValueOfEnum(enumVal.Number()))
+
+	case int, int32, int64, float64:
+		// Convert to enum number
+		var num int32
+		switch val := v.(type) {
+		case int:
+			num = int32(val)
+		case int32:
+			num = val
+		case int64:
+			num = int32(val)
+		case float64:
+			num = int32(val)
+		}
+		msg.Set(field, protoreflect.ValueOfEnum(protoreflect.EnumNumber(num)))
+
+	default:
+		return fmt.Errorf("expected string or int for enum, got %T", value)
 	}
 
 	return nil
@@ -272,7 +515,11 @@ func (l *ConfigLoader) applyEnvVars(target proto.Message) error {
 		return nil
 	}
 
-	msg := target.ProtoReflect()
+	return l.applyEnvVarsRecursive(target.ProtoReflect(), l.envPrefix)
+}
+
+// applyEnvVarsRecursive recursively applies environment variables to nested messages
+func (l *ConfigLoader) applyEnvVarsRecursive(msg protoreflect.Message, prefix string) error {
 	fields := msg.Descriptor().Fields()
 
 	for i := 0; i < fields.Len(); i++ {
@@ -281,7 +528,24 @@ func (l *ConfigLoader) applyEnvVars(target proto.Message) error {
 		// Build environment variable name from field name
 		// Convert snake_case to UPPER_CASE
 		fieldName := string(field.Name())
-		envName := l.envPrefix + "_" + strings.ToUpper(fieldName)
+		envName := prefix + "_" + strings.ToUpper(fieldName)
+
+		// Handle nested messages recursively
+		if field.Kind() == protoreflect.MessageKind && !field.IsList() && !field.IsMap() {
+			// Check if this field is already set
+			if !msg.Has(field) {
+				// Create new message instance
+				nestedMsg := msg.NewField(field).Message()
+				msg.Set(field, protoreflect.ValueOfMessage(nestedMsg))
+			}
+
+			// Recursively apply env vars to nested message
+			nestedMsg := msg.Get(field).Message()
+			if err := l.applyEnvVarsRecursive(nestedMsg, envName); err != nil {
+				return err
+			}
+			continue
+		}
 
 		// Check if env var is set
 		envValue, exists := os.LookupEnv(envName)
@@ -300,7 +564,11 @@ func (l *ConfigLoader) applyEnvVars(target proto.Message) error {
 
 // applyFlags overrides fields with CLI flags (single-command mode only)
 func (l *ConfigLoader) applyFlags(cmd *cli.Command, target proto.Message) error {
-	msg := target.ProtoReflect()
+	return l.applyFlagsRecursive(cmd, target.ProtoReflect(), "")
+}
+
+// applyFlagsRecursive recursively applies CLI flags to nested messages
+func (l *ConfigLoader) applyFlagsRecursive(cmd *cli.Command, msg protoreflect.Message, prefix string) error {
 	fields := msg.Descriptor().Fields()
 
 	for i := 0; i < fields.Len(); i++ {
@@ -312,14 +580,37 @@ func (l *ConfigLoader) applyFlags(cmd *cli.Command, target proto.Message) error 
 			continue
 		}
 
+		// Add prefix for nested fields (e.g., "database-url" becomes "database-url")
+		fullFlagName := flagName
+		if prefix != "" {
+			fullFlagName = prefix + "-" + flagName
+		}
+
+		// Handle nested messages recursively
+		if field.Kind() == protoreflect.MessageKind && !field.IsList() && !field.IsMap() {
+			// Check if this field is already set
+			if !msg.Has(field) {
+				// Create new message instance
+				nestedMsg := msg.NewField(field).Message()
+				msg.Set(field, protoreflect.ValueOfMessage(nestedMsg))
+			}
+
+			// Recursively apply flags to nested message
+			nestedMsg := msg.Get(field).Message()
+			if err := l.applyFlagsRecursive(cmd, nestedMsg, fullFlagName); err != nil {
+				return err
+			}
+			continue
+		}
+
 		// Check if flag was set by user (not just default)
-		if !cmd.IsSet(flagName) {
+		if !cmd.IsSet(fullFlagName) {
 			continue
 		}
 
 		// Get flag value and set field
-		if err := l.setFieldFromFlag(cmd, msg, field, flagName); err != nil {
-			return fmt.Errorf("failed to set field from flag %s: %w", flagName, err)
+		if err := l.setFieldFromFlag(cmd, msg, field, fullFlagName); err != nil {
+			return fmt.Errorf("failed to set field from flag %s: %w", fullFlagName, err)
 		}
 	}
 

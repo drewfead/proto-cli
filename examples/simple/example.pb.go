@@ -22,18 +22,280 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// LogLevel enum for configuration
+type LogLevel int32
+
+const (
+	LogLevel_LOG_LEVEL_UNSPECIFIED LogLevel = 0
+	LogLevel_DEBUG                 LogLevel = 1
+	LogLevel_INFO                  LogLevel = 2
+	LogLevel_WARN                  LogLevel = 3
+	LogLevel_ERROR                 LogLevel = 4
+)
+
+// Enum value maps for LogLevel.
+var (
+	LogLevel_name = map[int32]string{
+		0: "LOG_LEVEL_UNSPECIFIED",
+		1: "DEBUG",
+		2: "INFO",
+		3: "WARN",
+		4: "ERROR",
+	}
+	LogLevel_value = map[string]int32{
+		"LOG_LEVEL_UNSPECIFIED": 0,
+		"DEBUG":                 1,
+		"INFO":                  2,
+		"WARN":                  3,
+		"ERROR":                 4,
+	}
+)
+
+func (x LogLevel) Enum() *LogLevel {
+	p := new(LogLevel)
+	*p = x
+	return p
+}
+
+func (x LogLevel) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (LogLevel) Descriptor() protoreflect.EnumDescriptor {
+	return file_examples_simple_example_proto_enumTypes[0].Descriptor()
+}
+
+func (LogLevel) Type() protoreflect.EnumType {
+	return &file_examples_simple_example_proto_enumTypes[0]
+}
+
+func (x LogLevel) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use LogLevel.Descriptor instead.
+func (LogLevel) EnumDescriptor() ([]byte, []int) {
+	return file_examples_simple_example_proto_rawDescGZIP(), []int{0}
+}
+
+// DatabaseConfig is a nested configuration message
+type DatabaseConfig struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Url            string                 `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`
+	MaxConnections int32                  `protobuf:"varint,2,opt,name=max_connections,json=maxConnections,proto3" json:"max_connections,omitempty"`
+	TimeoutSeconds int32                  `protobuf:"varint,3,opt,name=timeout_seconds,json=timeoutSeconds,proto3" json:"timeout_seconds,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *DatabaseConfig) Reset() {
+	*x = DatabaseConfig{}
+	mi := &file_examples_simple_example_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DatabaseConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DatabaseConfig) ProtoMessage() {}
+
+func (x *DatabaseConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_examples_simple_example_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DatabaseConfig.ProtoReflect.Descriptor instead.
+func (*DatabaseConfig) Descriptor() ([]byte, []int) {
+	return file_examples_simple_example_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *DatabaseConfig) GetUrl() string {
+	if x != nil {
+		return x.Url
+	}
+	return ""
+}
+
+func (x *DatabaseConfig) GetMaxConnections() int32 {
+	if x != nil {
+		return x.MaxConnections
+	}
+	return 0
+}
+
+func (x *DatabaseConfig) GetTimeoutSeconds() int32 {
+	if x != nil {
+		return x.TimeoutSeconds
+	}
+	return 0
+}
+
+// PostgresBackend configuration
+type PostgresBackend struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Host          string                 `protobuf:"bytes,1,opt,name=host,proto3" json:"host,omitempty"`
+	Port          int32                  `protobuf:"varint,2,opt,name=port,proto3" json:"port,omitempty"`
+	Database      string                 `protobuf:"bytes,3,opt,name=database,proto3" json:"database,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PostgresBackend) Reset() {
+	*x = PostgresBackend{}
+	mi := &file_examples_simple_example_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PostgresBackend) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PostgresBackend) ProtoMessage() {}
+
+func (x *PostgresBackend) ProtoReflect() protoreflect.Message {
+	mi := &file_examples_simple_example_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PostgresBackend.ProtoReflect.Descriptor instead.
+func (*PostgresBackend) Descriptor() ([]byte, []int) {
+	return file_examples_simple_example_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *PostgresBackend) GetHost() string {
+	if x != nil {
+		return x.Host
+	}
+	return ""
+}
+
+func (x *PostgresBackend) GetPort() int32 {
+	if x != nil {
+		return x.Port
+	}
+	return 0
+}
+
+func (x *PostgresBackend) GetDatabase() string {
+	if x != nil {
+		return x.Database
+	}
+	return ""
+}
+
+// MySQLBackend configuration
+type MySQLBackend struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Host          string                 `protobuf:"bytes,1,opt,name=host,proto3" json:"host,omitempty"`
+	Port          int32                  `protobuf:"varint,2,opt,name=port,proto3" json:"port,omitempty"`
+	Database      string                 `protobuf:"bytes,3,opt,name=database,proto3" json:"database,omitempty"`
+	EnableSsl     bool                   `protobuf:"varint,4,opt,name=enable_ssl,json=enableSsl,proto3" json:"enable_ssl,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MySQLBackend) Reset() {
+	*x = MySQLBackend{}
+	mi := &file_examples_simple_example_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MySQLBackend) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MySQLBackend) ProtoMessage() {}
+
+func (x *MySQLBackend) ProtoReflect() protoreflect.Message {
+	mi := &file_examples_simple_example_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MySQLBackend.ProtoReflect.Descriptor instead.
+func (*MySQLBackend) Descriptor() ([]byte, []int) {
+	return file_examples_simple_example_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *MySQLBackend) GetHost() string {
+	if x != nil {
+		return x.Host
+	}
+	return ""
+}
+
+func (x *MySQLBackend) GetPort() int32 {
+	if x != nil {
+		return x.Port
+	}
+	return 0
+}
+
+func (x *MySQLBackend) GetDatabase() string {
+	if x != nil {
+		return x.Database
+	}
+	return ""
+}
+
+func (x *MySQLBackend) GetEnableSsl() bool {
+	if x != nil {
+		return x.EnableSsl
+	}
+	return false
+}
+
 // UserServiceConfig defines configuration for UserService
 type UserServiceConfig struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	DatabaseUrl    string                 `protobuf:"bytes,1,opt,name=database_url,json=databaseUrl,proto3" json:"database_url,omitempty"`
 	MaxConnections int64                  `protobuf:"varint,2,opt,name=max_connections,json=maxConnections,proto3" json:"max_connections,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Nested message field
+	Database *DatabaseConfig `protobuf:"bytes,3,opt,name=database,proto3" json:"database,omitempty"`
+	// Enum field
+	LogLevel LogLevel `protobuf:"varint,4,opt,name=log_level,json=logLevel,proto3,enum=example.LogLevel" json:"log_level,omitempty"`
+	// Repeated field
+	AllowedOrigins []string `protobuf:"bytes,5,rep,name=allowed_origins,json=allowedOrigins,proto3" json:"allowed_origins,omitempty"`
+	// Map field
+	FeatureFlags map[string]string `protobuf:"bytes,6,rep,name=feature_flags,json=featureFlags,proto3" json:"feature_flags,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// Oneof (union type)
+	//
+	// Types that are valid to be assigned to Backend:
+	//
+	//	*UserServiceConfig_Postgres
+	//	*UserServiceConfig_Mysql
+	Backend       isUserServiceConfig_Backend `protobuf_oneof:"backend"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *UserServiceConfig) Reset() {
 	*x = UserServiceConfig{}
-	mi := &file_examples_simple_example_proto_msgTypes[0]
+	mi := &file_examples_simple_example_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -45,7 +307,7 @@ func (x *UserServiceConfig) String() string {
 func (*UserServiceConfig) ProtoMessage() {}
 
 func (x *UserServiceConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_examples_simple_example_proto_msgTypes[0]
+	mi := &file_examples_simple_example_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -58,7 +320,7 @@ func (x *UserServiceConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UserServiceConfig.ProtoReflect.Descriptor instead.
 func (*UserServiceConfig) Descriptor() ([]byte, []int) {
-	return file_examples_simple_example_proto_rawDescGZIP(), []int{0}
+	return file_examples_simple_example_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *UserServiceConfig) GetDatabaseUrl() string {
@@ -75,6 +337,75 @@ func (x *UserServiceConfig) GetMaxConnections() int64 {
 	return 0
 }
 
+func (x *UserServiceConfig) GetDatabase() *DatabaseConfig {
+	if x != nil {
+		return x.Database
+	}
+	return nil
+}
+
+func (x *UserServiceConfig) GetLogLevel() LogLevel {
+	if x != nil {
+		return x.LogLevel
+	}
+	return LogLevel_LOG_LEVEL_UNSPECIFIED
+}
+
+func (x *UserServiceConfig) GetAllowedOrigins() []string {
+	if x != nil {
+		return x.AllowedOrigins
+	}
+	return nil
+}
+
+func (x *UserServiceConfig) GetFeatureFlags() map[string]string {
+	if x != nil {
+		return x.FeatureFlags
+	}
+	return nil
+}
+
+func (x *UserServiceConfig) GetBackend() isUserServiceConfig_Backend {
+	if x != nil {
+		return x.Backend
+	}
+	return nil
+}
+
+func (x *UserServiceConfig) GetPostgres() *PostgresBackend {
+	if x != nil {
+		if x, ok := x.Backend.(*UserServiceConfig_Postgres); ok {
+			return x.Postgres
+		}
+	}
+	return nil
+}
+
+func (x *UserServiceConfig) GetMysql() *MySQLBackend {
+	if x != nil {
+		if x, ok := x.Backend.(*UserServiceConfig_Mysql); ok {
+			return x.Mysql
+		}
+	}
+	return nil
+}
+
+type isUserServiceConfig_Backend interface {
+	isUserServiceConfig_Backend()
+}
+
+type UserServiceConfig_Postgres struct {
+	Postgres *PostgresBackend `protobuf:"bytes,7,opt,name=postgres,proto3,oneof"`
+}
+
+type UserServiceConfig_Mysql struct {
+	Mysql *MySQLBackend `protobuf:"bytes,8,opt,name=mysql,proto3,oneof"`
+}
+
+func (*UserServiceConfig_Postgres) isUserServiceConfig_Backend() {}
+
+func (*UserServiceConfig_Mysql) isUserServiceConfig_Backend() {}
+
 // Address is a nested message type for demonstrating recursive deserializers
 type Address struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -89,7 +420,7 @@ type Address struct {
 
 func (x *Address) Reset() {
 	*x = Address{}
-	mi := &file_examples_simple_example_proto_msgTypes[1]
+	mi := &file_examples_simple_example_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -101,7 +432,7 @@ func (x *Address) String() string {
 func (*Address) ProtoMessage() {}
 
 func (x *Address) ProtoReflect() protoreflect.Message {
-	mi := &file_examples_simple_example_proto_msgTypes[1]
+	mi := &file_examples_simple_example_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -114,7 +445,7 @@ func (x *Address) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Address.ProtoReflect.Descriptor instead.
 func (*Address) Descriptor() ([]byte, []int) {
-	return file_examples_simple_example_proto_rawDescGZIP(), []int{1}
+	return file_examples_simple_example_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *Address) GetStreet() string {
@@ -166,7 +497,7 @@ type User struct {
 
 func (x *User) Reset() {
 	*x = User{}
-	mi := &file_examples_simple_example_proto_msgTypes[2]
+	mi := &file_examples_simple_example_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -178,7 +509,7 @@ func (x *User) String() string {
 func (*User) ProtoMessage() {}
 
 func (x *User) ProtoReflect() protoreflect.Message {
-	mi := &file_examples_simple_example_proto_msgTypes[2]
+	mi := &file_examples_simple_example_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -191,7 +522,7 @@ func (x *User) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use User.ProtoReflect.Descriptor instead.
 func (*User) Descriptor() ([]byte, []int) {
-	return file_examples_simple_example_proto_rawDescGZIP(), []int{2}
+	return file_examples_simple_example_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *User) GetId() int64 {
@@ -239,7 +570,7 @@ type GetUserRequest struct {
 
 func (x *GetUserRequest) Reset() {
 	*x = GetUserRequest{}
-	mi := &file_examples_simple_example_proto_msgTypes[3]
+	mi := &file_examples_simple_example_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -251,7 +582,7 @@ func (x *GetUserRequest) String() string {
 func (*GetUserRequest) ProtoMessage() {}
 
 func (x *GetUserRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_examples_simple_example_proto_msgTypes[3]
+	mi := &file_examples_simple_example_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -264,7 +595,7 @@ func (x *GetUserRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetUserRequest.ProtoReflect.Descriptor instead.
 func (*GetUserRequest) Descriptor() ([]byte, []int) {
-	return file_examples_simple_example_proto_rawDescGZIP(), []int{3}
+	return file_examples_simple_example_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *GetUserRequest) GetId() int64 {
@@ -286,7 +617,7 @@ type CreateUserRequest struct {
 
 func (x *CreateUserRequest) Reset() {
 	*x = CreateUserRequest{}
-	mi := &file_examples_simple_example_proto_msgTypes[4]
+	mi := &file_examples_simple_example_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -298,7 +629,7 @@ func (x *CreateUserRequest) String() string {
 func (*CreateUserRequest) ProtoMessage() {}
 
 func (x *CreateUserRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_examples_simple_example_proto_msgTypes[4]
+	mi := &file_examples_simple_example_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -311,7 +642,7 @@ func (x *CreateUserRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateUserRequest.ProtoReflect.Descriptor instead.
 func (*CreateUserRequest) Descriptor() ([]byte, []int) {
-	return file_examples_simple_example_proto_rawDescGZIP(), []int{4}
+	return file_examples_simple_example_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *CreateUserRequest) GetName() string {
@@ -346,7 +677,7 @@ type UserResponse struct {
 
 func (x *UserResponse) Reset() {
 	*x = UserResponse{}
-	mi := &file_examples_simple_example_proto_msgTypes[5]
+	mi := &file_examples_simple_example_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -358,7 +689,7 @@ func (x *UserResponse) String() string {
 func (*UserResponse) ProtoMessage() {}
 
 func (x *UserResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_examples_simple_example_proto_msgTypes[5]
+	mi := &file_examples_simple_example_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -371,7 +702,7 @@ func (x *UserResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UserResponse.ProtoReflect.Descriptor instead.
 func (*UserResponse) Descriptor() ([]byte, []int) {
-	return file_examples_simple_example_proto_rawDescGZIP(), []int{5}
+	return file_examples_simple_example_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *UserResponse) GetUser() *User {
@@ -392,12 +723,42 @@ var File_examples_simple_example_proto protoreflect.FileDescriptor
 
 const file_examples_simple_example_proto_rawDesc = "" +
 	"\n" +
-	"\x1dexamples/simple/example.proto\x12\aexample\x1a\x18internal/clipb/cli.proto\"\xb9\x01\n" +
+	"\x1dexamples/simple/example.proto\x12\aexample\x1a\x18internal/clipb/cli.proto\"\xfb\x01\n" +
+	"\x0eDatabaseConfig\x124\n" +
+	"\x03url\x18\x01 \x01(\tB\"\x92\xb5\x18\x1e\n" +
+	"\x03url\x1a\x17Database connection URLR\x03url\x12\\\n" +
+	"\x0fmax_connections\x18\x02 \x01(\x05B3\x92\xb5\x18/\n" +
+	"\x0fmax-connections\x1a\x1cMaximum database connectionsR\x0emaxConnections\x12U\n" +
+	"\x0ftimeout_seconds\x18\x03 \x01(\x05B,\x92\xb5\x18(\n" +
+	"\atimeout\x1a\x1dConnection timeout in secondsR\x0etimeoutSeconds\"U\n" +
+	"\x0fPostgresBackend\x12\x12\n" +
+	"\x04host\x18\x01 \x01(\tR\x04host\x12\x12\n" +
+	"\x04port\x18\x02 \x01(\x05R\x04port\x12\x1a\n" +
+	"\bdatabase\x18\x03 \x01(\tR\bdatabase\"q\n" +
+	"\fMySQLBackend\x12\x12\n" +
+	"\x04host\x18\x01 \x01(\tR\x04host\x12\x12\n" +
+	"\x04port\x18\x02 \x01(\x05R\x04port\x12\x1a\n" +
+	"\bdatabase\x18\x03 \x01(\tR\bdatabase\x12\x1d\n" +
+	"\n" +
+	"enable_ssl\x18\x04 \x01(\bR\tenableSsl\"\xc2\x05\n" +
 	"\x11UserServiceConfig\x12L\n" +
 	"\fdatabase_url\x18\x01 \x01(\tB)\x92\xb5\x18%\n" +
 	"\x06db-url\x1a\x19PostgreSQL connection URL \x01R\vdatabaseUrl\x12V\n" +
 	"\x0fmax_connections\x18\x02 \x01(\x03B-\x92\xb5\x18)\n" +
-	"\tmax-conns\x1a\x1cMaximum database connectionsR\x0emaxConnections\"\x80\x01\n" +
+	"\tmax-conns\x1a\x1cMaximum database connectionsR\x0emaxConnections\x12[\n" +
+	"\bdatabase\x18\x03 \x01(\v2\x17.example.DatabaseConfigB&\x92\xb5\x18\"\n" +
+	"\bdatabase\x1a\x16Database configurationR\bdatabase\x12N\n" +
+	"\tlog_level\x18\x04 \x01(\x0e2\x11.example.LogLevelB\x1e\x92\xb5\x18\x1a\n" +
+	"\tlog-level\x1a\rLogging levelR\blogLevel\x12T\n" +
+	"\x0fallowed_origins\x18\x05 \x03(\tB+\x92\xb5\x18'\n" +
+	"\x0fallowed-origins\x1a\x14CORS allowed originsR\x0eallowedOrigins\x12Q\n" +
+	"\rfeature_flags\x18\x06 \x03(\v2,.example.UserServiceConfig.FeatureFlagsEntryR\ffeatureFlags\x126\n" +
+	"\bpostgres\x18\a \x01(\v2\x18.example.PostgresBackendH\x00R\bpostgres\x12-\n" +
+	"\x05mysql\x18\b \x01(\v2\x15.example.MySQLBackendH\x00R\x05mysql\x1a?\n" +
+	"\x11FeatureFlagsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\t\n" +
+	"\abackend\"\x80\x01\n" +
 	"\aAddress\x12\x16\n" +
 	"\x06street\x18\x01 \x01(\tR\x06street\x12\x12\n" +
 	"\x04city\x18\x02 \x01(\tR\x04city\x12\x14\n" +
@@ -422,7 +783,13 @@ const file_examples_simple_example_proto_rawDesc = "" +
 	"\aaddress\x18\x03 \x01(\v2\x10.example.AddressR\aaddress\"K\n" +
 	"\fUserResponse\x12!\n" +
 	"\x04user\x18\x01 \x01(\v2\r.example.UserR\x04user\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage2\xd4\x02\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage*O\n" +
+	"\bLogLevel\x12\x19\n" +
+	"\x15LOG_LEVEL_UNSPECIFIED\x10\x00\x12\t\n" +
+	"\x05DEBUG\x10\x01\x12\b\n" +
+	"\x04INFO\x10\x02\x12\b\n" +
+	"\x04WARN\x10\x03\x12\t\n" +
+	"\x05ERROR\x10\x042\xd4\x02\n" +
 	"\vUserService\x12a\n" +
 	"\aGetUser\x12\x17.example.GetUserRequest\x1a\x15.example.UserResponse\"&\x8a\xb5\x18\"\n" +
 	"\x04user\n" +
@@ -449,30 +816,41 @@ func file_examples_simple_example_proto_rawDescGZIP() []byte {
 	return file_examples_simple_example_proto_rawDescData
 }
 
-var file_examples_simple_example_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_examples_simple_example_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_examples_simple_example_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_examples_simple_example_proto_goTypes = []any{
-	(*UserServiceConfig)(nil), // 0: example.UserServiceConfig
-	(*Address)(nil),           // 1: example.Address
-	(*User)(nil),              // 2: example.User
-	(*GetUserRequest)(nil),    // 3: example.GetUserRequest
-	(*CreateUserRequest)(nil), // 4: example.CreateUserRequest
-	(*UserResponse)(nil),      // 5: example.UserResponse
+	(LogLevel)(0),             // 0: example.LogLevel
+	(*DatabaseConfig)(nil),    // 1: example.DatabaseConfig
+	(*PostgresBackend)(nil),   // 2: example.PostgresBackend
+	(*MySQLBackend)(nil),      // 3: example.MySQLBackend
+	(*UserServiceConfig)(nil), // 4: example.UserServiceConfig
+	(*Address)(nil),           // 5: example.Address
+	(*User)(nil),              // 6: example.User
+	(*GetUserRequest)(nil),    // 7: example.GetUserRequest
+	(*CreateUserRequest)(nil), // 8: example.CreateUserRequest
+	(*UserResponse)(nil),      // 9: example.UserResponse
+	nil,                       // 10: example.UserServiceConfig.FeatureFlagsEntry
 }
 var file_examples_simple_example_proto_depIdxs = []int32{
-	1, // 0: example.User.address:type_name -> example.Address
-	1, // 1: example.CreateUserRequest.address:type_name -> example.Address
-	2, // 2: example.UserResponse.user:type_name -> example.User
-	3, // 3: example.UserService.GetUser:input_type -> example.GetUserRequest
-	4, // 4: example.UserService.CreateUser:input_type -> example.CreateUserRequest
-	3, // 5: example.UserService.ListUsers:input_type -> example.GetUserRequest
-	5, // 6: example.UserService.GetUser:output_type -> example.UserResponse
-	5, // 7: example.UserService.CreateUser:output_type -> example.UserResponse
-	5, // 8: example.UserService.ListUsers:output_type -> example.UserResponse
-	6, // [6:9] is the sub-list for method output_type
-	3, // [3:6] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	1,  // 0: example.UserServiceConfig.database:type_name -> example.DatabaseConfig
+	0,  // 1: example.UserServiceConfig.log_level:type_name -> example.LogLevel
+	10, // 2: example.UserServiceConfig.feature_flags:type_name -> example.UserServiceConfig.FeatureFlagsEntry
+	2,  // 3: example.UserServiceConfig.postgres:type_name -> example.PostgresBackend
+	3,  // 4: example.UserServiceConfig.mysql:type_name -> example.MySQLBackend
+	5,  // 5: example.User.address:type_name -> example.Address
+	5,  // 6: example.CreateUserRequest.address:type_name -> example.Address
+	6,  // 7: example.UserResponse.user:type_name -> example.User
+	7,  // 8: example.UserService.GetUser:input_type -> example.GetUserRequest
+	8,  // 9: example.UserService.CreateUser:input_type -> example.CreateUserRequest
+	7,  // 10: example.UserService.ListUsers:input_type -> example.GetUserRequest
+	9,  // 11: example.UserService.GetUser:output_type -> example.UserResponse
+	9,  // 12: example.UserService.CreateUser:output_type -> example.UserResponse
+	9,  // 13: example.UserService.ListUsers:output_type -> example.UserResponse
+	11, // [11:14] is the sub-list for method output_type
+	8,  // [8:11] is the sub-list for method input_type
+	8,  // [8:8] is the sub-list for extension type_name
+	8,  // [8:8] is the sub-list for extension extendee
+	0,  // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_examples_simple_example_proto_init() }
@@ -480,18 +858,23 @@ func file_examples_simple_example_proto_init() {
 	if File_examples_simple_example_proto != nil {
 		return
 	}
+	file_examples_simple_example_proto_msgTypes[3].OneofWrappers = []any{
+		(*UserServiceConfig_Postgres)(nil),
+		(*UserServiceConfig_Mysql)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_examples_simple_example_proto_rawDesc), len(file_examples_simple_example_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   6,
+			NumEnums:      1,
+			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_examples_simple_example_proto_goTypes,
 		DependencyIndexes: file_examples_simple_example_proto_depIdxs,
+		EnumInfos:         file_examples_simple_example_proto_enumTypes,
 		MessageInfos:      file_examples_simple_example_proto_msgTypes,
 	}.Build()
 	File_examples_simple_example_proto = out.File
