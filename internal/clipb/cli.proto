@@ -22,10 +22,21 @@ message FlagOptions {
   bool required = 4;
 }
 
+// Service config annotation
+// Defines the configuration message type for a service
+message ServiceConfigOptions {
+  // Name of the config message type (must be in same package)
+  string config_message = 1;
+}
+
 extend google.protobuf.MethodOptions {
   CommandOptions command = 50001;
 }
 
 extend google.protobuf.FieldOptions {
   FlagOptions flag = 50002;
+}
+
+extend google.protobuf.ServiceOptions {
+  ServiceConfigOptions service_config = 50003;
 }

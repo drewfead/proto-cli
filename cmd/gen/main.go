@@ -4,7 +4,9 @@ import (
 	"strings"
 
 	"github.com/dave/jennifer/jen"
+	"github.com/drewfead/proto-cli/internal/clipb"
 	"google.golang.org/protobuf/compiler/protogen"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/pluginpb"
 )
@@ -33,6 +35,25 @@ func generateFile(gen *protogen.Plugin, file *protogen.File) {
 	}
 }
 
+// getServiceConfigOptions extracts the service_config extension from service options
+func getServiceConfigOptions(service *protogen.Service) *clipb.ServiceConfigOptions {
+	opts := service.Desc.Options()
+	if opts == nil {
+		return nil
+	}
+
+	if !proto.HasExtension(opts, clipb.E_ServiceConfig) {
+		return nil
+	}
+
+	ext := proto.GetExtension(opts, clipb.E_ServiceConfig)
+	if ext == nil {
+		return nil
+	}
+
+	return ext.(*clipb.ServiceConfigOptions)
+}
+
 func generateServiceCLI(gen *protogen.Plugin, file *protogen.File, service *protogen.Service) {
 	filename := file.GeneratedFilenamePrefix + "_cli.pb.go"
 
@@ -54,15 +75,15 @@ func generateServiceCLI(gen *protogen.Plugin, file *protogen.File, service *prot
 
 	// Generate the ServiceCommand function
 	funcName := service.GoName + "ServiceCommand"
-	serviceInterface := service.GoName + "Server"
 
 	f.Commentf("%s creates a service CLI for %s with options", funcName, service.GoName)
+	f.Commentf("The implOrFactory parameter can be either a direct service implementation or a factory function")
 	f.Func().Id(funcName).Params(
 		jen.Id("ctx").Qual("context", "Context"),
-		jen.Id("impl").Id(serviceInterface),
+		jen.Id("implOrFactory").Interface(),
 		jen.Id("opts").Op("...").Qual("github.com/drewfead/proto-cli", "ServiceOption"),
 	).Op("*").Qual("github.com/drewfead/proto-cli", "ServiceCLI").Block(
-		generateServiceCommands(service)...,
+		generateServiceCommands(file, service)...,
 	)
 
 	// Write the generated code
@@ -71,8 +92,15 @@ func generateServiceCLI(gen *protogen.Plugin, file *protogen.File, service *prot
 	g.P(content)
 }
 
-func generateServiceCommands(service *protogen.Service) []jen.Code {
+func generateServiceCommands(file *protogen.File, service *protogen.Service) []jen.Code {
 	var statements []jen.Code
+
+	// Check for service config annotation
+	configOpts := getServiceConfigOptions(service)
+	var configMessageType string
+	if configOpts != nil && configOpts.ConfigMessage != "" {
+		configMessageType = configOpts.ConfigMessage
+	}
 
 	// Apply service options
 	statements = append(statements,
@@ -103,31 +131,48 @@ func generateServiceCommands(service *protogen.Service) []jen.Code {
 			continue
 		}
 
-		statements = append(statements, generateMethodCommand(service, method)...)
+		statements = append(statements, generateMethodCommand(service, method, configMessageType, file)...)
 	}
 
 	// Return ServiceCLI with command and register function
+	serviceName := strings.ToLower(service.GoName)
 	registerFunc := "Register" + service.GoName + "Server"
+
+	// Build the ServiceCLI dict
+	serviceCLIDict := jen.Dict{
+		jen.Id("Command"): jen.Op("&").Qual("github.com/urfave/cli/v3", "Command").Values(jen.Dict{
+			jen.Id("Name"):     jen.Lit(serviceName),
+			jen.Id("Usage"):    jen.Lit("CLI for " + service.GoName),
+			jen.Id("Commands"): jen.Id("commands"),
+		}),
+		jen.Id("ServiceName"):       jen.Lit(serviceName),
+		jen.Id("ConfigMessageType"): jen.Lit(configMessageType),
+		jen.Id("FactoryOrImpl"):     jen.Id("implOrFactory"),
+		jen.Id("RegisterFunc"): jen.Func().Params(
+			jen.Id("s").Op("*").Qual("google.golang.org/grpc", "Server"),
+			jen.Id("impl").Interface(),
+		).Block(
+			jen.Id(registerFunc).Call(
+				jen.Id("s"),
+				jen.Id("impl").Assert(jen.Id(service.GoName+"Server")),
+			),
+		),
+	}
+
+	// Add ConfigPrototype if there's a config message
+	if configMessageType != "" {
+		serviceCLIDict[jen.Id("ConfigPrototype")] = jen.Op("&").Id(configMessageType).Values()
+	}
+
 	statements = append(statements,
 		jen.Line(),
-		jen.Return(jen.Op("&").Qual("github.com/drewfead/proto-cli", "ServiceCLI").Values(jen.Dict{
-			jen.Id("Command"): jen.Op("&").Qual("github.com/urfave/cli/v3", "Command").Values(jen.Dict{
-				jen.Id("Name"):     jen.Lit(strings.ToLower(service.GoName)),
-				jen.Id("Usage"):    jen.Lit("CLI for " + service.GoName),
-				jen.Id("Commands"): jen.Id("commands"),
-			}),
-			jen.Id("RegisterFunc"): jen.Func().Params(
-				jen.Id("s").Op("*").Qual("google.golang.org/grpc", "Server"),
-			).Block(
-				jen.Id(registerFunc).Call(jen.Id("s"), jen.Id("impl")),
-			),
-		})),
+		jen.Return(jen.Op("&").Qual("github.com/drewfead/proto-cli", "ServiceCLI").Values(serviceCLIDict)),
 	)
 
 	return statements
 }
 
-func generateMethodCommand(service *protogen.Service, method *protogen.Method) []jen.Code {
+func generateMethodCommand(service *protogen.Service, method *protogen.Method, configMessageType string, file *protogen.File) []jen.Code {
 	var statements []jen.Code
 
 	cmdName := strings.ToLower(method.GoName)
@@ -164,6 +209,9 @@ func generateMethodCommand(service *protogen.Service, method *protogen.Method) [
 		}
 	}
 
+	// Add config field flags if service has config
+	statements = append(statements, generateConfigFlags(file, configMessageType, cmdName)...)
+
 	// Add format-specific flags from registered formats
 	statements = append(statements,
 		jen.Line(),
@@ -199,7 +247,7 @@ func generateMethodCommand(service *protogen.Service, method *protogen.Method) [
 					jen.Id("cmdCtx").Qual("context", "Context"),
 					jen.Id("cmd").Op("*").Qual("github.com/urfave/cli/v3", "Command"),
 				).Error().Block(
-					generateActionBodyWithHooks(service, method)...,
+					generateActionBodyWithHooks(service, method, configMessageType)...,
 				),
 			}),
 		),
@@ -233,7 +281,103 @@ func generateFlag(field *protogen.Field) jen.Code {
 	}
 }
 
-func generateActionBodyWithHooks(service *protogen.Service, method *protogen.Method) []jen.Code {
+// generateConfigFlags generates CLI flags for config message fields
+func generateConfigFlags(file *protogen.File, configMessageType string, cmdName string) []jen.Code {
+	var statements []jen.Code
+
+	if configMessageType == "" {
+		return statements
+	}
+
+	// Find the config message in the file's messages
+	var configMessage *protogen.Message
+	for _, msg := range file.Messages {
+		if msg.GoIdent.GoName == configMessageType {
+			configMessage = msg
+			break
+		}
+	}
+
+	if configMessage == nil {
+		return statements
+	}
+
+	statements = append(statements,
+		jen.Line(),
+		jen.Comment("Add config field flags for single-command mode"),
+	)
+
+	// Generate flags for each config field
+	for _, field := range configMessage.Fields {
+		// Get the cli.flag annotation if present
+		flagOpts := getFieldFlagOptions(field)
+		if flagOpts == nil {
+			// No flag annotation, skip this field
+			continue
+		}
+
+		flagName := flagOpts.Name
+		if flagName == "" {
+			flagName = strings.ToLower(field.GoName)
+		}
+
+		usage := flagOpts.Usage
+		if usage == "" {
+			usage = field.GoName
+		}
+
+		// Generate flag based on field type
+		var flagCode jen.Code
+		switch field.Desc.Kind() {
+		case protoreflect.Int64Kind, protoreflect.Int32Kind:
+			flagCode = jen.Op("&").Qual("github.com/urfave/cli/v3", "IntFlag").Values(jen.Dict{
+				jen.Id("Name"):  jen.Lit(flagName),
+				jen.Id("Usage"): jen.Lit(usage),
+			})
+		case protoreflect.StringKind:
+			flagCode = jen.Op("&").Qual("github.com/urfave/cli/v3", "StringFlag").Values(jen.Dict{
+				jen.Id("Name"):  jen.Lit(flagName),
+				jen.Id("Usage"): jen.Lit(usage),
+			})
+		case protoreflect.BoolKind:
+			flagCode = jen.Op("&").Qual("github.com/urfave/cli/v3", "BoolFlag").Values(jen.Dict{
+				jen.Id("Name"):  jen.Lit(flagName),
+				jen.Id("Usage"): jen.Lit(usage),
+			})
+		default:
+			continue
+		}
+
+		if flagCode != nil {
+			statements = append(statements,
+				jen.Id("flags_"+cmdName).Op("=").Append(jen.Id("flags_"+cmdName), flagCode),
+			)
+		}
+	}
+
+	return statements
+}
+
+// getFieldFlagOptions extracts the (cli.flag) annotation from a field
+func getFieldFlagOptions(field *protogen.Field) *clipb.FlagOptions {
+	opts := field.Desc.Options()
+	if opts == nil {
+		return nil
+	}
+
+	if !proto.HasExtension(opts, clipb.E_Flag) {
+		return nil
+	}
+
+	ext := proto.GetExtension(opts, clipb.E_Flag)
+	if ext == nil {
+		return nil
+	}
+
+	return ext.(*clipb.FlagOptions)
+}
+
+func generateActionBodyWithHooks(service *protogen.Service, method *protogen.Method, configMessageType string) []jen.Code {
 	var statements []jen.Code
 
 	// Call before hook if set
@@ -341,14 +485,7 @@ func generateActionBodyWithHooks(service *protogen.Service, method *protogen.Met
 				jen.Return(jen.Qual("fmt", "Errorf").Call(jen.Lit("remote call failed: %w"), jen.Err())),
 			),
 		).Else().Block(
-			jen.Comment("Direct implementation call"),
-			jen.List(jen.Id("resp"), jen.Err()).Op("=").Id("impl").Dot(method.GoName).Call(
-				jen.Id("cmdCtx"),
-				jen.Id("req"),
-			),
-			jen.If(jen.Err().Op("!=").Nil()).Block(
-				jen.Return(jen.Qual("fmt", "Errorf").Call(jen.Lit("method failed: %w"), jen.Err())),
-			),
+			generateLocalCallLogic(service, method, configMessageType)...,
 		),
 		jen.Line(),
 	)
@@ -416,6 +553,75 @@ func generateActionBodyWithHooks(service *protogen.Service, method *protogen.Met
 
 	return statements
 }
+// generateLocalCallLogic generates the logic for calling the service implementation locally
+func generateLocalCallLogic(service *protogen.Service, method *protogen.Method, configMessageType string) []jen.Code {
+	var statements []jen.Code
+
+	if configMessageType != "" {
+		// Service has config - need to load it and call factory
+		statements = append(statements,
+			jen.Comment("Load config and create service implementation"),
+			jen.Comment("Get config paths and env prefix from root command"),
+			jen.Id("rootCmd").Op(":=").Id("cmd").Dot("Root").Call(),
+			jen.Id("configPaths").Op(":=").Id("rootCmd").Dot("StringSlice").Call(jen.Lit("config")),
+			jen.Id("envPrefix").Op(":=").Id("rootCmd").Dot("String").Call(jen.Lit("env-prefix")),
+			jen.Line(),
+			jen.Comment("Create config loader (single-command mode = uses files + env + flags)"),
+			jen.Id("loader").Op(":=").Qual("github.com/drewfead/proto-cli", "NewConfigLoader").Call(
+				jen.Qual("github.com/drewfead/proto-cli", "SingleCommandMode"),
+				jen.Qual("github.com/drewfead/proto-cli", "FileConfig").Call(jen.Id("configPaths").Op("...")),
+				jen.Qual("github.com/drewfead/proto-cli", "EnvPrefix").Call(jen.Id("envPrefix")),
+			),
+			jen.Line(),
+			jen.Comment("Create config instance and load configuration"),
+			jen.Id("config").Op(":=").Op("&").Id(configMessageType).Values(),
+			jen.If(
+				jen.Err().Op(":=").Id("loader").Dot("LoadServiceConfig").Call(
+					jen.Id("cmd"),
+					jen.Lit(strings.ToLower(service.GoName)),
+					jen.Id("config"),
+				),
+				jen.Err().Op("!=").Nil(),
+			).Block(
+				jen.Return(jen.Qual("fmt", "Errorf").Call(jen.Lit("failed to load config: %w"), jen.Err())),
+			),
+			jen.Line(),
+			jen.Comment("Call factory to create service implementation"),
+			jen.List(jen.Id("svcImpl"), jen.Err()).Op(":=").Qual("github.com/drewfead/proto-cli", "CallFactory").Call(
+				jen.Id("implOrFactory"),
+				jen.Id("config"),
+			),
+			jen.If(jen.Err().Op("!=").Nil()).Block(
+				jen.Return(jen.Qual("fmt", "Errorf").Call(jen.Lit("failed to create service: %w"), jen.Err())),
+			),
+			jen.Line(),
+			jen.Comment("Call the RPC method"),
+			jen.List(jen.Id("resp"), jen.Err()).Op("=").Id("svcImpl").Assert(jen.Id(service.GoName+"Server")).Dot(method.GoName).Call(
+				jen.Id("cmdCtx"),
+				jen.Id("req"),
+			),
+			jen.If(jen.Err().Op("!=").Nil()).Block(
+				jen.Return(jen.Qual("fmt", "Errorf").Call(jen.Lit("method failed: %w"), jen.Err())),
+			),
+		)
+	} else {
+		// No config - direct implementation call
+		statements = append(statements,
+			jen.Comment("Direct implementation call (no config)"),
+			jen.Id("svcImpl").Op(":=").Id("implOrFactory").Assert(jen.Id(service.GoName+"Server")),
+			jen.List(jen.Id("resp"), jen.Err()).Op("=").Id("svcImpl").Dot(method.GoName).Call(
+				jen.Id("cmdCtx"),
+				jen.Id("req"),
+			),
+			jen.If(jen.Err().Op("!=").Nil()).Block(
+				jen.Return(jen.Qual("fmt", "Errorf").Call(jen.Lit("method failed: %w"), jen.Err())),
+			),
+		)
+	}
+
+	return statements
+}
+
 func generateDaemonizeCommand(service *protogen.Service) []jen.Code {
 	var statements []jen.Code
 

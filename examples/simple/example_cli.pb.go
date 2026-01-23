@@ -22,7 +22,8 @@ func getOutputWriter(path string) (io.Writer, error) {
 }
 
 // UserServiceServiceCommand creates a service CLI for UserService with options
-func UserServiceServiceCommand(ctx context.Context, impl UserServiceServer, opts ...protocli.ServiceOption) *protocli.ServiceCLI {
+// The implOrFactory parameter can be either a direct service implementation or a factory function
+func UserServiceServiceCommand(ctx context.Context, implOrFactory interface{}, opts ...protocli.ServiceOption) *protocli.ServiceCLI {
 	options := protocli.ApplyServiceOptions(opts...)
 
 	// Determine default format (first registered format, or empty if none)
@@ -50,6 +51,16 @@ func UserServiceServiceCommand(ctx context.Context, impl UserServiceServer, opts
 	flags_getuser = append(flags_getuser, &v3.IntFlag{
 		Name:  "id",
 		Usage: "Id",
+	})
+
+	// Add config field flags for single-command mode
+	flags_getuser = append(flags_getuser, &v3.StringFlag{
+		Name:  "db-url",
+		Usage: "PostgreSQL connection URL",
+	})
+	flags_getuser = append(flags_getuser, &v3.IntFlag{
+		Name:  "max-conns",
+		Usage: "Maximum database connections",
 	})
 
 	// Add format-specific flags from registered formats
@@ -99,8 +110,29 @@ func UserServiceServiceCommand(ctx context.Context, impl UserServiceServer, opts
 					return fmt.Errorf("remote call failed: %w", err)
 				}
 			} else {
-				// Direct implementation call
-				resp, err = impl.GetUser(cmdCtx, req)
+				// Load config and create service implementation
+				// Get config paths and env prefix from root command
+				rootCmd := cmd.Root()
+				configPaths := rootCmd.StringSlice("config")
+				envPrefix := rootCmd.String("env-prefix")
+
+				// Create config loader (single-command mode = uses files + env + flags)
+				loader := protocli.NewConfigLoader(protocli.SingleCommandMode, protocli.FileConfig(configPaths...), protocli.EnvPrefix(envPrefix))
+
+				// Create config instance and load configuration
+				config := &UserServiceConfig{}
+				if err := loader.LoadServiceConfig(cmd, "userservice", config); err != nil {
+					return fmt.Errorf("failed to load config: %w", err)
+				}
+
+				// Call factory to create service implementation
+				svcImpl, err := protocli.CallFactory(implOrFactory, config)
+				if err != nil {
+					return fmt.Errorf("failed to create service: %w", err)
+				}
+
+				// Call the RPC method
+				resp, err = svcImpl.(UserServiceServer).GetUser(cmdCtx, req)
 				if err != nil {
 					return fmt.Errorf("method failed: %w", err)
 				}
@@ -166,6 +198,16 @@ func UserServiceServiceCommand(ctx context.Context, impl UserServiceServer, opts
 		Usage: "Email",
 	})
 
+	// Add config field flags for single-command mode
+	flags_createuser = append(flags_createuser, &v3.StringFlag{
+		Name:  "db-url",
+		Usage: "PostgreSQL connection URL",
+	})
+	flags_createuser = append(flags_createuser, &v3.IntFlag{
+		Name:  "max-conns",
+		Usage: "Maximum database connections",
+	})
+
 	// Add format-specific flags from registered formats
 	for _, outputFmt := range options.OutputFormats() {
 		// Check if format implements FlagConfiguredOutputFormat
@@ -214,8 +256,29 @@ func UserServiceServiceCommand(ctx context.Context, impl UserServiceServer, opts
 					return fmt.Errorf("remote call failed: %w", err)
 				}
 			} else {
-				// Direct implementation call
-				resp, err = impl.CreateUser(cmdCtx, req)
+				// Load config and create service implementation
+				// Get config paths and env prefix from root command
+				rootCmd := cmd.Root()
+				configPaths := rootCmd.StringSlice("config")
+				envPrefix := rootCmd.String("env-prefix")
+
+				// Create config loader (single-command mode = uses files + env + flags)
+				loader := protocli.NewConfigLoader(protocli.SingleCommandMode, protocli.FileConfig(configPaths...), protocli.EnvPrefix(envPrefix))
+
+				// Create config instance and load configuration
+				config := &UserServiceConfig{}
+				if err := loader.LoadServiceConfig(cmd, "userservice", config); err != nil {
+					return fmt.Errorf("failed to load config: %w", err)
+				}
+
+				// Call factory to create service implementation
+				svcImpl, err := protocli.CallFactory(implOrFactory, config)
+				if err != nil {
+					return fmt.Errorf("failed to create service: %w", err)
+				}
+
+				// Call the RPC method
+				resp, err = svcImpl.(UserServiceServer).CreateUser(cmdCtx, req)
 				if err != nil {
 					return fmt.Errorf("method failed: %w", err)
 				}
@@ -264,8 +327,12 @@ func UserServiceServiceCommand(ctx context.Context, impl UserServiceServer, opts
 			Name:     "userservice",
 			Usage:    "CLI for UserService",
 		},
-		RegisterFunc: func(s *grpc.Server) {
-			RegisterUserServiceServer(s, impl)
+		ConfigMessageType: "UserServiceConfig",
+		ConfigPrototype:   &UserServiceConfig{},
+		FactoryOrImpl:     implOrFactory,
+		RegisterFunc: func(s *grpc.Server, impl interface{}) {
+			RegisterUserServiceServer(s, impl.(UserServiceServer))
 		},
+		ServiceName: "userservice",
 	}
 }

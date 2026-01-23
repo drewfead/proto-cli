@@ -22,6 +22,59 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// UserServiceConfig defines configuration for UserService
+type UserServiceConfig struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	DatabaseUrl    string                 `protobuf:"bytes,1,opt,name=database_url,json=databaseUrl,proto3" json:"database_url,omitempty"`
+	MaxConnections int64                  `protobuf:"varint,2,opt,name=max_connections,json=maxConnections,proto3" json:"max_connections,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *UserServiceConfig) Reset() {
+	*x = UserServiceConfig{}
+	mi := &file_examples_simple_example_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UserServiceConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UserServiceConfig) ProtoMessage() {}
+
+func (x *UserServiceConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_examples_simple_example_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UserServiceConfig.ProtoReflect.Descriptor instead.
+func (*UserServiceConfig) Descriptor() ([]byte, []int) {
+	return file_examples_simple_example_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *UserServiceConfig) GetDatabaseUrl() string {
+	if x != nil {
+		return x.DatabaseUrl
+	}
+	return ""
+}
+
+func (x *UserServiceConfig) GetMaxConnections() int64 {
+	if x != nil {
+		return x.MaxConnections
+	}
+	return 0
+}
+
 // User message definition
 type User struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -35,7 +88,7 @@ type User struct {
 
 func (x *User) Reset() {
 	*x = User{}
-	mi := &file_examples_simple_example_proto_msgTypes[0]
+	mi := &file_examples_simple_example_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -47,7 +100,7 @@ func (x *User) String() string {
 func (*User) ProtoMessage() {}
 
 func (x *User) ProtoReflect() protoreflect.Message {
-	mi := &file_examples_simple_example_proto_msgTypes[0]
+	mi := &file_examples_simple_example_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -60,7 +113,7 @@ func (x *User) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use User.ProtoReflect.Descriptor instead.
 func (*User) Descriptor() ([]byte, []int) {
-	return file_examples_simple_example_proto_rawDescGZIP(), []int{0}
+	return file_examples_simple_example_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *User) GetId() int64 {
@@ -101,7 +154,7 @@ type GetUserRequest struct {
 
 func (x *GetUserRequest) Reset() {
 	*x = GetUserRequest{}
-	mi := &file_examples_simple_example_proto_msgTypes[1]
+	mi := &file_examples_simple_example_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -113,7 +166,7 @@ func (x *GetUserRequest) String() string {
 func (*GetUserRequest) ProtoMessage() {}
 
 func (x *GetUserRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_examples_simple_example_proto_msgTypes[1]
+	mi := &file_examples_simple_example_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -126,7 +179,7 @@ func (x *GetUserRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetUserRequest.ProtoReflect.Descriptor instead.
 func (*GetUserRequest) Descriptor() ([]byte, []int) {
-	return file_examples_simple_example_proto_rawDescGZIP(), []int{1}
+	return file_examples_simple_example_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *GetUserRequest) GetId() int64 {
@@ -147,7 +200,7 @@ type CreateUserRequest struct {
 
 func (x *CreateUserRequest) Reset() {
 	*x = CreateUserRequest{}
-	mi := &file_examples_simple_example_proto_msgTypes[2]
+	mi := &file_examples_simple_example_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -159,7 +212,7 @@ func (x *CreateUserRequest) String() string {
 func (*CreateUserRequest) ProtoMessage() {}
 
 func (x *CreateUserRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_examples_simple_example_proto_msgTypes[2]
+	mi := &file_examples_simple_example_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -172,7 +225,7 @@ func (x *CreateUserRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateUserRequest.ProtoReflect.Descriptor instead.
 func (*CreateUserRequest) Descriptor() ([]byte, []int) {
-	return file_examples_simple_example_proto_rawDescGZIP(), []int{2}
+	return file_examples_simple_example_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *CreateUserRequest) GetName() string {
@@ -200,7 +253,7 @@ type UserResponse struct {
 
 func (x *UserResponse) Reset() {
 	*x = UserResponse{}
-	mi := &file_examples_simple_example_proto_msgTypes[3]
+	mi := &file_examples_simple_example_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -212,7 +265,7 @@ func (x *UserResponse) String() string {
 func (*UserResponse) ProtoMessage() {}
 
 func (x *UserResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_examples_simple_example_proto_msgTypes[3]
+	mi := &file_examples_simple_example_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -225,7 +278,7 @@ func (x *UserResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UserResponse.ProtoReflect.Descriptor instead.
 func (*UserResponse) Descriptor() ([]byte, []int) {
-	return file_examples_simple_example_proto_rawDescGZIP(), []int{3}
+	return file_examples_simple_example_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *UserResponse) GetUser() *User {
@@ -246,7 +299,12 @@ var File_examples_simple_example_proto protoreflect.FileDescriptor
 
 const file_examples_simple_example_proto_rawDesc = "" +
 	"\n" +
-	"\x1dexamples/simple/example.proto\x12\aexample\x1a\x18internal/clipb/cli.proto\"_\n" +
+	"\x1dexamples/simple/example.proto\x12\aexample\x1a\x18internal/clipb/cli.proto\"\xb9\x01\n" +
+	"\x11UserServiceConfig\x12L\n" +
+	"\fdatabase_url\x18\x01 \x01(\tB)\x92\xb5\x18%\n" +
+	"\x06db-url\x1a\x19PostgreSQL connection URL \x01R\vdatabaseUrl\x12V\n" +
+	"\x0fmax_connections\x18\x02 \x01(\x03B-\x92\xb5\x18)\n" +
+	"\tmax-conns\x1a\x1cMaximum database connectionsR\x0emaxConnections\"_\n" +
 	"\x04User\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x14\n" +
@@ -263,7 +321,7 @@ const file_examples_simple_example_proto_rawDesc = "" +
 	"\x05email\x12\x01e\x1a\x14User's email address \x01R\x05email\"K\n" +
 	"\fUserResponse\x12!\n" +
 	"\x04user\x18\x01 \x01(\v2\r.example.UserR\x04user\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage2\xbb\x02\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage2\xd4\x02\n" +
 	"\vUserService\x12a\n" +
 	"\aGetUser\x12\x17.example.GetUserRequest\x1a\x15.example.UserResponse\"&\x8a\xb5\x18\"\n" +
 	"\x04user\n" +
@@ -274,7 +332,8 @@ const file_examples_simple_example_proto_rawDesc = "" +
 	"\x06create\x12\x11Create a new user\x12a\n" +
 	"\tListUsers\x12\x17.example.GetUserRequest\x1a\x15.example.UserResponse\" \x8a\xb5\x18\x1c\n" +
 	"\x04user\n" +
-	"\x04list\x12\x0eList all users(\x010\x01B\x86\x01\n" +
+	"\x04list\x12\x0eList all users(\x010\x01\x1a\x17\x9a\xb5\x18\x13\n" +
+	"\x11UserServiceConfigB\x86\x01\n" +
 	"\vcom.exampleB\fExampleProtoP\x01Z-github.com/drewfead/proto-cli/examples/simple\xa2\x02\x03EXX\xaa\x02\aExample\xca\x02\aExample\xe2\x02\x13Example\\GPBMetadata\xea\x02\aExampleb\x06proto3"
 
 var (
@@ -289,21 +348,22 @@ func file_examples_simple_example_proto_rawDescGZIP() []byte {
 	return file_examples_simple_example_proto_rawDescData
 }
 
-var file_examples_simple_example_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_examples_simple_example_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_examples_simple_example_proto_goTypes = []any{
-	(*User)(nil),              // 0: example.User
-	(*GetUserRequest)(nil),    // 1: example.GetUserRequest
-	(*CreateUserRequest)(nil), // 2: example.CreateUserRequest
-	(*UserResponse)(nil),      // 3: example.UserResponse
+	(*UserServiceConfig)(nil), // 0: example.UserServiceConfig
+	(*User)(nil),              // 1: example.User
+	(*GetUserRequest)(nil),    // 2: example.GetUserRequest
+	(*CreateUserRequest)(nil), // 3: example.CreateUserRequest
+	(*UserResponse)(nil),      // 4: example.UserResponse
 }
 var file_examples_simple_example_proto_depIdxs = []int32{
-	0, // 0: example.UserResponse.user:type_name -> example.User
-	1, // 1: example.UserService.GetUser:input_type -> example.GetUserRequest
-	2, // 2: example.UserService.CreateUser:input_type -> example.CreateUserRequest
-	1, // 3: example.UserService.ListUsers:input_type -> example.GetUserRequest
-	3, // 4: example.UserService.GetUser:output_type -> example.UserResponse
-	3, // 5: example.UserService.CreateUser:output_type -> example.UserResponse
-	3, // 6: example.UserService.ListUsers:output_type -> example.UserResponse
+	1, // 0: example.UserResponse.user:type_name -> example.User
+	2, // 1: example.UserService.GetUser:input_type -> example.GetUserRequest
+	3, // 2: example.UserService.CreateUser:input_type -> example.CreateUserRequest
+	2, // 3: example.UserService.ListUsers:input_type -> example.GetUserRequest
+	4, // 4: example.UserService.GetUser:output_type -> example.UserResponse
+	4, // 5: example.UserService.CreateUser:output_type -> example.UserResponse
+	4, // 6: example.UserService.ListUsers:output_type -> example.UserResponse
 	4, // [4:7] is the sub-list for method output_type
 	1, // [1:4] is the sub-list for method input_type
 	1, // [1:1] is the sub-list for extension type_name
@@ -322,7 +382,7 @@ func file_examples_simple_example_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_examples_simple_example_proto_rawDesc), len(file_examples_simple_example_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

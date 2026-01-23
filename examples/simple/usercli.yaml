@@ -1,0 +1,10 @@
+# Example configuration for usercli
+# This file demonstrates the config schema support in proto-cli
+
+services:
+  userservice:
+    # Database connection URL
+    database-url: postgresql://localhost:5432/mydb
+
+    # Maximum number of database connections
+    max-connections: 20

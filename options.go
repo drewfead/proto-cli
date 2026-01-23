@@ -43,6 +43,9 @@ type RootConfig interface {
 	GRPCServerOptions() []grpc.ServerOption
 	EnableTranscoding() bool
 	TranscodingPort() int
+	ConfigPaths() []string
+	EnvPrefix() string
+	ServiceFactory(serviceName string) (interface{}, bool)
 }
 
 // Private interfaces for internal use
@@ -112,6 +115,9 @@ type rootCommandOptions struct {
 	grpcServerOptions []grpc.ServerOption
 	enableTranscoding bool
 	transcodingPort   int
+	configPaths       []string                // Config file paths for loading
+	envPrefix         string                  // Environment variable prefix
+	serviceFactories  map[string]interface{}  // Service name -> factory function
 }
 
 // SetBeforeCommand sets the before hook
@@ -167,6 +173,25 @@ func (o *rootCommandOptions) EnableTranscoding() bool {
 // TranscodingPort returns the port for gRPC transcoding (HTTP/JSON gateway)
 func (o *rootCommandOptions) TranscodingPort() int {
 	return o.transcodingPort
+}
+
+// ConfigPaths returns the config file paths
+func (o *rootCommandOptions) ConfigPaths() []string {
+	return o.configPaths
+}
+
+// EnvPrefix returns the environment variable prefix
+func (o *rootCommandOptions) EnvPrefix() string {
+	return o.envPrefix
+}
+
+// ServiceFactory returns the factory function for a service, if registered
+func (o *rootCommandOptions) ServiceFactory(serviceName string) (interface{}, bool) {
+	if o.serviceFactories == nil {
+		return nil, false
+	}
+	factory, ok := o.serviceFactories[serviceName]
+	return factory, ok
 }
 
 // Option types for type-safe configuration using interface pattern
@@ -267,6 +292,37 @@ func WithTranscoding(httpPort int) RootOnlyOption {
 	return RootOnlyOption(func(o *rootCommandOptions) {
 		o.enableTranscoding = true
 		o.transcodingPort = httpPort
+	})
+}
+
+// WithConfigFile adds a config file path to load
+// Can be called multiple times to specify multiple config files (deep merge)
+// Type-safe: only works with RootOptions
+func WithConfigFile(path string) RootOnlyOption {
+	return RootOnlyOption(func(o *rootCommandOptions) {
+		o.configPaths = append(o.configPaths, path)
+	})
+}
+
+// WithEnvPrefix sets the environment variable prefix for config overrides
+// Example: WithEnvPrefix("USERCLI") enables USERCLI_DB_URL env var
+// Type-safe: only works with RootOptions
+func WithEnvPrefix(prefix string) RootOnlyOption {
+	return RootOnlyOption(func(o *rootCommandOptions) {
+		o.envPrefix = prefix
+	})
+}
+
+// WithConfigFactory registers a factory function for a service
+// The factory function takes a config message and returns a service implementation
+// Example: WithConfigFactory("userservice", func(cfg *UserServiceConfig) UserServiceServer { ... })
+// Type-safe: only works with RootOptions
+func WithConfigFactory(serviceName string, factory interface{}) RootOnlyOption {
+	return RootOnlyOption(func(o *rootCommandOptions) {
+		if o.serviceFactories == nil {
+			o.serviceFactories = make(map[string]interface{})
+		}
+		o.serviceFactories[serviceName] = factory
 	})
 }
 

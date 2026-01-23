@@ -6,6 +6,19 @@ option go_package = "github.com/drewfead/proto-cli/simple";
 
 import "internal/clipb/cli.proto";
 
+// UserServiceConfig defines configuration for UserService
+message UserServiceConfig {
+  string database_url = 1 [(cli.flag) = {
+    name: "db-url",
+    usage: "PostgreSQL connection URL",
+    required: true
+  }];
+  int64 max_connections = 2 [(cli.flag) = {
+    name: "max-conns",
+    usage: "Maximum database connections"
+  }];
+}
+
 // User message definition
 message User {
   int64 id = 1;
@@ -48,6 +61,10 @@ message UserResponse {
 
 // UserService defines gRPC service methods
 service UserService {
+  option (cli.service_config) = {
+    config_message: "UserServiceConfig"
+  };
+
   // GetUser retrieves a user by ID
   rpc GetUser(GetUserRequest) returns (UserResponse) {
     option (cli.command) = {

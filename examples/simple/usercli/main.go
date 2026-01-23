@@ -16,7 +16,28 @@ import (
 // userService implements simple.UserServiceServer
 type userService struct {
 	simple.UnimplementedUserServiceServer
-	users map[int64]*simple.User
+	dbURL    string
+	maxConns int64
+	users    map[int64]*simple.User
+}
+
+// newUserService is a factory function that creates a UserService with config
+func newUserService(config *simple.UserServiceConfig) simple.UserServiceServer {
+	log.Printf("Creating UserService with config: DB=%s, MaxConns=%d",
+		config.DatabaseUrl, config.MaxConnections)
+
+	return &userService{
+		dbURL:    config.DatabaseUrl,
+		maxConns: config.MaxConnections,
+		users: map[int64]*simple.User{
+			1: {
+				Id:        1,
+				Name:      "Demo User",
+				Email:     "demo@example.com",
+				CreatedAt: time.Now().Unix(),
+			},
+		},
+	}
 }
 
 func (s *userService) GetUser(ctx context.Context, req *simple.GetUserRequest) (*simple.UserResponse, error) {
@@ -48,22 +69,11 @@ func (s *userService) CreateUser(ctx context.Context, req *simple.CreateUserRequ
 }
 
 func main() {
-	// Create service implementation with some demo data
-	serviceImpl := &userService{
-		users: map[int64]*simple.User{
-			1: {
-				Id:        1,
-				Name:      "Demo User",
-				Email:     "demo@example.com",
-				CreatedAt: time.Now().Unix(),
-			},
-		},
-	}
-
 	ctx := context.Background()
 
-	// Build service CLI with implementation, lifecycle hooks, and output formats
-	userServiceCLI := simple.UserServiceServiceCommand(ctx, serviceImpl,
+	// Build service CLI with factory function, lifecycle hooks, and output formats
+	// Pass the factory function (not the impl) - config will be loaded automatically
+	userServiceCLI := simple.UserServiceServiceCommand(ctx, newUserService,
 		protocli.WithBeforeCommand(func(ctx context.Context, cmd *v3.Command) error {
 			log.Printf("[HOOK] Starting command: %s", cmd.Name)
 			return nil
@@ -82,11 +92,13 @@ func main() {
 	// Create root CLI with all services using the new API
 	rootCmd := protocli.RootCommand("usercli",
 		protocli.WithService(userServiceCLI),
-		// You could add more services here:
-		// protocli.WithService(productServiceCLI),
-		// protocli.WithService(orderServiceCLI),
-		// Or add root-level hooks/formats:
-		// protocli.WithRootOutputFormats(protocli.JSON(), protocli.YAML()),
+		protocli.WithConfigFactory("userservice", newUserService),
+		protocli.WithEnvPrefix("USERCLI"),
+		// Config files are loaded from:
+		//   ./usercli.yaml (default)
+		//   ~/.config/usercli/config.yaml (default)
+		// Add custom paths with:
+		// protocli.WithConfigFile("/path/to/custom.yaml"),
 	)
 
 	rootCmd.Usage = "User Service CLI - Multi-service support"
