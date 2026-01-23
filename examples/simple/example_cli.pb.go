@@ -90,8 +90,8 @@ func UserServiceServiceCommand(ctx context.Context, implOrFactory interface{}, o
 			// Build request message
 			var req *GetUserRequest
 
-			// Check for custom flag deserializer
-			deserializer, hasDeserializer := options.FlagDeserializer("GetUserRequest")
+			// Check for custom flag deserializer for example.GetUserRequest
+			deserializer, hasDeserializer := options.FlagDeserializer("example.GetUserRequest")
 			if hasDeserializer {
 				// Use custom deserializer
 				msg, err := deserializer(cmdCtx, cmd)
@@ -253,8 +253,8 @@ func UserServiceServiceCommand(ctx context.Context, implOrFactory interface{}, o
 			// Build request message
 			var req *CreateUserRequest
 
-			// Check for custom flag deserializer
-			deserializer, hasDeserializer := options.FlagDeserializer("CreateUserRequest")
+			// Check for custom flag deserializer for example.CreateUserRequest
+			deserializer, hasDeserializer := options.FlagDeserializer("example.CreateUserRequest")
 			if hasDeserializer {
 				// Use custom deserializer
 				msg, err := deserializer(cmdCtx, cmd)
@@ -271,6 +271,24 @@ func UserServiceServiceCommand(ctx context.Context, implOrFactory interface{}, o
 				req = &CreateUserRequest{}
 				req.Name = cmd.String("name")
 				req.Email = cmd.String("email")
+				// Field Address: check for custom deserializer for example.Address
+				if fieldDeserializer, hasFieldDeserializer := options.FlagDeserializer("example.Address"); hasFieldDeserializer {
+					// Use custom deserializer for nested message
+					fieldMsg, fieldErr := fieldDeserializer(cmdCtx, cmd)
+					if fieldErr != nil {
+						return fmt.Errorf("failed to deserialize field Address: %w", fieldErr)
+					}
+					typedField, fieldOk := fieldMsg.(*Address)
+					if !fieldOk {
+						return fmt.Errorf("custom deserializer for example.Address returned wrong type: expected *Address, got %T", fieldMsg)
+					}
+					req.Address = typedField
+				} else {
+					// No custom deserializer - create nested message from flags
+					// TODO: Generate nested field parsing with prefix
+					// For now, nested message Address requires a custom deserializer
+					req.Address = &Address{}
+				}
 			}
 
 			// Check if using remote gRPC call or direct implementation call

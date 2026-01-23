@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/dave/jennifer/jen"
@@ -378,6 +379,7 @@ func getFieldFlagOptions(field *protogen.Field) *clipb.FlagOptions {
 }
 
 // generateRequestFieldAssignments generates code to assign flag values to request fields
+// Handles both primitive types and nested messages (checking for custom deserializers)
 func generateRequestFieldAssignments(method *protogen.Method) []jen.Code {
 	var statements []jen.Code
 
@@ -385,6 +387,50 @@ func generateRequestFieldAssignments(method *protogen.Method) []jen.Code {
 		flagName := strings.ToLower(field.GoName)
 
 		switch field.Desc.Kind() {
+		case protoreflect.MessageKind:
+			// For message fields, check if there's a custom deserializer
+			// Use fully qualified proto name
+			messageType := field.Message
+			fullyQualifiedName := string(messageType.Desc.FullName())
+			goTypeName := messageType.GoIdent.GoName
+
+			statements = append(statements,
+				jen.Comment(fmt.Sprintf("Field %s: check for custom deserializer for %s", field.GoName, fullyQualifiedName)),
+				jen.If(
+					jen.List(jen.Id("fieldDeserializer"), jen.Id("hasFieldDeserializer")).Op(":=").Id("options").Dot("FlagDeserializer").Call(
+						jen.Lit(fullyQualifiedName),
+					),
+					jen.Id("hasFieldDeserializer"),
+				).Block(
+					jen.Comment("Use custom deserializer for nested message"),
+					jen.List(jen.Id("fieldMsg"), jen.Id("fieldErr")).Op(":=").Id("fieldDeserializer").Call(
+						jen.Id("cmdCtx"),
+						jen.Id("cmd"),
+					),
+					jen.If(jen.Id("fieldErr").Op("!=").Nil()).Block(
+						jen.Return(jen.Qual("fmt", "Errorf").Call(
+							jen.Lit(fmt.Sprintf("failed to deserialize field %s: %%w", field.GoName)),
+							jen.Id("fieldErr"),
+						)),
+					),
+					jen.List(jen.Id("typedField"), jen.Id("fieldOk")).Op(":=").Id("fieldMsg").Assert(jen.Op("*").Id(goTypeName)),
+					jen.If(jen.Op("!").Id("fieldOk")).Block(
+						jen.Return(jen.Qual("fmt", "Errorf").Call(
+							jen.Lit(fmt.Sprintf("custom deserializer for %s returned wrong type: expected *%s, got %%T", fullyQualifiedName, goTypeName)),
+							jen.Id("fieldMsg"),
+						)),
+					),
+					jen.Id("req").Dot(field.GoName).Op("=").Id("typedField"),
+				).Else().Block(
+					jen.Comment("No custom deserializer - create nested message from flags"),
+					jen.Comment("TODO: Generate nested field parsing with prefix"),
+					jen.Comment(fmt.Sprintf("For now, nested message %s requires a custom deserializer", goTypeName)),
+					// For now, just create empty nested message
+					// In a full implementation, we'd recursively parse nested fields
+					jen.Id("req").Dot(field.GoName).Op("=").Op("&").Id(goTypeName).Values(),
+				),
+			)
+
 		case protoreflect.Int64Kind:
 			statements = append(statements,
 				jen.Id("req").Dot(field.GoName).Op("=").Int64().Call(
@@ -451,6 +497,7 @@ func generateActionBodyWithHooks(service *protogen.Service, method *protogen.Met
 
 	// Build request - check for custom deserializer first
 	requestTypeName := method.Input.GoIdent.GoName
+	requestFullyQualifiedName := string(method.Input.Desc.FullName())
 
 	// First, check for custom deserializer
 	statements = append(statements,
@@ -461,9 +508,9 @@ func generateActionBodyWithHooks(service *protogen.Service, method *protogen.Met
 
 	// Generate the if-else block for custom deserializer vs auto-generated
 	deserializerCheck := []jen.Code{
-		jen.Comment("Check for custom flag deserializer"),
+		jen.Comment(fmt.Sprintf("Check for custom flag deserializer for %s", requestFullyQualifiedName)),
 		jen.List(jen.Id("deserializer"), jen.Id("hasDeserializer")).Op(":=").Id("options").Dot("FlagDeserializer").Call(
-			jen.Lit(requestTypeName),
+			jen.Lit(requestFullyQualifiedName),
 		),
 		jen.If(jen.Id("hasDeserializer")).Block(
 			jen.Comment("Use custom deserializer"),
