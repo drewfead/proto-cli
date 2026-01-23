@@ -1,0 +1,74 @@
+syntax = "proto3";
+
+package example;
+
+option go_package = "github.com/drewfead/proto-cli/simple";
+
+import "internal/clipb/cli.proto";
+
+// User message definition
+message User {
+  int64 id = 1;
+  string name = 2;
+  string email = 3;
+  int64 created_at = 4;
+}
+
+// Request to get a user by ID
+message GetUserRequest {
+  int64 id = 1 [(cli.flag) = {
+    name: "id",
+    shorthand: "i",
+    usage: "User ID to retrieve",
+    required: true
+  }];
+}
+
+// Request to create a new user
+message CreateUserRequest {
+  string name = 1 [(cli.flag) = {
+    name: "name",
+    shorthand: "n",
+    usage: "User's full name",
+    required: true
+  }];
+  string email = 2 [(cli.flag) = {
+    name: "email",
+    shorthand: "e",
+    usage: "User's email address",
+    required: true
+  }];
+}
+
+// Response containing a user
+message UserResponse {
+  User user = 1;
+  string message = 2;
+}
+
+// UserService defines gRPC service methods
+service UserService {
+  // GetUser retrieves a user by ID
+  rpc GetUser(GetUserRequest) returns (UserResponse) {
+    option (cli.command) = {
+      command: ["user", "get"],
+      description: "Retrieve a user by ID"
+    };
+  }
+
+  // CreateUser creates a new user
+  rpc CreateUser(CreateUserRequest) returns (UserResponse) {
+    option (cli.command) = {
+      command: ["user", "create"],
+      description: "Create a new user"
+    };
+  }
+
+  // ListUsers streams all users
+  rpc ListUsers(stream GetUserRequest) returns (stream UserResponse) {
+    option (cli.command) = {
+      command: ["user", "list"],
+      description: "List all users"
+    };
+  }
+}

@@ -1,0 +1,28 @@
+version: '2'
+
+run:
+  timeout: 30s
+  modules-download-mode: readonly
+  allow-parallel-runners: true
+
+linters:
+  default: all
+
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+
+formatters:
+  enable:
+    - goimports
+
+output:
+  formats:
+    checkstyle:
+      path: stderr
+  sort-order:
+    - severity
+    - file
+    - linter

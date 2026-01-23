@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package cli;
+
+option go_package = "github.com/drewfead/proto-cli/internal/clipb";
+
+import "google/protobuf/descriptor.proto";
+
+// CLI command annotation for RPC methods
+// Defines the command hierarchy (e.g., ["user", "get"] -> "mycli user get")
+message CommandOptions {
+  repeated string command = 1;
+  string description = 2;
+}
+
+// CLI flag annotation for message fields
+// Maps message fields to CLI flags
+message FlagOptions {
+  string name = 1;
+  string shorthand = 2;
+  string usage = 3;
+  bool required = 4;
+}
+
+extend google.protobuf.MethodOptions {
+  CommandOptions command = 50001;
+}
+
+extend google.protobuf.FieldOptions {
+  FlagOptions flag = 50002;
+}
