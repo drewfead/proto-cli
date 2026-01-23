@@ -9,6 +9,7 @@ proto-cli is a protoc plugin that generates complete command-line interfaces fro
 - 🎯 **Type-Safe Code Generation** - Uses [jennifer](https://github.com/dave/jennifer) to generate clean, idiomatic Go code
 - 🚀 **Zero Boilerplate** - Define your service once in `.proto`, get a full CLI automatically
 - 🔌 **Dual Mode Execution** - Call services directly (in-process) or via gRPC (remote)
+- 🎛️ **Selective Service Enable** - Start daemon with only specific services using `--service` flag
 - 🎨 **Multiple Output Formats** - JSON, YAML, and Go-native formatting built-in
 - 🪝 **Lifecycle Hooks** - Before/after command hooks for logging, auth, metrics
 - 🛡️ **gRPC Interceptors** - Add unary and stream interceptors for cross-cutting concerns
@@ -137,8 +138,11 @@ func main() {
 # Direct call (in-process)
 ./usercli userservice getuser --id 1 --format json
 
-# Start as gRPC server
+# Start as gRPC server (all services)
 ./usercli daemonize --port 50051
+
+# Start with specific services only
+./usercli daemonize --port 50051 --service userservice --service productservice
 
 # Remote call (gRPC client)
 ./usercli userservice getuser --id 1 --remote localhost:50051 --format yaml
@@ -157,8 +161,11 @@ make build/example
 # Direct call
 ./bin/usercli userservice getuser --id 1 --format json
 
-# Start daemon
+# Start daemon (all services)
 ./bin/usercli daemonize --port 50051
+
+# Start daemon with specific services only
+./bin/usercli daemonize --port 50051 --service userservice
 
 # Remote call
 ./bin/usercli userservice getuser --id 1 --remote localhost:50051 --format yaml

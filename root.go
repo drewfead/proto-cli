@@ -44,6 +44,10 @@ func RootCommand(appName string, opts ...RootOption) *cli.Command {
 				Value: 50051,
 				Usage: "Port to bind the gRPC server to",
 			},
+			&cli.StringSliceFlag{
+				Name:  "service",
+				Usage: "Service to enable (by name). Can be specified multiple times. If not specified, all services are enabled. Example: --service userservice --service productservice",
+			},
 		},
 		Action: func(ctx context.Context, cmd *cli.Command) error {
 			host := cmd.String("host")
@@ -59,12 +63,42 @@ func RootCommand(appName string, opts ...RootOption) *cli.Command {
 			// Create gRPC server with configured options
 			grpcServer := grpc.NewServer(options.GRPCServerOptions()...)
 
-			// Register all services
-			for _, svc := range services {
+			// Filter services based on --service flag
+			enabledServices := cmd.StringSlice("service")
+			servicesToRegister := services
+
+			if len(enabledServices) > 0 {
+				// Create a map for quick lookup
+				enabledMap := make(map[string]bool)
+				for _, name := range enabledServices {
+					enabledMap[name] = true
+				}
+
+				// Filter services
+				servicesToRegister = make([]*ServiceCLI, 0, len(enabledServices))
+				for _, svc := range services {
+					if enabledMap[svc.Command.Name] {
+						servicesToRegister = append(servicesToRegister, svc)
+					}
+				}
+
+				// Warn if requested services weren't found
+				if len(servicesToRegister) != len(enabledServices) {
+					registeredNames := make([]string, 0, len(servicesToRegister))
+					for _, svc := range servicesToRegister {
+						registeredNames = append(registeredNames, svc.Command.Name)
+					}
+					fmt.Fprintf(os.Stderr, "Warning: Requested %d service(s) but only found %d: %v\n",
+						len(enabledServices), len(servicesToRegister), registeredNames)
+				}
+			}
+
+			// Register selected services
+			for _, svc := range servicesToRegister {
 				svc.RegisterFunc(grpcServer)
 			}
 
-			fmt.Fprintf(os.Stdout, "Starting gRPC server on %s with %d service(s)\n", address, len(services))
+			fmt.Fprintf(os.Stdout, "Starting gRPC server on %s with %d service(s)\n", address, len(servicesToRegister))
 
 			// If transcoding is enabled, start HTTP gateway server
 			if options.EnableTranscoding() {
@@ -75,7 +109,7 @@ func RootCommand(appName string, opts ...RootOption) *cli.Command {
 
 				// Check if any service has gateway registration
 				hasGateway := false
-				for _, svc := range services {
+				for _, svc := range servicesToRegister {
 					if svc.GatewayRegisterFunc != nil {
 						hasGateway = true
 						break
