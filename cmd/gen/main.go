@@ -377,6 +377,34 @@ func getFieldFlagOptions(field *protogen.Field) *clipb.FlagOptions {
 	return ext.(*clipb.FlagOptions)
 }
 
+// generateRequestFieldAssignments generates code to assign flag values to request fields
+func generateRequestFieldAssignments(method *protogen.Method) []jen.Code {
+	var statements []jen.Code
+
+	for _, field := range method.Input.Fields {
+		flagName := strings.ToLower(field.GoName)
+
+		switch field.Desc.Kind() {
+		case protoreflect.Int64Kind:
+			statements = append(statements,
+				jen.Id("req").Dot(field.GoName).Op("=").Int64().Call(
+					jen.Id("cmd").Dot("Int").Call(jen.Lit(flagName)),
+				),
+			)
+		case protoreflect.StringKind:
+			statements = append(statements,
+				jen.Id("req").Dot(field.GoName).Op("=").Id("cmd").Dot("String").Call(jen.Lit(flagName)),
+			)
+		case protoreflect.BoolKind:
+			statements = append(statements,
+				jen.Id("req").Dot(field.GoName).Op("=").Id("cmd").Dot("Bool").Call(jen.Lit(flagName)),
+			)
+		}
+	}
+
+	return statements
+}
+
 func generateActionBodyWithHooks(service *protogen.Service, method *protogen.Method, configMessageType string) []jen.Code {
 	var statements []jen.Code
 
@@ -421,35 +449,53 @@ func generateActionBodyWithHooks(service *protogen.Service, method *protogen.Met
 		jen.Line(),
 	)
 
-	// Create request
+	// Build request - check for custom deserializer first
+	requestTypeName := method.Input.GoIdent.GoName
+
+	// First, check for custom deserializer
 	statements = append(statements,
-		jen.Id("req").Op(":=").Op("&").Id(method.Input.GoIdent.GoName).Values(),
+		jen.Comment("Build request message"),
+		jen.Var().Id("req").Op("*").Id(requestTypeName),
 		jen.Line(),
 	)
 
-	// Parse flags into request
-	for _, field := range method.Input.Fields {
-		flagName := strings.ToLower(field.GoName)
-
-		switch field.Desc.Kind() {
-		case protoreflect.Int64Kind:
-			statements = append(statements,
-				jen.Id("req").Dot(field.GoName).Op("=").Int64().Call(
-					jen.Id("cmd").Dot("Int").Call(jen.Lit(flagName)),
-				),
-			)
-		case protoreflect.StringKind:
-			statements = append(statements,
-				jen.Id("req").Dot(field.GoName).Op("=").Id("cmd").Dot("String").Call(jen.Lit(flagName)),
-			)
-		case protoreflect.BoolKind:
-			statements = append(statements,
-				jen.Id("req").Dot(field.GoName).Op("=").Id("cmd").Dot("Bool").Call(jen.Lit(flagName)),
-			)
-		}
+	// Generate the if-else block for custom deserializer vs auto-generated
+	deserializerCheck := []jen.Code{
+		jen.Comment("Check for custom flag deserializer"),
+		jen.List(jen.Id("deserializer"), jen.Id("hasDeserializer")).Op(":=").Id("options").Dot("FlagDeserializer").Call(
+			jen.Lit(requestTypeName),
+		),
+		jen.If(jen.Id("hasDeserializer")).Block(
+			jen.Comment("Use custom deserializer"),
+			jen.List(jen.Id("msg"), jen.Err()).Op(":=").Id("deserializer").Call(
+				jen.Id("cmdCtx"),
+				jen.Id("cmd"),
+			),
+			jen.If(jen.Err().Op("!=").Nil()).Block(
+				jen.Return(jen.Qual("fmt", "Errorf").Call(
+					jen.Lit("custom deserializer failed: %w"),
+					jen.Err(),
+				)),
+			),
+			jen.Var().Id("ok").Bool(),
+			jen.List(jen.Id("req"), jen.Id("ok")).Op("=").Id("msg").Assert(jen.Op("*").Id(requestTypeName)),
+			jen.If(jen.Op("!").Id("ok")).Block(
+				jen.Return(jen.Qual("fmt", "Errorf").Call(
+					jen.Lit("custom deserializer returned wrong type: expected *%s, got %T"),
+					jen.Lit(requestTypeName),
+					jen.Id("msg"),
+				)),
+			),
+		).Else().Block(
+			append([]jen.Code{
+				jen.Comment("Use auto-generated flag parsing"),
+				jen.Id("req").Op("=").Op("&").Id(requestTypeName).Values(),
+			}, generateRequestFieldAssignments(method)...)...,
+		),
+		jen.Line(),
 	}
 
-	statements = append(statements, jen.Line())
+	statements = append(statements, deserializerCheck...)
 
 	// Check if remote flag is set and call either remote or direct
 	clientType := "New" + service.GoName + "Client"

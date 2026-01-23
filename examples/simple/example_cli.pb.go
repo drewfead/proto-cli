@@ -87,9 +87,27 @@ func UserServiceServiceCommand(ctx context.Context, implOrFactory interface{}, o
 				}
 			}()
 
-			req := &GetUserRequest{}
+			// Build request message
+			var req *GetUserRequest
 
-			req.Id = int64(cmd.Int("id"))
+			// Check for custom flag deserializer
+			deserializer, hasDeserializer := options.FlagDeserializer("GetUserRequest")
+			if hasDeserializer {
+				// Use custom deserializer
+				msg, err := deserializer(cmdCtx, cmd)
+				if err != nil {
+					return fmt.Errorf("custom deserializer failed: %w", err)
+				}
+				var ok bool
+				req, ok = msg.(*GetUserRequest)
+				if !ok {
+					return fmt.Errorf("custom deserializer returned wrong type: expected *%s, got %T", "GetUserRequest", msg)
+				}
+			} else {
+				// Use auto-generated flag parsing
+				req = &GetUserRequest{}
+				req.Id = int64(cmd.Int("id"))
+			}
 
 			// Check if using remote gRPC call or direct implementation call
 			remoteAddr := cmd.String("remote")
@@ -232,10 +250,28 @@ func UserServiceServiceCommand(ctx context.Context, implOrFactory interface{}, o
 				}
 			}()
 
-			req := &CreateUserRequest{}
+			// Build request message
+			var req *CreateUserRequest
 
-			req.Name = cmd.String("name")
-			req.Email = cmd.String("email")
+			// Check for custom flag deserializer
+			deserializer, hasDeserializer := options.FlagDeserializer("CreateUserRequest")
+			if hasDeserializer {
+				// Use custom deserializer
+				msg, err := deserializer(cmdCtx, cmd)
+				if err != nil {
+					return fmt.Errorf("custom deserializer failed: %w", err)
+				}
+				var ok bool
+				req, ok = msg.(*CreateUserRequest)
+				if !ok {
+					return fmt.Errorf("custom deserializer returned wrong type: expected *%s, got %T", "CreateUserRequest", msg)
+				}
+			} else {
+				// Use auto-generated flag parsing
+				req = &CreateUserRequest{}
+				req.Name = cmd.String("name")
+				req.Email = cmd.String("email")
+			}
 
 			// Check if using remote gRPC call or direct implementation call
 			remoteAddr := cmd.String("remote")

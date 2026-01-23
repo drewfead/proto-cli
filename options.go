@@ -18,6 +18,12 @@ type OutputFormat interface {
 	Format(ctx context.Context, cmd *cli.Command, w io.Writer, msg proto.Message) error
 }
 
+// FlagDeserializer builds a proto message from CLI flags
+// This allows users to implement custom logic for constructing complex messages
+// from simple CLI flags. Takes the CLI command (to access flag values) and
+// returns the constructed message or an error.
+type FlagDeserializer func(ctx context.Context, cmd *cli.Command) (proto.Message, error)
+
 // FlagConfiguredOutputFormat is an optional interface for formats that need custom flags
 type FlagConfiguredOutputFormat interface {
 	OutputFormat
@@ -34,6 +40,7 @@ type ServiceConfig interface {
 	BeforeCommand() func(context.Context, *cli.Command) error
 	AfterCommand() func(context.Context, *cli.Command) error
 	OutputFormats() []OutputFormat
+	FlagDeserializer(messageName string) (FlagDeserializer, bool)
 }
 
 // RootConfig is the configuration returned by ApplyRootOptions
@@ -71,9 +78,10 @@ type rootOptions interface {
 
 // serviceCommandOptions holds configuration for individual service commands
 type serviceCommandOptions struct {
-	beforeCommand func(context.Context, *cli.Command) error
-	afterCommand  func(context.Context, *cli.Command) error
-	outputFormats []OutputFormat
+	beforeCommand    func(context.Context, *cli.Command) error
+	afterCommand     func(context.Context, *cli.Command) error
+	outputFormats    []OutputFormat
+	flagDeserializers map[string]FlagDeserializer // messageName -> deserializer
 }
 
 // SetBeforeCommand sets the before hook
@@ -104,6 +112,15 @@ func (o *serviceCommandOptions) AfterCommand() func(context.Context, *cli.Comman
 // OutputFormats returns the registered output formats
 func (o *serviceCommandOptions) OutputFormats() []OutputFormat {
 	return o.outputFormats
+}
+
+// FlagDeserializer returns the deserializer for a message type, if registered
+func (o *serviceCommandOptions) FlagDeserializer(messageName string) (FlagDeserializer, bool) {
+	if o.flagDeserializers == nil {
+		return nil, false
+	}
+	deserializer, ok := o.flagDeserializers[messageName]
+	return deserializer, ok
 }
 
 // rootCommandOptions holds configuration for the root CLI command
@@ -221,6 +238,16 @@ func (fn SharedOption) applyToRootConfig(opts *rootCommandOptions) {
 	fn(opts)
 }
 
+// ServiceOnlyOption is a concrete option type that only works with service level
+// It implements only the ServiceOption interface
+type ServiceOnlyOption func(*serviceCommandOptions)
+
+var _ ServiceOption = ServiceOnlyOption(nil)
+
+func (fn ServiceOnlyOption) applyToServiceConfig(opts *serviceCommandOptions) {
+	fn(opts)
+}
+
 // RootOnlyOption is a concrete option type that only works with root level
 // It implements only the RootOption interface
 type RootOnlyOption func(*rootCommandOptions)
@@ -252,6 +279,32 @@ func WithAfterCommand(fn func(context.Context, *cli.Command) error) SharedOption
 func WithOutputFormats(formats ...OutputFormat) SharedOption {
 	return SharedOption(func(o baseOptions) {
 		o.SetOutputFormats(formats)
+	})
+}
+
+// Service-only options
+
+// WithFlagDeserializer registers a custom deserializer for a specific message type
+// This allows users to implement custom logic for constructing complex proto messages
+// from CLI flags, enabling advanced transformations and validation.
+//
+// Example:
+//   WithFlagDeserializer("GetUserRequest", func(ctx context.Context, cmd *cli.Command) (proto.Message, error) {
+//       // Custom logic to build GetUserRequest from flags
+//       userId := cmd.String("user-id")
+//       return &pb.GetUserRequest{
+//           UserId: userId,
+//           IncludeDetails: cmd.Bool("details"),
+//       }, nil
+//   })
+//
+// Type-safe: only works with ServiceOptions
+func WithFlagDeserializer(messageName string, deserializer FlagDeserializer) ServiceOnlyOption {
+	return ServiceOnlyOption(func(o *serviceCommandOptions) {
+		if o.flagDeserializers == nil {
+			o.flagDeserializers = make(map[string]FlagDeserializer)
+		}
+		o.flagDeserializers[messageName] = deserializer
 	})
 }
 

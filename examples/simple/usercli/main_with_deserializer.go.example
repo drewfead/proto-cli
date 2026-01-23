@@ -1,0 +1,220 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"os"
+	"strconv"
+	"strings"
+
+	protocli "github.com/drewfead/proto-cli"
+	simple "github.com/drewfead/proto-cli/examples/simple"
+	"github.com/urfave/cli/v3"
+	"google.golang.org/protobuf/proto"
+)
+
+// userService implementation
+type userService struct {
+	simple.UnimplementedUserServiceServer
+	dbURL    string
+	maxConns int64
+	users    map[int64]*simple.User
+}
+
+// Factory function that takes config
+func newUserService(config *simple.UserServiceConfig) simple.UserServiceServer {
+	log.Printf("Creating UserService with config: DB=%s, MaxConns=%d",
+		config.DatabaseUrl, config.MaxConnections)
+
+	return &userService{
+		dbURL:    config.DatabaseUrl,
+		maxConns: config.MaxConnections,
+		users: map[int64]*simple.User{
+			1: {
+				Id:    1,
+				Name:  "Demo User",
+				Email: "demo@example.com",
+			},
+			2: {
+				Id:    2,
+				Name:  "Another User",
+				Email: "another@example.com",
+			},
+		},
+	}
+}
+
+func (s *userService) GetUser(ctx context.Context, req *simple.GetUserRequest) (*simple.UserResponse, error) {
+	user, exists := s.users[req.Id]
+	if !exists {
+		return &simple.UserResponse{Message: "User not found"}, nil
+	}
+	return &simple.UserResponse{User: user, Message: "Success"}, nil
+}
+
+func (s *userService) CreateUser(ctx context.Context, req *simple.CreateUserRequest) (*simple.UserResponse, error) {
+	newID := int64(len(s.users) + 1)
+	user := &simple.User{
+		Id:    newID,
+		Name:  req.Name,
+		Email: req.Email,
+	}
+	s.users[newID] = user
+	return &simple.UserResponse{User: user, Message: "User created"}, nil
+}
+
+// Example 1: Custom deserializer with validation for GetUserRequest
+func getUserRequestDeserializer(ctx context.Context, cmd *cli.Command) (proto.Message, error) {
+	userId := cmd.Int("id")
+
+	// Custom validation
+	if userId <= 0 {
+		return nil, fmt.Errorf("user ID must be positive, got: %d", userId)
+	}
+
+	if userId > 1000000 {
+		return nil, fmt.Errorf("user ID too large: %d (max: 1000000)", userId)
+	}
+
+	log.Printf("Using custom deserializer for GetUserRequest: id=%d", userId)
+
+	return &simple.GetUserRequest{
+		Id: int64(userId),
+	}, nil
+}
+
+// Example 2: Custom deserializer with smart defaults for CreateUserRequest
+func createUserRequestDeserializer(ctx context.Context, cmd *cli.Command) (proto.Message, error) {
+	name := cmd.String("name")
+	email := cmd.String("email")
+
+	// Validation
+	if name == "" {
+		return nil, fmt.Errorf("name is required")
+	}
+
+	if len(name) < 2 {
+		return nil, fmt.Errorf("name must be at least 2 characters")
+	}
+
+	if email == "" {
+		return nil, fmt.Errorf("email is required")
+	}
+
+	// Simple email validation
+	if !strings.Contains(email, "@") {
+		return nil, fmt.Errorf("invalid email format: %s", email)
+	}
+
+	// Apply smart defaults
+	name = strings.TrimSpace(name)
+	email = strings.ToLower(strings.TrimSpace(email))
+
+	log.Printf("Using custom deserializer for CreateUserRequest: name=%s, email=%s", name, email)
+
+	return &simple.CreateUserRequest{
+		Name:  name,
+		Email: email,
+	}, nil
+}
+
+// Example 3: Advanced deserializer that accepts multiple input formats
+func advancedGetUserDeserializer(ctx context.Context, cmd *cli.Command) (proto.Message, error) {
+	// Support --id flag
+	if cmd.IsSet("id") {
+		userId := cmd.Int("id")
+		if userId <= 0 {
+			return nil, fmt.Errorf("invalid user ID: %d", userId)
+		}
+		return &simple.GetUserRequest{Id: int64(userId)}, nil
+	}
+
+	// Support --user-id-list flag (comma-separated)
+	if cmd.IsSet("user-id-list") {
+		idList := cmd.String("user-id-list")
+		ids := strings.Split(idList, ",")
+		if len(ids) > 0 {
+			firstId := strings.TrimSpace(ids[0])
+			userId, err := strconv.ParseInt(firstId, 10, 64)
+			if err != nil {
+				return nil, fmt.Errorf("invalid user ID in list: %s", firstId)
+			}
+			log.Printf("Extracting first ID from list: %d", userId)
+			return &simple.GetUserRequest{Id: userId}, nil
+		}
+	}
+
+	return nil, fmt.Errorf("either --id or --user-id-list must be provided")
+}
+
+func main() {
+	ctx := context.Background()
+
+	// Choose which custom deserializer example to use:
+	//
+	// Option 1: Basic validation deserializer
+	userServiceCLI := simple.UserServiceServiceCommand(
+		ctx,
+		newUserService,
+		protocli.WithFlagDeserializer("GetUserRequest", getUserRequestDeserializer),
+		protocli.WithFlagDeserializer("CreateUserRequest", createUserRequestDeserializer),
+		protocli.WithOutputFormats(
+			protocli.JSON(),
+			protocli.YAML(),
+		),
+	)
+
+	// Option 2: Advanced multi-format deserializer
+	// Uncomment this to use the advanced deserializer instead:
+	// userServiceCLI := simple.UserServiceServiceCommand(
+	// 	ctx,
+	// 	newUserService,
+	// 	protocli.WithFlagDeserializer("GetUserRequest", advancedGetUserDeserializer),
+	// 	protocli.WithOutputFormats(
+	// 		protocli.JSON(),
+	// 		protocli.YAML(),
+	// 	),
+	// )
+
+	// Create root CLI
+	rootCmd := protocli.RootCommand("usercli",
+		protocli.WithService(userServiceCLI),
+		protocli.WithConfigFactory("userservice", newUserService),
+		protocli.WithEnvPrefix("USERCLI"),
+	)
+
+	if err := rootCmd.Run(ctx, os.Args); err != nil {
+		log.Fatal(err)
+	}
+}
+
+/*
+Usage examples:
+
+1. With custom validation:
+   $ go run main_with_deserializer.go.example userservice getuser --id 1
+   $ go run main_with_deserializer.go.example userservice getuser --id -1  # Error: user ID must be positive
+   $ go run main_with_deserializer.go.example userservice getuser --id 9999999  # Error: user ID too large
+
+2. With smart defaults:
+   $ go run main_with_deserializer.go.example userservice createuser --name "  John Doe  " --email "JOHN@EXAMPLE.COM"
+   # Name and email will be trimmed and normalized
+
+3. Without required fields:
+   $ go run main_with_deserializer.go.example userservice createuser --name ""
+   # Error: name is required
+
+4. Advanced multi-format (if using advancedGetUserDeserializer):
+   $ go run main_with_deserializer.go.example userservice getuser --id 1
+   $ go run main_with_deserializer.go.example userservice getuser --user-id-list "1,2,3"
+   # Will extract first ID from list
+
+Benefits of Custom Deserializers:
+- Input validation before RPC call
+- Better error messages
+- Smart defaults and normalization
+- Support for multiple input formats
+- Business logic encapsulation
+- Improved user experience
+*/
