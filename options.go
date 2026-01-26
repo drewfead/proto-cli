@@ -20,11 +20,86 @@ type OutputFormat interface {
 	Format(ctx context.Context, cmd *cli.Command, w io.Writer, msg proto.Message) error
 }
 
+// FlagContainer provides type-safe access to flag values for a specific flag
+// It encapsulates the CLI command and flag name, exposing convenient accessors
+// This abstraction allows deserializers to be reusable across different flag names
+//
+// For deserializers that need to access multiple flags (e.g., top-level request deserializers),
+// use the *Named() methods to read other flags by name
+type FlagContainer interface {
+	// Primary flag accessors (use the encapsulated flag name)
+	String() string
+	Int() int
+	Int64() int64
+	Uint() uint
+	Uint64() uint64
+	Bool() bool
+	Float() float64
+	StringSlice() []string
+	IsSet() bool
+
+	// Named flag accessors (for accessing other flags)
+	StringNamed(flagName string) string
+	IntNamed(flagName string) int
+	Int64Named(flagName string) int64
+	BoolNamed(flagName string) bool
+	FloatNamed(flagName string) float64
+	StringSliceNamed(flagName string) []string
+	IsSetNamed(flagName string) bool
+
+	// FlagName returns the primary flag name for this container
+	FlagName() string
+}
+
+// flagContainer implements FlagContainer by wrapping a cli.Command and flag name
+type flagContainer struct {
+	cmd      *cli.Command
+	flagName string
+}
+
+// Primary flag accessors (use encapsulated flag name)
+func (f *flagContainer) String() string         { return f.cmd.String(f.flagName) }
+func (f *flagContainer) Int() int               { return f.cmd.Int(f.flagName) }
+func (f *flagContainer) Int64() int64           { return int64(f.cmd.Int(f.flagName)) }
+func (f *flagContainer) Uint() uint             { return f.cmd.Uint(f.flagName) }
+func (f *flagContainer) Uint64() uint64         { return uint64(f.cmd.Uint(f.flagName)) }
+func (f *flagContainer) Bool() bool             { return f.cmd.Bool(f.flagName) }
+func (f *flagContainer) Float() float64         { return f.cmd.Float(f.flagName) }
+func (f *flagContainer) StringSlice() []string  { return f.cmd.StringSlice(f.flagName) }
+func (f *flagContainer) IsSet() bool            { return f.cmd.IsSet(f.flagName) }
+
+// Named flag accessors (for accessing other flags by name)
+func (f *flagContainer) StringNamed(name string) string      { return f.cmd.String(name) }
+func (f *flagContainer) IntNamed(name string) int            { return f.cmd.Int(name) }
+func (f *flagContainer) Int64Named(name string) int64        { return int64(f.cmd.Int(name)) }
+func (f *flagContainer) BoolNamed(name string) bool          { return f.cmd.Bool(name) }
+func (f *flagContainer) FloatNamed(name string) float64      { return f.cmd.Float(name) }
+func (f *flagContainer) StringSliceNamed(name string) []string { return f.cmd.StringSlice(name) }
+func (f *flagContainer) IsSetNamed(name string) bool         { return f.cmd.IsSet(name) }
+
+// FlagName returns the encapsulated flag name
+func (f *flagContainer) FlagName() string { return f.flagName }
+
+// NewFlagContainer creates a new FlagContainer for the given command and flag name
+func NewFlagContainer(cmd *cli.Command, flagName string) FlagContainer {
+	return &flagContainer{cmd: cmd, flagName: flagName}
+}
+
 // FlagDeserializer builds a proto message from CLI flags
 // This allows users to implement custom logic for constructing complex messages
-// from simple CLI flags. Takes the CLI command (to access flag values) and
-// returns the constructed message or an error.
-type FlagDeserializer func(ctx context.Context, cmd *cli.Command) (proto.Message, error)
+// from simple CLI flags. The FlagContainer provides type-safe access to the flag value
+// without requiring knowledge of the flag name, making deserializers reusable.
+//
+// Example of a reusable timestamp deserializer:
+//   func(ctx context.Context, flags FlagContainer) (proto.Message, error) {
+//       timeStr := flags.String()  // No need to know the flag name!
+//       t, err := time.Parse(time.RFC3339, timeStr)
+//       if err != nil {
+//           return nil, err
+//       }
+//       return timestamppb.New(t), nil
+//   }
+type FlagDeserializer func(ctx context.Context, flags FlagContainer) (proto.Message, error)
 
 // DaemonStartupHook is called before the gRPC server starts listening
 // Receives the gRPC server instance and gateway mux (if transcoding is enabled)

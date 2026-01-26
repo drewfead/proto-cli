@@ -17,8 +17,8 @@ import (
 func TestIntegration_CustomFlagDeserializer(t *testing.T) {
 	// Custom deserializer that builds GetUserRequest from a user-id flag
 	// This example shows how you can add custom parsing logic, validation, etc.
-	customDeserializer := func(ctx context.Context, cmd *cli.Command) (proto.Message, error) {
-		userId := cmd.Int("id")
+	customDeserializer := func(ctx context.Context, flags protocli.FlagContainer) (proto.Message, error) {
+		userId := flags.IntNamed("id")
 
 		// Custom logic: validate user ID
 		if userId <= 0 {
@@ -54,9 +54,9 @@ func TestIntegration_CustomFlagDeserializer(t *testing.T) {
 // TestIntegration_CustomDeserializer_ComplexTransformation demonstrates more complex use cases
 func TestIntegration_CustomDeserializer_ComplexTransformation(t *testing.T) {
 	// Example: Parse a comma-separated list or JSON string into a proto message
-	complexDeserializer := func(ctx context.Context, cmd *cli.Command) (proto.Message, error) {
-		name := cmd.String("name")
-		email := cmd.String("email")
+	complexDeserializer := func(ctx context.Context, flags protocli.FlagContainer) (proto.Message, error) {
+		name := flags.StringNamed("name")
+		email := flags.StringNamed("email")
 
 		// Could add validation here
 		if name == "" {
@@ -92,8 +92,8 @@ func TestIntegration_CustomDeserializer_WithValidation(t *testing.T) {
 	}{
 		{
 			name: "valid input",
-			deserializer: func(ctx context.Context, cmd *cli.Command) (proto.Message, error) {
-				userId := cmd.Int("id")
+			deserializer: func(ctx context.Context, flags protocli.FlagContainer) (proto.Message, error) {
+				userId := flags.IntNamed("id")
 				if userId <= 0 {
 					return nil, assert.AnError
 				}
@@ -103,8 +103,8 @@ func TestIntegration_CustomDeserializer_WithValidation(t *testing.T) {
 		},
 		{
 			name: "with default values",
-			deserializer: func(ctx context.Context, cmd *cli.Command) (proto.Message, error) {
-				userId := cmd.Int("id")
+			deserializer: func(ctx context.Context, flags protocli.FlagContainer) (proto.Message, error) {
+				userId := flags.IntNamed("id")
 				if userId <= 0 {
 					userId = 1 // Apply default
 				}
@@ -133,18 +133,18 @@ func TestIntegration_CustomDeserializer_WithValidation(t *testing.T) {
 
 // Example use case: Parsing JSON from a flag into a complex message
 func TestIntegration_CustomDeserializer_JSONParsing(t *testing.T) {
-	jsonDeserializer := func(ctx context.Context, cmd *cli.Command) (proto.Message, error) {
+	jsonDeserializer := func(ctx context.Context, flags protocli.FlagContainer) (proto.Message, error) {
 		// In a real scenario, you might have a --json flag
 		// that contains the entire request as JSON
 		// Example: --json '{"name":"John","email":"john@example.com"}'
 
 		// For this test, we'll just show the pattern
-		name := cmd.String("name")
-		email := cmd.String("email")
+		name := flags.StringNamed("name")
+		email := flags.StringNamed("email")
 
 		// Could parse JSON here:
 		// var req CreateUserRequest
-		// json.Unmarshal([]byte(cmd.String("json")), &req)
+		// json.Unmarshal([]byte(flags.StringNamed("json")), &req)
 
 		return &simple.CreateUserRequest{
 			Name:  name,
@@ -165,16 +165,16 @@ func TestIntegration_CustomDeserializer_JSONParsing(t *testing.T) {
 
 // Example: Multiple deserializers for different message types
 func TestIntegration_MultipleCustomDeserializers(t *testing.T) {
-	getUserDeserializer := func(ctx context.Context, cmd *cli.Command) (proto.Message, error) {
+	getUserDeserializer := func(ctx context.Context, flags protocli.FlagContainer) (proto.Message, error) {
 		return &simple.GetUserRequest{
-			Id: int64(cmd.Int("id")),
+			Id: int64(flags.IntNamed("id")),
 		}, nil
 	}
 
-	createUserDeserializer := func(ctx context.Context, cmd *cli.Command) (proto.Message, error) {
+	createUserDeserializer := func(ctx context.Context, flags protocli.FlagContainer) (proto.Message, error) {
 		return &simple.CreateUserRequest{
-			Name:  cmd.String("name"),
-			Email: cmd.String("email"),
+			Name:  flags.StringNamed("name"),
+			Email: flags.StringNamed("email"),
 		}, nil
 	}
 
@@ -194,9 +194,9 @@ func TestIntegration_MultipleCustomDeserializers(t *testing.T) {
 // Benchmarks
 
 func BenchmarkCustomDeserializer(b *testing.B) {
-	deserializer := func(ctx context.Context, cmd *cli.Command) (proto.Message, error) {
+	deserializer := func(ctx context.Context, flags protocli.FlagContainer) (proto.Message, error) {
 		return &simple.GetUserRequest{
-			Id: int64(cmd.Int("id")),
+			Id: int64(flags.IntNamed("id")),
 		}, nil
 	}
 
@@ -210,7 +210,8 @@ func BenchmarkCustomDeserializer(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = deserializer(ctx, cmd)
+		flagContainer := protocli.NewFlagContainer(cmd, "id")
+		_, _ = deserializer(ctx, flagContainer)
 	}
 }
 

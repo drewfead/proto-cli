@@ -403,9 +403,14 @@ func generateRequestFieldAssignments(method *protogen.Method) []jen.Code {
 					jen.Id("hasFieldDeserializer"),
 				).Block(
 					jen.Comment("Use custom deserializer for nested message"),
+					jen.Comment(fmt.Sprintf("Create FlagContainer for field flag: %s", flagName)),
+					jen.Id("fieldFlags").Op(":=").Qual("github.com/drewfead/proto-cli", "NewFlagContainer").Call(
+						jen.Id("cmd"),
+						jen.Lit(flagName),
+					),
 					jen.List(jen.Id("fieldMsg"), jen.Id("fieldErr")).Op(":=").Id("fieldDeserializer").Call(
 						jen.Id("cmdCtx"),
-						jen.Id("cmd"),
+						jen.Id("fieldFlags"),
 					),
 					jen.If(jen.Id("fieldErr").Op("!=").Nil()).Block(
 						jen.Return(jen.Qual("fmt", "Errorf").Call(
@@ -513,10 +518,15 @@ func generateActionBodyWithHooks(service *protogen.Service, method *protogen.Met
 			jen.Lit(requestFullyQualifiedName),
 		),
 		jen.If(jen.Id("hasDeserializer")).Block(
-			jen.Comment("Use custom deserializer"),
+			jen.Comment("Use custom deserializer for top-level request"),
+			jen.Comment("Create FlagContainer (deserializer can access multiple flags via Command())"),
+			jen.Id("requestFlags").Op(":=").Qual("github.com/drewfead/proto-cli", "NewFlagContainer").Call(
+				jen.Id("cmd"),
+				jen.Lit(""),  // Empty flag name for top-level requests
+			),
 			jen.List(jen.Id("msg"), jen.Err()).Op(":=").Id("deserializer").Call(
 				jen.Id("cmdCtx"),
-				jen.Id("cmd"),
+				jen.Id("requestFlags"),
 			),
 			jen.If(jen.Err().Op("!=").Nil()).Block(
 				jen.Return(jen.Qual("fmt", "Errorf").Call(

@@ -97,8 +97,10 @@ func UserServiceServiceCommand(ctx context.Context, implOrFactory interface{}, o
 			// Check for custom flag deserializer for example.GetUserRequest
 			deserializer, hasDeserializer := options.FlagDeserializer("example.GetUserRequest")
 			if hasDeserializer {
-				// Use custom deserializer
-				msg, err := deserializer(cmdCtx, cmd)
+				// Use custom deserializer for top-level request
+				// Create FlagContainer (deserializer can access multiple flags via Command())
+				requestFlags := protocli.NewFlagContainer(cmd, "")
+				msg, err := deserializer(cmdCtx, requestFlags)
 				if err != nil {
 					return fmt.Errorf("custom deserializer failed: %w", err)
 				}
@@ -264,8 +266,10 @@ func UserServiceServiceCommand(ctx context.Context, implOrFactory interface{}, o
 			// Check for custom flag deserializer for example.CreateUserRequest
 			deserializer, hasDeserializer := options.FlagDeserializer("example.CreateUserRequest")
 			if hasDeserializer {
-				// Use custom deserializer
-				msg, err := deserializer(cmdCtx, cmd)
+				// Use custom deserializer for top-level request
+				// Create FlagContainer (deserializer can access multiple flags via Command())
+				requestFlags := protocli.NewFlagContainer(cmd, "")
+				msg, err := deserializer(cmdCtx, requestFlags)
 				if err != nil {
 					return fmt.Errorf("custom deserializer failed: %w", err)
 				}
@@ -282,7 +286,9 @@ func UserServiceServiceCommand(ctx context.Context, implOrFactory interface{}, o
 				// Field Address: check for custom deserializer for example.Address
 				if fieldDeserializer, hasFieldDeserializer := options.FlagDeserializer("example.Address"); hasFieldDeserializer {
 					// Use custom deserializer for nested message
-					fieldMsg, fieldErr := fieldDeserializer(cmdCtx, cmd)
+					// Create FlagContainer for field flag: address
+					fieldFlags := protocli.NewFlagContainer(cmd, "address")
+					fieldMsg, fieldErr := fieldDeserializer(cmdCtx, fieldFlags)
 					if fieldErr != nil {
 						return fmt.Errorf("failed to deserialize field Address: %w", fieldErr)
 					}

@@ -18,9 +18,9 @@ import (
 func TestIntegration_RecursiveDeserializer_NestedMessage(t *testing.T) {
 	// Custom deserializer for Address (nested message type)
 	// Uses fully qualified proto name: example.Address
-	addressDeserializer := func(ctx context.Context, cmd *cli.Command) (proto.Message, error) {
+	addressDeserializer := func(ctx context.Context, flags protocli.FlagContainer) (proto.Message, error) {
 		// Parse address from comma-separated string: street,city,state,zip,country
-		addressStr := cmd.String("address")
+		addressStr := flags.StringNamed("address")
 
 		if addressStr == "" {
 			// Return empty address
@@ -65,24 +65,24 @@ func TestIntegration_RecursiveDeserializer_NestedMessage(t *testing.T) {
 // registering deserializers at both top-level and nested levels
 func TestIntegration_RecursiveDeserializer_TopLevelAndNested(t *testing.T) {
 	// Deserializer for nested Address message
-	addressDeserializer := func(ctx context.Context, cmd *cli.Command) (proto.Message, error) {
+	addressDeserializer := func(ctx context.Context, flags protocli.FlagContainer) (proto.Message, error) {
 		return &simple.Address{
-			Street:  cmd.String("street"),
-			City:    cmd.String("city"),
-			State:   cmd.String("state"),
-			ZipCode: cmd.String("zip"),
-			Country: cmd.String("country"),
+			Street:  flags.StringNamed("street"),
+			City:    flags.StringNamed("city"),
+			State:   flags.StringNamed("state"),
+			ZipCode: flags.StringNamed("zip"),
+			Country: flags.StringNamed("country"),
 		}, nil
 	}
 
 	// Top-level deserializer for CreateUserRequest
 	// This can use the address deserializer for its nested field
-	createUserDeserializer := func(ctx context.Context, cmd *cli.Command) (proto.Message, error) {
+	createUserDeserializer := func(ctx context.Context, flags protocli.FlagContainer) (proto.Message, error) {
 		// Build the CreateUserRequest
 		// The nested Address field will be handled by its own deserializer
 		return &simple.CreateUserRequest{
-			Name:  cmd.String("name"),
-			Email: cmd.String("email"),
+			Name:  flags.StringNamed("name"),
+			Email: flags.StringNamed("email"),
 			// Address will be deserialized by the Address deserializer
 			// when auto-generated code processes the nested field
 		}, nil
@@ -127,7 +127,7 @@ func TestIntegration_RecursiveDeserializer_FullyQualifiedNames(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			deserializer := func(ctx context.Context, cmd *cli.Command) (proto.Message, error) {
+			deserializer := func(ctx context.Context, flags protocli.FlagContainer) (proto.Message, error) {
 				return &simple.Address{}, nil
 			}
 
@@ -148,23 +148,23 @@ func TestIntegration_RecursiveDeserializer_FullyQualifiedNames(t *testing.T) {
 // example of parsing complex address formats
 func TestIntegration_RecursiveDeserializer_RealWorldExample(t *testing.T) {
 	// Example: Parse addresses from various formats
-	addressDeserializer := func(ctx context.Context, cmd *cli.Command) (proto.Message, error) {
+	addressDeserializer := func(ctx context.Context, flags protocli.FlagContainer) (proto.Message, error) {
 		// Support multiple input methods:
 
 		// Method 1: Individual flags
-		if cmd.IsSet("street") {
+		if flags.IsSetNamed("street") {
 			return &simple.Address{
-				Street:  cmd.String("street"),
-				City:    cmd.String("city"),
-				State:   cmd.String("state"),
-				ZipCode: cmd.String("zip"),
-				Country: cmd.String("country"),
+				Street:  flags.StringNamed("street"),
+				City:    flags.StringNamed("city"),
+				State:   flags.StringNamed("state"),
+				ZipCode: flags.StringNamed("zip"),
+				Country: flags.StringNamed("country"),
 			}, nil
 		}
 
 		// Method 2: Comma-separated string
-		if cmd.IsSet("address") {
-			addressStr := cmd.String("address")
+		if flags.IsSetNamed("address") {
+			addressStr := flags.StringNamed("address")
 			parts := strings.Split(addressStr, ",")
 
 			address := &simple.Address{}
@@ -206,9 +206,9 @@ func TestIntegration_RecursiveDeserializer_RealWorldExample(t *testing.T) {
 // validation in nested message deserializers
 func TestIntegration_RecursiveDeserializer_ValidationInNested(t *testing.T) {
 	// Address deserializer with validation
-	addressDeserializer := func(ctx context.Context, cmd *cli.Command) (proto.Message, error) {
-		city := cmd.String("city")
-		state := cmd.String("state")
+	addressDeserializer := func(ctx context.Context, flags protocli.FlagContainer) (proto.Message, error) {
+		city := flags.StringNamed("city")
+		state := flags.StringNamed("state")
 
 		// Validation logic
 		if city == "" {
@@ -223,11 +223,11 @@ func TestIntegration_RecursiveDeserializer_ValidationInNested(t *testing.T) {
 		}
 
 		return &simple.Address{
-			Street:  cmd.String("street"),
+			Street:  flags.StringNamed("street"),
 			City:    city,
 			State:   state,
-			ZipCode: cmd.String("zip"),
-			Country: cmd.String("country"),
+			ZipCode: flags.StringNamed("zip"),
+			Country: flags.StringNamed("country"),
 		}, nil
 	}
 
@@ -246,27 +246,27 @@ func TestIntegration_RecursiveDeserializer_ValidationInNested(t *testing.T) {
 // deserializers can compose together
 func TestIntegration_RecursiveDeserializer_CompositionPattern(t *testing.T) {
 	// Helper function to build address (could be reused)
-	buildAddress := func(cmd *cli.Command) *simple.Address {
+	buildAddress := func(flags protocli.FlagContainer) *simple.Address {
 		return &simple.Address{
-			Street:  cmd.String("street"),
-			City:    cmd.String("city"),
-			State:   cmd.String("state"),
-			ZipCode: cmd.String("zip"),
-			Country: cmd.String("country"),
+			Street:  flags.StringNamed("street"),
+			City:    flags.StringNamed("city"),
+			State:   flags.StringNamed("state"),
+			ZipCode: flags.StringNamed("zip"),
+			Country: flags.StringNamed("country"),
 		}
 	}
 
 	// Address deserializer using helper
-	addressDeserializer := func(ctx context.Context, cmd *cli.Command) (proto.Message, error) {
-		return buildAddress(cmd), nil
+	addressDeserializer := func(ctx context.Context, flags protocli.FlagContainer) (proto.Message, error) {
+		return buildAddress(flags), nil
 	}
 
 	// Top-level deserializer could manually build nested messages
-	createUserDeserializer := func(ctx context.Context, cmd *cli.Command) (proto.Message, error) {
+	createUserDeserializer := func(ctx context.Context, flags protocli.FlagContainer) (proto.Message, error) {
 		return &simple.CreateUserRequest{
-			Name:    cmd.String("name"),
-			Email:   cmd.String("email"),
-			Address: buildAddress(cmd), // Manually compose
+			Name:    flags.StringNamed("name"),
+			Email:   flags.StringNamed("email"),
+			Address: buildAddress(flags), // Manually compose
 		}, nil
 	}
 
@@ -284,13 +284,13 @@ func TestIntegration_RecursiveDeserializer_CompositionPattern(t *testing.T) {
 
 // BenchmarkRecursiveDeserializer benchmarks nested message deserialization
 func BenchmarkRecursiveDeserializer(b *testing.B) {
-	addressDeserializer := func(ctx context.Context, cmd *cli.Command) (proto.Message, error) {
+	addressDeserializer := func(ctx context.Context, flags protocli.FlagContainer) (proto.Message, error) {
 		return &simple.Address{
-			Street:  cmd.String("street"),
-			City:    cmd.String("city"),
-			State:   cmd.String("state"),
-			ZipCode: cmd.String("zip"),
-			Country: cmd.String("country"),
+			Street:  flags.StringNamed("street"),
+			City:    flags.StringNamed("city"),
+			State:   flags.StringNamed("state"),
+			ZipCode: flags.StringNamed("zip"),
+			Country: flags.StringNamed("country"),
 		}, nil
 	}
 
@@ -308,6 +308,7 @@ func BenchmarkRecursiveDeserializer(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = addressDeserializer(ctx, cmd)
+		flagContainer := protocli.NewFlagContainer(cmd, "street")
+		_, _ = addressDeserializer(ctx, flagContainer)
 	}
 }
