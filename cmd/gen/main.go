@@ -55,6 +55,27 @@ func getServiceConfigOptions(service *protogen.Service) *clipb.ServiceConfigOpti
 	return ext.(*clipb.ServiceConfigOptions)
 }
 
+// qualifyType returns a jen.Code that properly references a Go type
+// If the type is in the same package as the file being generated, use jen.Id()
+// Otherwise, use jen.Qual() to import from the correct package
+func qualifyType(file *protogen.File, message *protogen.Message, pointer bool) *jen.Statement {
+	var stmt *jen.Statement
+
+	// Check if the message is in the same package as the file being generated
+	if message.GoIdent.GoImportPath == file.GoImportPath {
+		// Same package - use simple identifier
+		stmt = jen.Id(message.GoIdent.GoName)
+	} else {
+		// Different package - use qualified import
+		stmt = jen.Qual(string(message.GoIdent.GoImportPath), message.GoIdent.GoName)
+	}
+
+	if pointer {
+		return jen.Op("*").Add(stmt)
+	}
+	return stmt
+}
+
 func generateServiceCLI(gen *protogen.Plugin, file *protogen.File, service *protogen.Service) {
 	filename := file.GeneratedFilenamePrefix + "_cli.pb.go"
 
@@ -248,7 +269,7 @@ func generateMethodCommand(service *protogen.Service, method *protogen.Method, c
 					jen.Id("cmdCtx").Qual("context", "Context"),
 					jen.Id("cmd").Op("*").Qual("github.com/urfave/cli/v3", "Command"),
 				).Error().Block(
-					generateActionBodyWithHooks(service, method, configMessageType)...,
+					generateActionBodyWithHooks(file, service, method, configMessageType)...,
 				),
 			}),
 		),
@@ -276,6 +297,15 @@ func generateFlag(field *protogen.Field) jen.Code {
 		return jen.Op("&").Qual("github.com/urfave/cli/v3", "BoolFlag").Values(jen.Dict{
 			jen.Id("Name"):  jen.Lit(flagName),
 			jen.Id("Usage"): jen.Lit(field.GoName),
+		})
+	case protoreflect.MessageKind:
+		// For message fields (e.g., google.protobuf.Timestamp, nested messages),
+		// generate a StringFlag that custom deserializers can parse
+		messageType := field.Message
+		fullyQualifiedName := string(messageType.Desc.FullName())
+		return jen.Op("&").Qual("github.com/urfave/cli/v3", "StringFlag").Values(jen.Dict{
+			jen.Id("Name"):  jen.Lit(flagName),
+			jen.Id("Usage"): jen.Lit(fmt.Sprintf("%s (%s)", field.GoName, fullyQualifiedName)),
 		})
 	default:
 		return nil
@@ -380,7 +410,7 @@ func getFieldFlagOptions(field *protogen.Field) *clipb.FlagOptions {
 
 // generateRequestFieldAssignments generates code to assign flag values to request fields
 // Handles both primitive types and nested messages (checking for custom deserializers)
-func generateRequestFieldAssignments(method *protogen.Method) []jen.Code {
+func generateRequestFieldAssignments(file *protogen.File, method *protogen.Method) []jen.Code {
 	var statements []jen.Code
 
 	for _, field := range method.Input.Fields {
@@ -393,6 +423,7 @@ func generateRequestFieldAssignments(method *protogen.Method) []jen.Code {
 			messageType := field.Message
 			fullyQualifiedName := string(messageType.Desc.FullName())
 			goTypeName := messageType.GoIdent.GoName
+			qualifiedType := qualifyType(file, messageType, true)
 
 			statements = append(statements,
 				jen.Comment(fmt.Sprintf("Field %s: check for custom deserializer for %s", field.GoName, fullyQualifiedName)),
@@ -418,7 +449,7 @@ func generateRequestFieldAssignments(method *protogen.Method) []jen.Code {
 							jen.Id("fieldErr"),
 						)),
 					),
-					jen.List(jen.Id("typedField"), jen.Id("fieldOk")).Op(":=").Id("fieldMsg").Assert(jen.Op("*").Id(goTypeName)),
+					jen.List(jen.Id("typedField"), jen.Id("fieldOk")).Op(":=").Id("fieldMsg").Assert(qualifiedType),
 					jen.If(jen.Op("!").Id("fieldOk")).Block(
 						jen.Return(jen.Qual("fmt", "Errorf").Call(
 							jen.Lit(fmt.Sprintf("custom deserializer for %s returned wrong type: expected *%s, got %%T", fullyQualifiedName, goTypeName)),
@@ -427,12 +458,14 @@ func generateRequestFieldAssignments(method *protogen.Method) []jen.Code {
 					),
 					jen.Id("req").Dot(field.GoName).Op("=").Id("typedField"),
 				).Else().Block(
-					jen.Comment("No custom deserializer - create nested message from flags"),
-					jen.Comment("TODO: Generate nested field parsing with prefix"),
-					jen.Comment(fmt.Sprintf("For now, nested message %s requires a custom deserializer", goTypeName)),
-					// For now, just create empty nested message
-					// In a full implementation, we'd recursively parse nested fields
-					jen.Id("req").Dot(field.GoName).Op("=").Op("&").Id(goTypeName).Values(),
+					jen.Comment("No custom deserializer - check if user provided a value"),
+					jen.If(jen.Id("cmd").Dot("IsSet").Call(jen.Lit(flagName))).Block(
+						jen.Return(jen.Qual("fmt", "Errorf").Call(
+							jen.Lit(fmt.Sprintf("flag --%s requires a custom deserializer for %s (register with protocli.WithFlagDeserializer)", flagName, fullyQualifiedName)),
+						)),
+					),
+					jen.Comment("No value provided - create empty nested message"),
+					jen.Id("req").Dot(field.GoName).Op("=").Op("&").Add(qualifyType(file, messageType, false)).Values(),
 				),
 			)
 
@@ -456,7 +489,7 @@ func generateRequestFieldAssignments(method *protogen.Method) []jen.Code {
 	return statements
 }
 
-func generateActionBodyWithHooks(service *protogen.Service, method *protogen.Method, configMessageType string) []jen.Code {
+func generateActionBodyWithHooks(file *protogen.File, service *protogen.Service, method *protogen.Method, configMessageType string) []jen.Code {
 	var statements []jen.Code
 
 	// Call before hook if set
@@ -501,13 +534,14 @@ func generateActionBodyWithHooks(service *protogen.Service, method *protogen.Met
 	)
 
 	// Build request - check for custom deserializer first
-	requestTypeName := method.Input.GoIdent.GoName
 	requestFullyQualifiedName := string(method.Input.Desc.FullName())
+	requestTypeName := method.Input.GoIdent.GoName
+	requestQualifiedType := qualifyType(file, method.Input, true)
 
 	// First, check for custom deserializer
 	statements = append(statements,
 		jen.Comment("Build request message"),
-		jen.Var().Id("req").Op("*").Id(requestTypeName),
+		jen.Var().Id("req").Add(requestQualifiedType),
 		jen.Line(),
 	)
 
@@ -535,7 +569,7 @@ func generateActionBodyWithHooks(service *protogen.Service, method *protogen.Met
 				)),
 			),
 			jen.Var().Id("ok").Bool(),
-			jen.List(jen.Id("req"), jen.Id("ok")).Op("=").Id("msg").Assert(jen.Op("*").Id(requestTypeName)),
+			jen.List(jen.Id("req"), jen.Id("ok")).Op("=").Id("msg").Assert(requestQualifiedType),
 			jen.If(jen.Op("!").Id("ok")).Block(
 				jen.Return(jen.Qual("fmt", "Errorf").Call(
 					jen.Lit("custom deserializer returned wrong type: expected *%s, got %T"),
@@ -546,8 +580,8 @@ func generateActionBodyWithHooks(service *protogen.Service, method *protogen.Met
 		).Else().Block(
 			append([]jen.Code{
 				jen.Comment("Use auto-generated flag parsing"),
-				jen.Id("req").Op("=").Op("&").Id(requestTypeName).Values(),
-			}, generateRequestFieldAssignments(method)...)...,
+				jen.Id("req").Op("=").Op("&").Add(qualifyType(file, method.Input, false)).Values(),
+			}, generateRequestFieldAssignments(file, method)...)...,
 		),
 		jen.Line(),
 	}

@@ -11,6 +11,7 @@ import (
 	simple "github.com/drewfead/proto-cli/examples/simple"
 
 	v3 "github.com/urfave/cli/v3"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // userService implements simple.UserServiceServer
@@ -34,7 +35,7 @@ func newUserService(config *simple.UserServiceConfig) simple.UserServiceServer {
 				Id:        1,
 				Name:      "Demo User",
 				Email:     "demo@example.com",
-				CreatedAt: time.Now().Unix(),
+				CreatedAt: timestamppb.New(time.Now()),
 			},
 		},
 	}
@@ -59,7 +60,7 @@ func (s *userService) CreateUser(ctx context.Context, req *simple.CreateUserRequ
 		Id:        id,
 		Name:      req.Name,
 		Email:     req.Email,
-		CreatedAt: time.Now().Unix(),
+		CreatedAt: timestamppb.New(time.Now()),
 	}
 	s.users[id] = user
 	return &simple.UserResponse{

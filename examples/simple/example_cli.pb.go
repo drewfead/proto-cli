@@ -9,6 +9,7 @@ import (
 	v3 "github.com/urfave/cli/v3"
 	grpc "google.golang.org/grpc"
 	insecure "google.golang.org/grpc/credentials/insecure"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	"io"
 	"os"
 )
@@ -221,6 +222,14 @@ func UserServiceServiceCommand(ctx context.Context, implOrFactory interface{}, o
 		Name:  "email",
 		Usage: "Email",
 	})
+	flags_createuser = append(flags_createuser, &v3.StringFlag{
+		Name:  "address",
+		Usage: "Address (example.Address)",
+	})
+	flags_createuser = append(flags_createuser, &v3.StringFlag{
+		Name:  "registrationdate",
+		Usage: "RegistrationDate (google.protobuf.Timestamp)",
+	})
 
 	// Add config field flags for single-command mode
 	flags_createuser = append(flags_createuser, &v3.StringFlag{
@@ -298,10 +307,34 @@ func UserServiceServiceCommand(ctx context.Context, implOrFactory interface{}, o
 					}
 					req.Address = typedField
 				} else {
-					// No custom deserializer - create nested message from flags
-					// TODO: Generate nested field parsing with prefix
-					// For now, nested message Address requires a custom deserializer
+					// No custom deserializer - check if user provided a value
+					if cmd.IsSet("address") {
+						return fmt.Errorf("flag --address requires a custom deserializer for example.Address (register with protocli.WithFlagDeserializer)")
+					}
+					// No value provided - create empty nested message
 					req.Address = &Address{}
+				}
+				// Field RegistrationDate: check for custom deserializer for google.protobuf.Timestamp
+				if fieldDeserializer, hasFieldDeserializer := options.FlagDeserializer("google.protobuf.Timestamp"); hasFieldDeserializer {
+					// Use custom deserializer for nested message
+					// Create FlagContainer for field flag: registrationdate
+					fieldFlags := protocli.NewFlagContainer(cmd, "registrationdate")
+					fieldMsg, fieldErr := fieldDeserializer(cmdCtx, fieldFlags)
+					if fieldErr != nil {
+						return fmt.Errorf("failed to deserialize field RegistrationDate: %w", fieldErr)
+					}
+					typedField, fieldOk := fieldMsg.(*timestamppb.Timestamp)
+					if !fieldOk {
+						return fmt.Errorf("custom deserializer for google.protobuf.Timestamp returned wrong type: expected *Timestamp, got %T", fieldMsg)
+					}
+					req.RegistrationDate = typedField
+				} else {
+					// No custom deserializer - check if user provided a value
+					if cmd.IsSet("registrationdate") {
+						return fmt.Errorf("flag --registrationdate requires a custom deserializer for google.protobuf.Timestamp (register with protocli.WithFlagDeserializer)")
+					}
+					// No value provided - create empty nested message
+					req.RegistrationDate = &timestamppb.Timestamp{}
 				}
 			}
 

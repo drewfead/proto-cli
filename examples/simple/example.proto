@@ -4,6 +4,7 @@ package example;
 
 option go_package = "github.com/drewfead/proto-cli/simple";
 
+import "google/protobuf/timestamp.proto";
 import "internal/clipb/cli.proto";
 
 // DatabaseConfig is a nested configuration message
@@ -100,7 +101,7 @@ message User {
   int64 id = 1;
   string name = 2;
   string email = 3;
-  int64 created_at = 4;
+  google.protobuf.Timestamp created_at = 4;  // External type to test import qualification
   Address address = 5;  // Nested address field
 }
 
@@ -129,6 +130,7 @@ message CreateUserRequest {
     required: true
   }];
   Address address = 3;  // Nested address - demonstrates recursive deserializers
+  google.protobuf.Timestamp registration_date = 4;  // External type to test import qualification
 }
 
 // Response containing a user

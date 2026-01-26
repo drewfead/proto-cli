@@ -10,6 +10,7 @@ import (
 	_ "github.com/drewfead/proto-cli/internal/clipb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -489,8 +490,8 @@ type User struct {
 	Id            int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
 	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
 	Email         string                 `protobuf:"bytes,3,opt,name=email,proto3" json:"email,omitempty"`
-	CreatedAt     int64                  `protobuf:"varint,4,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	Address       *Address               `protobuf:"bytes,5,opt,name=address,proto3" json:"address,omitempty"` // Nested address field
+	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"` // External type to test import qualification
+	Address       *Address               `protobuf:"bytes,5,opt,name=address,proto3" json:"address,omitempty"`                      // Nested address field
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -546,11 +547,11 @@ func (x *User) GetEmail() string {
 	return ""
 }
 
-func (x *User) GetCreatedAt() int64 {
+func (x *User) GetCreatedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.CreatedAt
 	}
-	return 0
+	return nil
 }
 
 func (x *User) GetAddress() *Address {
@@ -607,12 +608,13 @@ func (x *GetUserRequest) GetId() int64 {
 
 // Request to create a new user
 type CreateUserRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Email         string                 `protobuf:"bytes,2,opt,name=email,proto3" json:"email,omitempty"`
-	Address       *Address               `protobuf:"bytes,3,opt,name=address,proto3" json:"address,omitempty"` // Nested address - demonstrates recursive deserializers
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Name             string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Email            string                 `protobuf:"bytes,2,opt,name=email,proto3" json:"email,omitempty"`
+	Address          *Address               `protobuf:"bytes,3,opt,name=address,proto3" json:"address,omitempty"`                                           // Nested address - demonstrates recursive deserializers
+	RegistrationDate *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=registration_date,json=registrationDate,proto3" json:"registration_date,omitempty"` // External type to test import qualification
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *CreateUserRequest) Reset() {
@@ -662,6 +664,13 @@ func (x *CreateUserRequest) GetEmail() string {
 func (x *CreateUserRequest) GetAddress() *Address {
 	if x != nil {
 		return x.Address
+	}
+	return nil
+}
+
+func (x *CreateUserRequest) GetRegistrationDate() *timestamppb.Timestamp {
+	if x != nil {
+		return x.RegistrationDate
 	}
 	return nil
 }
@@ -723,7 +732,7 @@ var File_examples_simple_example_proto protoreflect.FileDescriptor
 
 const file_examples_simple_example_proto_rawDesc = "" +
 	"\n" +
-	"\x1dexamples/simple/example.proto\x12\aexample\x1a\x18internal/clipb/cli.proto\"\xfb\x01\n" +
+	"\x1dexamples/simple/example.proto\x12\aexample\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x18internal/clipb/cli.proto\"\xfb\x01\n" +
 	"\x0eDatabaseConfig\x124\n" +
 	"\x03url\x18\x01 \x01(\tB\"\x92\xb5\x18\x1e\n" +
 	"\x03url\x1a\x17Database connection URLR\x03url\x12\\\n" +
@@ -764,23 +773,24 @@ const file_examples_simple_example_proto_rawDesc = "" +
 	"\x04city\x18\x02 \x01(\tR\x04city\x12\x14\n" +
 	"\x05state\x18\x03 \x01(\tR\x05state\x12\x19\n" +
 	"\bzip_code\x18\x04 \x01(\tR\azipCode\x12\x18\n" +
-	"\acountry\x18\x05 \x01(\tR\acountry\"\x8b\x01\n" +
+	"\acountry\x18\x05 \x01(\tR\acountry\"\xa7\x01\n" +
 	"\x04User\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x14\n" +
-	"\x05email\x18\x03 \x01(\tR\x05email\x12\x1d\n" +
+	"\x05email\x18\x03 \x01(\tR\x05email\x129\n" +
 	"\n" +
-	"created_at\x18\x04 \x01(\x03R\tcreatedAt\x12*\n" +
+	"created_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12*\n" +
 	"\aaddress\x18\x05 \x01(\v2\x10.example.AddressR\aaddress\"D\n" +
 	"\x0eGetUserRequest\x122\n" +
 	"\x02id\x18\x01 \x01(\x03B\"\x92\xb5\x18\x1e\n" +
-	"\x02id\x12\x01i\x1a\x13User ID to retrieve \x01R\x02id\"\xb4\x01\n" +
+	"\x02id\x12\x01i\x1a\x13User ID to retrieve \x01R\x02id\"\xfd\x01\n" +
 	"\x11CreateUserRequest\x125\n" +
 	"\x04name\x18\x01 \x01(\tB!\x92\xb5\x18\x1d\n" +
 	"\x04name\x12\x01n\x1a\x10User's full name \x01R\x04name\x12<\n" +
 	"\x05email\x18\x02 \x01(\tB&\x92\xb5\x18\"\n" +
 	"\x05email\x12\x01e\x1a\x14User's email address \x01R\x05email\x12*\n" +
-	"\aaddress\x18\x03 \x01(\v2\x10.example.AddressR\aaddress\"K\n" +
+	"\aaddress\x18\x03 \x01(\v2\x10.example.AddressR\aaddress\x12G\n" +
+	"\x11registration_date\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x10registrationDate\"K\n" +
 	"\fUserResponse\x12!\n" +
 	"\x04user\x18\x01 \x01(\v2\r.example.UserR\x04user\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage*O\n" +
@@ -819,17 +829,18 @@ func file_examples_simple_example_proto_rawDescGZIP() []byte {
 var file_examples_simple_example_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_examples_simple_example_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_examples_simple_example_proto_goTypes = []any{
-	(LogLevel)(0),             // 0: example.LogLevel
-	(*DatabaseConfig)(nil),    // 1: example.DatabaseConfig
-	(*PostgresBackend)(nil),   // 2: example.PostgresBackend
-	(*MySQLBackend)(nil),      // 3: example.MySQLBackend
-	(*UserServiceConfig)(nil), // 4: example.UserServiceConfig
-	(*Address)(nil),           // 5: example.Address
-	(*User)(nil),              // 6: example.User
-	(*GetUserRequest)(nil),    // 7: example.GetUserRequest
-	(*CreateUserRequest)(nil), // 8: example.CreateUserRequest
-	(*UserResponse)(nil),      // 9: example.UserResponse
-	nil,                       // 10: example.UserServiceConfig.FeatureFlagsEntry
+	(LogLevel)(0),                 // 0: example.LogLevel
+	(*DatabaseConfig)(nil),        // 1: example.DatabaseConfig
+	(*PostgresBackend)(nil),       // 2: example.PostgresBackend
+	(*MySQLBackend)(nil),          // 3: example.MySQLBackend
+	(*UserServiceConfig)(nil),     // 4: example.UserServiceConfig
+	(*Address)(nil),               // 5: example.Address
+	(*User)(nil),                  // 6: example.User
+	(*GetUserRequest)(nil),        // 7: example.GetUserRequest
+	(*CreateUserRequest)(nil),     // 8: example.CreateUserRequest
+	(*UserResponse)(nil),          // 9: example.UserResponse
+	nil,                           // 10: example.UserServiceConfig.FeatureFlagsEntry
+	(*timestamppb.Timestamp)(nil), // 11: google.protobuf.Timestamp
 }
 var file_examples_simple_example_proto_depIdxs = []int32{
 	1,  // 0: example.UserServiceConfig.database:type_name -> example.DatabaseConfig
@@ -837,20 +848,22 @@ var file_examples_simple_example_proto_depIdxs = []int32{
 	10, // 2: example.UserServiceConfig.feature_flags:type_name -> example.UserServiceConfig.FeatureFlagsEntry
 	2,  // 3: example.UserServiceConfig.postgres:type_name -> example.PostgresBackend
 	3,  // 4: example.UserServiceConfig.mysql:type_name -> example.MySQLBackend
-	5,  // 5: example.User.address:type_name -> example.Address
-	5,  // 6: example.CreateUserRequest.address:type_name -> example.Address
-	6,  // 7: example.UserResponse.user:type_name -> example.User
-	7,  // 8: example.UserService.GetUser:input_type -> example.GetUserRequest
-	8,  // 9: example.UserService.CreateUser:input_type -> example.CreateUserRequest
-	7,  // 10: example.UserService.ListUsers:input_type -> example.GetUserRequest
-	9,  // 11: example.UserService.GetUser:output_type -> example.UserResponse
-	9,  // 12: example.UserService.CreateUser:output_type -> example.UserResponse
-	9,  // 13: example.UserService.ListUsers:output_type -> example.UserResponse
-	11, // [11:14] is the sub-list for method output_type
-	8,  // [8:11] is the sub-list for method input_type
-	8,  // [8:8] is the sub-list for extension type_name
-	8,  // [8:8] is the sub-list for extension extendee
-	0,  // [0:8] is the sub-list for field type_name
+	11, // 5: example.User.created_at:type_name -> google.protobuf.Timestamp
+	5,  // 6: example.User.address:type_name -> example.Address
+	5,  // 7: example.CreateUserRequest.address:type_name -> example.Address
+	11, // 8: example.CreateUserRequest.registration_date:type_name -> google.protobuf.Timestamp
+	6,  // 9: example.UserResponse.user:type_name -> example.User
+	7,  // 10: example.UserService.GetUser:input_type -> example.GetUserRequest
+	8,  // 11: example.UserService.CreateUser:input_type -> example.CreateUserRequest
+	7,  // 12: example.UserService.ListUsers:input_type -> example.GetUserRequest
+	9,  // 13: example.UserService.GetUser:output_type -> example.UserResponse
+	9,  // 14: example.UserService.CreateUser:output_type -> example.UserResponse
+	9,  // 15: example.UserService.ListUsers:output_type -> example.UserResponse
+	13, // [13:16] is the sub-list for method output_type
+	10, // [10:13] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_examples_simple_example_proto_init() }
