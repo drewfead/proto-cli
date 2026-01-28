@@ -23,11 +23,15 @@ const (
 )
 
 type ListItemsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Category      string                 `protobuf:"bytes,1,opt,name=category,proto3" json:"category,omitempty"`
-	Limit         int32                  `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Category string                 `protobuf:"bytes,1,opt,name=category,proto3" json:"category,omitempty"`
+	Limit    int32                  `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
+	// Optional fields demonstrate explicit presence tracking
+	Offset         *int32  `protobuf:"varint,3,opt,name=offset,proto3,oneof" json:"offset,omitempty"`
+	SortBy         *string `protobuf:"bytes,4,opt,name=sort_by,json=sortBy,proto3,oneof" json:"sort_by,omitempty"`
+	IncludeDeleted *bool   `protobuf:"varint,5,opt,name=include_deleted,json=includeDeleted,proto3,oneof" json:"include_deleted,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *ListItemsRequest) Reset() {
@@ -72,6 +76,27 @@ func (x *ListItemsRequest) GetLimit() int32 {
 		return x.Limit
 	}
 	return 0
+}
+
+func (x *ListItemsRequest) GetOffset() int32 {
+	if x != nil && x.Offset != nil {
+		return *x.Offset
+	}
+	return 0
+}
+
+func (x *ListItemsRequest) GetSortBy() string {
+	if x != nil && x.SortBy != nil {
+		return *x.SortBy
+	}
+	return ""
+}
+
+func (x *ListItemsRequest) GetIncludeDeleted() bool {
+	if x != nil && x.IncludeDeleted != nil {
+		return *x.IncludeDeleted
+	}
+	return false
 }
 
 type ItemResponse struct {
@@ -294,12 +319,22 @@ var File_examples_streaming_streaming_proto protoreflect.FileDescriptor
 
 const file_examples_streaming_streaming_proto_rawDesc = "" +
 	"\n" +
-	"\"examples/streaming/streaming.proto\x12\tstreaming\x1a\x18internal/clipb/cli.proto\"\x8a\x01\n" +
+	"\"examples/streaming/streaming.proto\x12\tstreaming\x1a\x18internal/clipb/cli.proto\"\xa3\x03\n" +
 	"\x10ListItemsRequest\x12>\n" +
 	"\bcategory\x18\x01 \x01(\tB\"\x92\xb5\x18\x1e\n" +
 	"\bcategory\x1a\x12Filter by categoryR\bcategory\x126\n" +
 	"\x05limit\x18\x02 \x01(\x05B \x92\xb5\x18\x1c\n" +
-	"\x05limit\x1a\x13Max items to returnR\x05limit\"M\n" +
+	"\x05limit\x1a\x13Max items to returnR\x05limit\x12B\n" +
+	"\x06offset\x18\x03 \x01(\x05B%\x92\xb5\x18!\n" +
+	"\x06offset\x1a\x17Number of items to skipH\x00R\x06offset\x88\x01\x01\x12L\n" +
+	"\asort_by\x18\x04 \x01(\tB.\x92\xb5\x18*\n" +
+	"\asort-by\x1a\x1fSort field (name, id, category)H\x01R\x06sortBy\x88\x01\x01\x12Z\n" +
+	"\x0finclude_deleted\x18\x05 \x01(\bB,\x92\xb5\x18(\n" +
+	"\x0finclude-deleted\x1a\x15Include deleted itemsH\x02R\x0eincludeDeleted\x88\x01\x01B\t\n" +
+	"\a_offsetB\n" +
+	"\n" +
+	"\b_sort_byB\x12\n" +
+	"\x10_include_deleted\"M\n" +
 	"\fItemResponse\x12#\n" +
 	"\x04item\x18\x01 \x01(\v2\x0f.streaming.ItemR\x04item\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\"F\n" +
@@ -364,6 +399,7 @@ func file_examples_streaming_streaming_proto_init() {
 	if File_examples_streaming_streaming_proto != nil {
 		return
 	}
+	file_examples_streaming_streaming_proto_msgTypes[0].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

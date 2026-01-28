@@ -30,6 +30,11 @@ service StreamingService {
 message ListItemsRequest {
   string category = 1 [(cli.flag) = {name: "category", usage: "Filter by category"}];
   int32 limit = 2 [(cli.flag) = {name: "limit", usage: "Max items to return"}];
+
+  // Optional fields demonstrate explicit presence tracking
+  optional int32 offset = 3 [(cli.flag) = {name: "offset", usage: "Number of items to skip"}];
+  optional string sort_by = 4 [(cli.flag) = {name: "sort-by", usage: "Sort field (name, id, category)"}];
+  optional bool include_deleted = 5 [(cli.flag) = {name: "include-deleted", usage: "Include deleted items"}];
 }
 
 message ItemResponse {

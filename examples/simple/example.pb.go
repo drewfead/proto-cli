@@ -567,8 +567,11 @@ type GetUserRequest struct {
 	Id    int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
 	// Field with partial annotation - demonstrates name defaults to kebab-case
 	IncludeDetails bool `protobuf:"varint,2,opt,name=include_details,json=includeDetails,proto3" json:"include_details,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Optional fields demonstrate explicit presence tracking in proto3
+	FieldsFilter  *string `protobuf:"bytes,3,opt,name=fields_filter,json=fieldsFilter,proto3,oneof" json:"fields_filter,omitempty"`
+	TimeoutMs     *int32  `protobuf:"varint,4,opt,name=timeout_ms,json=timeoutMs,proto3,oneof" json:"timeout_ms,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetUserRequest) Reset() {
@@ -615,6 +618,20 @@ func (x *GetUserRequest) GetIncludeDetails() bool {
 	return false
 }
 
+func (x *GetUserRequest) GetFieldsFilter() string {
+	if x != nil && x.FieldsFilter != nil {
+		return *x.FieldsFilter
+	}
+	return ""
+}
+
+func (x *GetUserRequest) GetTimeoutMs() int32 {
+	if x != nil && x.TimeoutMs != nil {
+		return *x.TimeoutMs
+	}
+	return 0
+}
+
 // Request to create a new user
 type CreateUserRequest struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
@@ -623,7 +640,11 @@ type CreateUserRequest struct {
 	Address          *Address               `protobuf:"bytes,3,opt,name=address,proto3" json:"address,omitempty"`                                           // Nested address - demonstrates recursive deserializers
 	RegistrationDate *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=registration_date,json=registrationDate,proto3" json:"registration_date,omitempty"` // External type to test import qualification
 	// Field without annotation - demonstrates kebab-case default
-	PhoneNumber   string `protobuf:"bytes,5,opt,name=phone_number,json=phoneNumber,proto3" json:"phone_number,omitempty"`
+	PhoneNumber string `protobuf:"bytes,5,opt,name=phone_number,json=phoneNumber,proto3" json:"phone_number,omitempty"`
+	// Optional fields demonstrate explicit presence tracking
+	Nickname      *string `protobuf:"bytes,6,opt,name=nickname,proto3,oneof" json:"nickname,omitempty"`
+	Age           *int32  `protobuf:"varint,7,opt,name=age,proto3,oneof" json:"age,omitempty"`
+	Verified      *bool   `protobuf:"varint,8,opt,name=verified,proto3,oneof" json:"verified,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -691,6 +712,27 @@ func (x *CreateUserRequest) GetPhoneNumber() string {
 		return x.PhoneNumber
 	}
 	return ""
+}
+
+func (x *CreateUserRequest) GetNickname() string {
+	if x != nil && x.Nickname != nil {
+		return *x.Nickname
+	}
+	return ""
+}
+
+func (x *CreateUserRequest) GetAge() int32 {
+	if x != nil && x.Age != nil {
+		return *x.Age
+	}
+	return 0
+}
+
+func (x *CreateUserRequest) GetVerified() bool {
+	if x != nil && x.Verified != nil {
+		return *x.Verified
+	}
+	return false
 }
 
 // Response containing a user
@@ -888,11 +930,18 @@ const file_examples_simple_example_proto_rawDesc = "" +
 	"\x05email\x18\x03 \x01(\tR\x05email\x129\n" +
 	"\n" +
 	"created_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12*\n" +
-	"\aaddress\x18\x05 \x01(\v2\x10.example.AddressR\aaddress\"\x99\x01\n" +
+	"\aaddress\x18\x05 \x01(\v2\x10.example.AddressR\aaddress\"\x8b\x03\n" +
 	"\x0eGetUserRequest\x122\n" +
 	"\x02id\x18\x01 \x01(\x03B\"\x92\xb5\x18\x1e\n" +
 	"\x02id\x12\x01i\x1a\x13User ID to retrieve \x01R\x02id\x12S\n" +
-	"\x0finclude_details\x18\x02 \x01(\bB*\x92\xb5\x18&\x12\x01d\x1a!Include detailed user informationR\x0eincludeDetails\"\xa0\x02\n" +
+	"\x0finclude_details\x18\x02 \x01(\bB*\x92\xb5\x18&\x12\x01d\x1a!Include detailed user informationR\x0eincludeDetails\x12x\n" +
+	"\rfields_filter\x18\x03 \x01(\tBN\x92\xb5\x18J\n" +
+	"\x06fields\x12\x01f\x1a=Comma-separated list of fields to return (e.g., 'name,email')H\x00R\ffieldsFilter\x88\x01\x01\x12U\n" +
+	"\n" +
+	"timeout_ms\x18\x04 \x01(\x05B1\x92\xb5\x18-\n" +
+	"\atimeout\x12\x01t\x1a\x1fRequest timeout in millisecondsH\x01R\ttimeoutMs\x88\x01\x01B\x10\n" +
+	"\x0e_fields_filterB\r\n" +
+	"\v_timeout_ms\"\x9f\x04\n" +
 	"\x11CreateUserRequest\x125\n" +
 	"\x04name\x18\x01 \x01(\tB!\x92\xb5\x18\x1d\n" +
 	"\x04name\x12\x01n\x1a\x10User's full name \x01R\x04name\x12<\n" +
@@ -900,7 +949,16 @@ const file_examples_simple_example_proto_rawDesc = "" +
 	"\x05email\x12\x01e\x1a\x14User's email address \x01R\x05email\x12*\n" +
 	"\aaddress\x18\x03 \x01(\v2\x10.example.AddressR\aaddress\x12G\n" +
 	"\x11registration_date\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x10registrationDate\x12!\n" +
-	"\fphone_number\x18\x05 \x01(\tR\vphoneNumber\"K\n" +
+	"\fphone_number\x18\x05 \x01(\tR\vphoneNumber\x12O\n" +
+	"\bnickname\x18\x06 \x01(\tB.\x92\xb5\x18*\n" +
+	"\bnickname\x1a\x1eOptional nickname for the userH\x00R\bnickname\x88\x01\x01\x125\n" +
+	"\x03age\x18\a \x01(\x05B\x1e\x92\xb5\x18\x1a\n" +
+	"\x03age\x1a\x13User's age in yearsH\x01R\x03age\x88\x01\x01\x12S\n" +
+	"\bverified\x18\b \x01(\bB2\x92\xb5\x18.\n" +
+	"\bverified\x1a\"Whether the user email is verifiedH\x02R\bverified\x88\x01\x01B\v\n" +
+	"\t_nicknameB\x06\n" +
+	"\x04_ageB\v\n" +
+	"\t_verified\"K\n" +
 	"\fUserResponse\x12!\n" +
 	"\x04user\x18\x01 \x01(\v2\r.example.UserR\x04user\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\"\x0e\n" +
@@ -994,6 +1052,8 @@ func file_examples_simple_example_proto_init() {
 		(*UserServiceConfig_Postgres)(nil),
 		(*UserServiceConfig_Mysql)(nil),
 	}
+	file_examples_simple_example_proto_msgTypes[6].OneofWrappers = []any{}
+	file_examples_simple_example_proto_msgTypes[7].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

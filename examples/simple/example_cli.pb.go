@@ -60,6 +60,16 @@ func UserServiceCommand(ctx context.Context, implOrFactory interface{}, opts ...
 		Name:    "include-details",
 		Usage:   "Include detailed user information",
 	})
+	flags_get = append(flags_get, &v3.StringFlag{
+		Aliases: []string{"f"},
+		Name:    "fields",
+		Usage:   "Comma-separated list of fields to return (e.g., 'name,email')",
+	})
+	flags_get = append(flags_get, &v3.Int32Flag{
+		Aliases: []string{"t"},
+		Name:    "timeout",
+		Usage:   "Request timeout in milliseconds",
+	})
 
 	// Add config field flags for single-command mode
 	flags_get = append(flags_get, &v3.StringFlag{
@@ -130,6 +140,14 @@ func UserServiceCommand(ctx context.Context, implOrFactory interface{}, opts ...
 				req = &GetUserRequest{}
 				req.Id = cmd.Int64("id")
 				req.IncludeDetails = cmd.Bool("include-details")
+				if cmd.IsSet("fields-filter") {
+					val := cmd.String("fields-filter")
+					req.FieldsFilter = &val
+				}
+				if cmd.IsSet("timeout-ms") {
+					val := cmd.Int32("timeout-ms")
+					req.TimeoutMs = &val
+				}
 			}
 
 			// Check if using remote gRPC call or direct implementation call
@@ -256,6 +274,18 @@ func UserServiceCommand(ctx context.Context, implOrFactory interface{}, opts ...
 		Name:  "phone-number",
 		Usage: "PhoneNumber",
 	})
+	flags_create = append(flags_create, &v3.StringFlag{
+		Name:  "nickname",
+		Usage: "Optional nickname for the user",
+	})
+	flags_create = append(flags_create, &v3.Int32Flag{
+		Name:  "age",
+		Usage: "User's age in years",
+	})
+	flags_create = append(flags_create, &v3.BoolFlag{
+		Name:  "verified",
+		Usage: "Whether the user email is verified",
+	})
 
 	// Add config field flags for single-command mode
 	flags_create = append(flags_create, &v3.StringFlag{
@@ -375,6 +405,18 @@ func UserServiceCommand(ctx context.Context, implOrFactory interface{}, opts ...
 					// No value provided - leave field as nil
 				}
 				req.PhoneNumber = cmd.String("phone-number")
+				if cmd.IsSet("nickname") {
+					val := cmd.String("nickname")
+					req.Nickname = &val
+				}
+				if cmd.IsSet("age") {
+					val := cmd.Int32("age")
+					req.Age = &val
+				}
+				if cmd.IsSet("verified") {
+					val := cmd.Bool("verified")
+					req.Verified = &val
+				}
 			}
 
 			// Check if using remote gRPC call or direct implementation call

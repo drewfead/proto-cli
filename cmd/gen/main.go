@@ -604,6 +604,8 @@ func getFieldFlagOptions(field *protogen.Field) *clipb.FlagOptions {
 
 // generateRequestFieldAssignments generates code to assign flag values to request fields
 // Handles both primitive types and nested messages (checking for custom deserializers)
+//
+//nolint:gocyclo,dupl,maintidx // Complexity comes from handling all proto kinds with optional field support
 func generateRequestFieldAssignments(file *protogen.File, method *protogen.Method) []jen.Code {
 	var statements []jen.Code
 
@@ -666,45 +668,137 @@ func generateRequestFieldAssignments(file *protogen.File, method *protogen.Metho
 			)
 
 		case protoreflect.Int32Kind, protoreflect.Sint32Kind, protoreflect.Sfixed32Kind:
-			statements = append(statements,
-				jen.Id("req").Dot(field.GoName).Op("=").Id("cmd").Dot("Int32").Call(jen.Lit(flagName)),
-			)
+			// Check if field is optional (has synthetic oneof for presence tracking)
+			oneof := field.Desc.ContainingOneof()
+			isOptional := field.Desc.HasPresence() && (oneof == nil || (oneof != nil && oneof.IsSynthetic()))
+			if isOptional {
+				// Optional field - only set if flag was provided
+				statements = append(statements,
+					jen.If(jen.Id("cmd").Dot("IsSet").Call(jen.Lit(flagName))).Block(
+						jen.Id("val").Op(":=").Id("cmd").Dot("Int32").Call(jen.Lit(flagName)),
+						jen.Id("req").Dot(field.GoName).Op("=").Op("&").Id("val"),
+					),
+				)
+			} else {
+				// Regular field - always set
+				statements = append(statements,
+					jen.Id("req").Dot(field.GoName).Op("=").Id("cmd").Dot("Int32").Call(jen.Lit(flagName)),
+				)
+			}
 		case protoreflect.Int64Kind, protoreflect.Sint64Kind, protoreflect.Sfixed64Kind:
-			statements = append(statements,
-				jen.Id("req").Dot(field.GoName).Op("=").Id("cmd").Dot("Int64").Call(jen.Lit(flagName)),
-			)
+			oneof := field.Desc.ContainingOneof()
+			isOptional := field.Desc.HasPresence() && (oneof == nil || (oneof != nil && oneof.IsSynthetic()))
+			if isOptional {
+				statements = append(statements,
+					jen.If(jen.Id("cmd").Dot("IsSet").Call(jen.Lit(flagName))).Block(
+						jen.Id("val").Op(":=").Id("cmd").Dot("Int64").Call(jen.Lit(flagName)),
+						jen.Id("req").Dot(field.GoName).Op("=").Op("&").Id("val"),
+					),
+				)
+			} else {
+				statements = append(statements,
+					jen.Id("req").Dot(field.GoName).Op("=").Id("cmd").Dot("Int64").Call(jen.Lit(flagName)),
+				)
+			}
 		case protoreflect.Uint32Kind, protoreflect.Fixed32Kind:
-			statements = append(statements,
-				jen.Id("req").Dot(field.GoName).Op("=").Id("cmd").Dot("Uint32").Call(jen.Lit(flagName)),
-			)
+			oneof := field.Desc.ContainingOneof()
+			isOptional := field.Desc.HasPresence() && (oneof == nil || (oneof != nil && oneof.IsSynthetic()))
+			if isOptional {
+				statements = append(statements,
+					jen.If(jen.Id("cmd").Dot("IsSet").Call(jen.Lit(flagName))).Block(
+						jen.Id("val").Op(":=").Id("cmd").Dot("Uint32").Call(jen.Lit(flagName)),
+						jen.Id("req").Dot(field.GoName).Op("=").Op("&").Id("val"),
+					),
+				)
+			} else {
+				statements = append(statements,
+					jen.Id("req").Dot(field.GoName).Op("=").Id("cmd").Dot("Uint32").Call(jen.Lit(flagName)),
+				)
+			}
 		case protoreflect.Uint64Kind, protoreflect.Fixed64Kind:
-			statements = append(statements,
-				jen.Id("req").Dot(field.GoName).Op("=").Id("cmd").Dot("Uint64").Call(jen.Lit(flagName)),
-			)
+			oneof := field.Desc.ContainingOneof()
+			isOptional := field.Desc.HasPresence() && (oneof == nil || (oneof != nil && oneof.IsSynthetic()))
+			if isOptional {
+				statements = append(statements,
+					jen.If(jen.Id("cmd").Dot("IsSet").Call(jen.Lit(flagName))).Block(
+						jen.Id("val").Op(":=").Id("cmd").Dot("Uint64").Call(jen.Lit(flagName)),
+						jen.Id("req").Dot(field.GoName).Op("=").Op("&").Id("val"),
+					),
+				)
+			} else {
+				statements = append(statements,
+					jen.Id("req").Dot(field.GoName).Op("=").Id("cmd").Dot("Uint64").Call(jen.Lit(flagName)),
+				)
+			}
 		case protoreflect.FloatKind:
-			statements = append(statements,
-				jen.Id("req").Dot(field.GoName).Op("=").Id("cmd").Dot("Float32").Call(jen.Lit(flagName)),
-			)
+			oneof := field.Desc.ContainingOneof()
+			isOptional := field.Desc.HasPresence() && (oneof == nil || (oneof != nil && oneof.IsSynthetic()))
+			if isOptional {
+				statements = append(statements,
+					jen.If(jen.Id("cmd").Dot("IsSet").Call(jen.Lit(flagName))).Block(
+						jen.Id("val").Op(":=").Id("cmd").Dot("Float32").Call(jen.Lit(flagName)),
+						jen.Id("req").Dot(field.GoName).Op("=").Op("&").Id("val"),
+					),
+				)
+			} else {
+				statements = append(statements,
+					jen.Id("req").Dot(field.GoName).Op("=").Id("cmd").Dot("Float32").Call(jen.Lit(flagName)),
+				)
+			}
 		case protoreflect.DoubleKind:
-			statements = append(statements,
-				jen.Id("req").Dot(field.GoName).Op("=").Id("cmd").Dot("Float64").Call(jen.Lit(flagName)),
-			)
+			oneof := field.Desc.ContainingOneof()
+			isOptional := field.Desc.HasPresence() && (oneof == nil || (oneof != nil && oneof.IsSynthetic()))
+			if isOptional {
+				statements = append(statements,
+					jen.If(jen.Id("cmd").Dot("IsSet").Call(jen.Lit(flagName))).Block(
+						jen.Id("val").Op(":=").Id("cmd").Dot("Float64").Call(jen.Lit(flagName)),
+						jen.Id("req").Dot(field.GoName).Op("=").Op("&").Id("val"),
+					),
+				)
+			} else {
+				statements = append(statements,
+					jen.Id("req").Dot(field.GoName).Op("=").Id("cmd").Dot("Float64").Call(jen.Lit(flagName)),
+				)
+			}
 		case protoreflect.StringKind:
-			statements = append(statements,
-				jen.Id("req").Dot(field.GoName).Op("=").Id("cmd").Dot("String").Call(jen.Lit(flagName)),
-			)
+			oneof := field.Desc.ContainingOneof()
+			isOptional := field.Desc.HasPresence() && (oneof == nil || (oneof != nil && oneof.IsSynthetic()))
+			if isOptional {
+				statements = append(statements,
+					jen.If(jen.Id("cmd").Dot("IsSet").Call(jen.Lit(flagName))).Block(
+						jen.Id("val").Op(":=").Id("cmd").Dot("String").Call(jen.Lit(flagName)),
+						jen.Id("req").Dot(field.GoName).Op("=").Op("&").Id("val"),
+					),
+				)
+			} else {
+				statements = append(statements,
+					jen.Id("req").Dot(field.GoName).Op("=").Id("cmd").Dot("String").Call(jen.Lit(flagName)),
+				)
+			}
 		case protoreflect.BoolKind:
-			statements = append(statements,
-				jen.Id("req").Dot(field.GoName).Op("=").Id("cmd").Dot("Bool").Call(jen.Lit(flagName)),
-			)
+			oneof := field.Desc.ContainingOneof()
+			isOptional := field.Desc.HasPresence() && (oneof == nil || (oneof != nil && oneof.IsSynthetic()))
+			if isOptional {
+				statements = append(statements,
+					jen.If(jen.Id("cmd").Dot("IsSet").Call(jen.Lit(flagName))).Block(
+						jen.Id("val").Op(":=").Id("cmd").Dot("Bool").Call(jen.Lit(flagName)),
+						jen.Id("req").Dot(field.GoName).Op("=").Op("&").Id("val"),
+					),
+				)
+			} else {
+				statements = append(statements,
+					jen.Id("req").Dot(field.GoName).Op("=").Id("cmd").Dot("Bool").Call(jen.Lit(flagName)),
+				)
+			}
 		case protoreflect.BytesKind:
+			// Bytes fields don't have explicit presence in proto3, always set
 			statements = append(statements,
 				jen.Id("req").Dot(field.GoName).Op("=").Index().Byte().Call(
 					jen.Id("cmd").Dot("String").Call(jen.Lit(flagName)),
 				),
 			)
 		case protoreflect.EnumKind:
-			// Enums are int32 in Go protobuf
+			// Enums don't have explicit presence tracking, always set
 			statements = append(statements,
 				jen.Id("req").Dot(field.GoName).Op("=").Id("cmd").Dot("Int32").Call(jen.Lit(flagName)),
 			)

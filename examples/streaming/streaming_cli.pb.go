@@ -147,6 +147,18 @@ func StreamingServiceCommand(ctx context.Context, implOrFactory interface{}, opt
 		Name:  "limit",
 		Usage: "Max items to return",
 	})
+	flags_list_items = append(flags_list_items, &v3.Int32Flag{
+		Name:  "offset",
+		Usage: "Number of items to skip",
+	})
+	flags_list_items = append(flags_list_items, &v3.StringFlag{
+		Name:  "sort-by",
+		Usage: "Sort field (name, id, category)",
+	})
+	flags_list_items = append(flags_list_items, &v3.BoolFlag{
+		Name:  "include-deleted",
+		Usage: "Include deleted items",
+	})
 
 	// Add format-specific flags from registered formats
 	for _, outputFmt := range options.OutputFormats() {
@@ -197,6 +209,18 @@ func StreamingServiceCommand(ctx context.Context, implOrFactory interface{}, opt
 				req = &ListItemsRequest{}
 				req.Category = cmd.String("category")
 				req.Limit = cmd.Int32("limit")
+				if cmd.IsSet("offset") {
+					val := cmd.Int32("offset")
+					req.Offset = &val
+				}
+				if cmd.IsSet("sort-by") {
+					val := cmd.String("sort-by")
+					req.SortBy = &val
+				}
+				if cmd.IsSet("include-deleted") {
+					val := cmd.Bool("include-deleted")
+					req.IncludeDeleted = &val
+				}
 			}
 
 			// Open output writer

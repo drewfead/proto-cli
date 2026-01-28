@@ -119,6 +119,18 @@ message GetUserRequest {
     shorthand: "d",
     usage: "Include detailed user information"
   }];
+
+  // Optional fields demonstrate explicit presence tracking in proto3
+  optional string fields_filter = 3 [(cli.flag) = {
+    name: "fields",
+    shorthand: "f",
+    usage: "Comma-separated list of fields to return (e.g., 'name,email')"
+  }];
+  optional int32 timeout_ms = 4 [(cli.flag) = {
+    name: "timeout",
+    shorthand: "t",
+    usage: "Request timeout in milliseconds"
+  }];
 }
 
 // Request to create a new user
@@ -140,6 +152,20 @@ message CreateUserRequest {
 
   // Field without annotation - demonstrates kebab-case default
   string phone_number = 5;
+
+  // Optional fields demonstrate explicit presence tracking
+  optional string nickname = 6 [(cli.flag) = {
+    name: "nickname",
+    usage: "Optional nickname for the user"
+  }];
+  optional int32 age = 7 [(cli.flag) = {
+    name: "age",
+    usage: "User's age in years"
+  }];
+  optional bool verified = 8 [(cli.flag) = {
+    name: "verified",
+    usage: "Whether the user email is verified"
+  }];
 }
 
 // Response containing a user
