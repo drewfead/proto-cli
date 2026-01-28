@@ -19,7 +19,6 @@ linters:
   disable:
     # Overly strict linters that don't provide enough value
     - exhaustruct        # Requiring all struct fields is too strict
-    - exhaustive         # TODO: enable this one
     - depguard           # Import restrictions not needed yet
     - godot              # This one is just annoying
     - gocognit           # Cognitive complexity checks too strict

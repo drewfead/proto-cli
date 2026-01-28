@@ -270,6 +270,8 @@ var (
 )
 
 // setFieldValueWithPath sets a proto field value based on type.
+//
+//nolint:gocyclo // Complexity comes from handling all proto kinds exhaustively
 func (l *ConfigLoader) setFieldValueWithPath(msg protoreflect.Message, field protoreflect.FieldDescriptor, value any, fieldPath string) error {
 	// Handle repeated fields (lists)
 	if field.IsList() {
@@ -299,7 +301,9 @@ func (l *ConfigLoader) setFieldValueWithPath(msg protoreflect.Message, field pro
 		}
 		msg.Set(field, protoreflect.ValueOfString(str))
 
-	case protoreflect.Int32Kind, protoreflect.Int64Kind:
+	case protoreflect.Int32Kind, protoreflect.Int64Kind,
+		protoreflect.Sint32Kind, protoreflect.Sint64Kind,
+		protoreflect.Sfixed32Kind, protoreflect.Sfixed64Kind:
 		var intVal int64
 		switch v := value.(type) {
 		case int:
@@ -315,7 +319,8 @@ func (l *ConfigLoader) setFieldValueWithPath(msg protoreflect.Message, field pro
 		}
 		msg.Set(field, protoreflect.ValueOfInt64(intVal))
 
-	case protoreflect.Uint32Kind, protoreflect.Uint64Kind:
+	case protoreflect.Uint32Kind, protoreflect.Uint64Kind,
+		protoreflect.Fixed32Kind, protoreflect.Fixed64Kind:
 		var uintVal uint64
 		switch v := value.(type) {
 		case int:
@@ -357,8 +362,23 @@ func (l *ConfigLoader) setFieldValueWithPath(msg protoreflect.Message, field pro
 		}
 		msg.Set(field, protoreflect.ValueOfFloat64(floatVal))
 
+	case protoreflect.BytesKind:
+		var bytesVal []byte
+		switch v := value.(type) {
+		case string:
+			bytesVal = []byte(v)
+		case []byte:
+			bytesVal = v
+		default:
+			return fmt.Errorf("%w: expected string or []byte for bytes field, got %T", ErrUnexpectedFieldValueType, value)
+		}
+		msg.Set(field, protoreflect.ValueOfBytes(bytesVal))
+
 	case protoreflect.EnumKind:
 		return l.setEnumField(msg, field, value)
+
+	case protoreflect.GroupKind:
+		return fmt.Errorf("%w: GroupKind is deprecated and not supported", ErrUnexpectedFieldValueType)
 
 	default:
 		return fmt.Errorf("%w: unsupported field type: %s", ErrUnexpectedFieldValueType, field.Kind())
@@ -438,6 +458,8 @@ func (l *ConfigLoader) setListField(msg protoreflect.Message, field protoreflect
 }
 
 // appendListElement appends a single element to a list field.
+//
+//nolint:gocyclo // Complexity comes from handling all proto kinds exhaustively
 func (l *ConfigLoader) appendListElement(list protoreflect.List, field protoreflect.FieldDescriptor, value any) error {
 	switch field.Kind() {
 	case protoreflect.MessageKind:
@@ -461,7 +483,9 @@ func (l *ConfigLoader) appendListElement(list protoreflect.List, field protorefl
 		}
 		list.Append(protoreflect.ValueOfString(str))
 
-	case protoreflect.Int32Kind, protoreflect.Int64Kind:
+	case protoreflect.Int32Kind, protoreflect.Int64Kind,
+		protoreflect.Sint32Kind, protoreflect.Sint64Kind,
+		protoreflect.Sfixed32Kind, protoreflect.Sfixed64Kind:
 		var intVal int64
 		switch v := value.(type) {
 		case int:
@@ -475,12 +499,99 @@ func (l *ConfigLoader) appendListElement(list protoreflect.List, field protorefl
 		}
 		list.Append(protoreflect.ValueOfInt64(intVal))
 
+	case protoreflect.Uint32Kind, protoreflect.Uint64Kind,
+		protoreflect.Fixed32Kind, protoreflect.Fixed64Kind:
+		var uintVal uint64
+		switch v := value.(type) {
+		case int:
+			if v < 0 {
+				return fmt.Errorf("%w: cannot convert negative int %d to uint64", ErrOverflow, v)
+			}
+			uintVal = uint64(v)
+		case uint:
+			uintVal = uint64(v)
+		case uint32:
+			uintVal = uint64(v)
+		case uint64:
+			uintVal = v
+		case float64:
+			uintVal = uint64(v)
+		default:
+			return fmt.Errorf("%w: expected uint, got %T", ErrUnexpectedFieldValueType, value)
+		}
+		list.Append(protoreflect.ValueOfUint64(uintVal))
+
+	case protoreflect.FloatKind, protoreflect.DoubleKind:
+		var floatVal float64
+		switch v := value.(type) {
+		case float32:
+			floatVal = float64(v)
+		case float64:
+			floatVal = v
+		case int:
+			floatVal = float64(v)
+		default:
+			return fmt.Errorf("%w: expected float, got %T", ErrUnexpectedFieldValueType, value)
+		}
+		list.Append(protoreflect.ValueOfFloat64(floatVal))
+
+	case protoreflect.BytesKind:
+		var bytesVal []byte
+		switch v := value.(type) {
+		case string:
+			bytesVal = []byte(v)
+		case []byte:
+			bytesVal = v
+		default:
+			return fmt.Errorf("%w: expected string or []byte for bytes field, got %T", ErrUnexpectedFieldValueType, value)
+		}
+		list.Append(protoreflect.ValueOfBytes(bytesVal))
+
+	case protoreflect.EnumKind:
+		// Enum values in lists
+		switch v := value.(type) {
+		case string:
+			enumDesc := field.Enum()
+			enumVal := enumDesc.Values().ByName(protoreflect.Name(v))
+			if enumVal == nil {
+				return fmt.Errorf("%w: unknown enum value: %s", ErrUnknownField, v)
+			}
+			list.Append(protoreflect.ValueOfEnum(enumVal.Number()))
+		case int, int32, int64, float64:
+			var num int32
+			switch val := v.(type) {
+			case int:
+				if val < -2147483648 || val > 2147483647 {
+					return fmt.Errorf("%w: int value %d overflows int32", ErrOverflow, val)
+				}
+				num = int32(val)
+			case int32:
+				num = val
+			case int64:
+				if val < -2147483648 || val > 2147483647 {
+					return fmt.Errorf("%w: int64 value %d overflows int32", ErrOverflow, val)
+				}
+				num = int32(val)
+			case float64:
+				if val < -2147483648 || val > 2147483647 {
+					return fmt.Errorf("%w: float64 value %f overflows int32", ErrOverflow, val)
+				}
+				num = int32(val)
+			}
+			list.Append(protoreflect.ValueOfEnum(protoreflect.EnumNumber(num)))
+		default:
+			return fmt.Errorf("%w: expected string or int for enum, got %T", ErrUnexpectedFieldValueType, value)
+		}
+
 	case protoreflect.BoolKind:
 		boolVal, ok := value.(bool)
 		if !ok {
 			return fmt.Errorf("%w: expected bool, got %T", ErrUnexpectedFieldValueType, value)
 		}
 		list.Append(protoreflect.ValueOfBool(boolVal))
+
+	case protoreflect.GroupKind:
+		return fmt.Errorf("%w: GroupKind is deprecated and not supported", ErrUnexpectedFieldValueType)
 
 	default:
 		return fmt.Errorf("%w: unsupported list element type: %s", ErrUnexpectedFieldValueType, field.Kind())
@@ -490,6 +601,8 @@ func (l *ConfigLoader) appendListElement(list protoreflect.List, field protorefl
 }
 
 // setMapField handles map fields.
+//
+//nolint:gocyclo // Complexity comes from handling all proto kinds exhaustively
 func (l *ConfigLoader) setMapField(msg protoreflect.Message, field protoreflect.FieldDescriptor, value any) error {
 	// Value should be a map
 	yamlMap, ok := value.(map[string]any)
@@ -532,7 +645,9 @@ func (l *ConfigLoader) setMapField(msg protoreflect.Message, field protoreflect.
 			}
 			mapVal = protoreflect.ValueOfString(str)
 
-		case protoreflect.Int32Kind, protoreflect.Int64Kind:
+		case protoreflect.Int32Kind, protoreflect.Int64Kind,
+			protoreflect.Sint32Kind, protoreflect.Sint64Kind,
+			protoreflect.Sfixed32Kind, protoreflect.Sfixed64Kind:
 			var intVal int64
 			switch val := v.(type) {
 			case int:
@@ -545,6 +660,99 @@ func (l *ConfigLoader) setMapField(msg protoreflect.Message, field protoreflect.
 				return fmt.Errorf("%w: expected int, got %T", ErrUnexpectedFieldValueType, v)
 			}
 			mapVal = protoreflect.ValueOfInt64(intVal)
+
+		case protoreflect.Uint32Kind, protoreflect.Uint64Kind,
+			protoreflect.Fixed32Kind, protoreflect.Fixed64Kind:
+			var uintVal uint64
+			switch val := v.(type) {
+			case int:
+				if val < 0 {
+					return fmt.Errorf("%w: cannot convert negative int %d to uint64", ErrOverflow, val)
+				}
+				uintVal = uint64(val)
+			case uint:
+				uintVal = uint64(val)
+			case uint32:
+				uintVal = uint64(val)
+			case uint64:
+				uintVal = val
+			case float64:
+				uintVal = uint64(val)
+			default:
+				return fmt.Errorf("%w: expected uint, got %T", ErrUnexpectedFieldValueType, v)
+			}
+			mapVal = protoreflect.ValueOfUint64(uintVal)
+
+		case protoreflect.FloatKind, protoreflect.DoubleKind:
+			var floatVal float64
+			switch val := v.(type) {
+			case float32:
+				floatVal = float64(val)
+			case float64:
+				floatVal = val
+			case int:
+				floatVal = float64(val)
+			default:
+				return fmt.Errorf("%w: expected float, got %T", ErrUnexpectedFieldValueType, v)
+			}
+			mapVal = protoreflect.ValueOfFloat64(floatVal)
+
+		case protoreflect.BoolKind:
+			boolVal, ok := v.(bool)
+			if !ok {
+				return fmt.Errorf("%w: expected bool, got %T", ErrUnexpectedFieldValueType, v)
+			}
+			mapVal = protoreflect.ValueOfBool(boolVal)
+
+		case protoreflect.BytesKind:
+			var bytesVal []byte
+			switch val := v.(type) {
+			case string:
+				bytesVal = []byte(val)
+			case []byte:
+				bytesVal = val
+			default:
+				return fmt.Errorf("%w: expected string or []byte for bytes field, got %T", ErrUnexpectedFieldValueType, v)
+			}
+			mapVal = protoreflect.ValueOfBytes(bytesVal)
+
+		case protoreflect.EnumKind:
+			enumDesc := valueField.Enum()
+			switch val := v.(type) {
+			case string:
+				enumVal := enumDesc.Values().ByName(protoreflect.Name(val))
+				if enumVal == nil {
+					return fmt.Errorf("%w: unknown enum value: %s", ErrUnknownField, val)
+				}
+				mapVal = protoreflect.ValueOfEnum(enumVal.Number())
+			case int, int32, int64, float64:
+				var num int32
+				switch enumInt := val.(type) {
+				case int:
+					if enumInt < -2147483648 || enumInt > 2147483647 {
+						return fmt.Errorf("%w: int value %d overflows int32", ErrOverflow, enumInt)
+					}
+					num = int32(enumInt)
+				case int32:
+					num = enumInt
+				case int64:
+					if enumInt < -2147483648 || enumInt > 2147483647 {
+						return fmt.Errorf("%w: int64 value %d overflows int32", ErrOverflow, enumInt)
+					}
+					num = int32(enumInt)
+				case float64:
+					if enumInt < -2147483648 || enumInt > 2147483647 {
+						return fmt.Errorf("%w: float64 value %f overflows int32", ErrOverflow, enumInt)
+					}
+					num = int32(enumInt)
+				}
+				mapVal = protoreflect.ValueOfEnum(protoreflect.EnumNumber(num))
+			default:
+				return fmt.Errorf("%w: expected string or int for enum, got %T", ErrUnexpectedFieldValueType, v)
+			}
+
+		case protoreflect.GroupKind:
+			return fmt.Errorf("%w: GroupKind is deprecated and not supported", ErrUnexpectedFieldValueType)
 
 		default:
 			return fmt.Errorf("%w: unsupported map value type: %s", ErrUnexpectedFieldValueType, valueField.Kind())
@@ -759,28 +967,28 @@ func (l *ConfigLoader) setFieldFromString(msg protoreflect.Message, field protor
 	case protoreflect.StringKind:
 		msg.Set(field, protoreflect.ValueOfString(value))
 
-	case protoreflect.Int32Kind:
+	case protoreflect.Int32Kind, protoreflect.Sint32Kind, protoreflect.Sfixed32Kind:
 		intVal, err := strconv.ParseInt(value, 10, 32)
 		if err != nil {
 			return err
 		}
 		msg.Set(field, protoreflect.ValueOfInt32(int32(intVal)))
 
-	case protoreflect.Int64Kind:
+	case protoreflect.Int64Kind, protoreflect.Sint64Kind, protoreflect.Sfixed64Kind:
 		intVal, err := strconv.ParseInt(value, 10, 64)
 		if err != nil {
 			return err
 		}
 		msg.Set(field, protoreflect.ValueOfInt64(intVal))
 
-	case protoreflect.Uint32Kind:
+	case protoreflect.Uint32Kind, protoreflect.Fixed32Kind:
 		uintVal, err := strconv.ParseUint(value, 10, 32)
 		if err != nil {
 			return err
 		}
 		msg.Set(field, protoreflect.ValueOfUint32(uint32(uintVal)))
 
-	case protoreflect.Uint64Kind:
+	case protoreflect.Uint64Kind, protoreflect.Fixed64Kind:
 		uintVal, err := strconv.ParseUint(value, 10, 64)
 		if err != nil {
 			return err
@@ -808,6 +1016,32 @@ func (l *ConfigLoader) setFieldFromString(msg protoreflect.Message, field protor
 		}
 		msg.Set(field, protoreflect.ValueOfFloat64(floatVal))
 
+	case protoreflect.BytesKind:
+		// Parse bytes from string (direct string-to-bytes conversion)
+		msg.Set(field, protoreflect.ValueOfBytes([]byte(value)))
+
+	case protoreflect.EnumKind:
+		// Parse enum from string (name or number)
+		enumDesc := field.Enum()
+		// Try as enum name first
+		enumVal := enumDesc.Values().ByName(protoreflect.Name(value))
+		if enumVal != nil {
+			msg.Set(field, protoreflect.ValueOfEnum(enumVal.Number()))
+		} else {
+			// Try as number
+			num, err := strconv.ParseInt(value, 10, 32)
+			if err != nil {
+				return fmt.Errorf("%w: invalid enum value: %s (not a valid name or number)", ErrUnknownField, value)
+			}
+			msg.Set(field, protoreflect.ValueOfEnum(protoreflect.EnumNumber(num)))
+		}
+
+	case protoreflect.MessageKind:
+		return fmt.Errorf("%w: MessageKind cannot be set from environment variable string", ErrUnexpectedFieldValueType)
+
+	case protoreflect.GroupKind:
+		return fmt.Errorf("%w: GroupKind is deprecated and not supported", ErrUnexpectedFieldValueType)
+
 	default:
 		return fmt.Errorf("%w: unsupported field type: %s", ErrUnexpectedFieldValueType, field.Kind())
 	}
@@ -822,25 +1056,25 @@ func (l *ConfigLoader) setFieldFromFlag(cmd *cli.Command, msg protoreflect.Messa
 		value := cmd.String(flagName)
 		msg.Set(field, protoreflect.ValueOfString(value))
 
-	case protoreflect.Int32Kind:
+	case protoreflect.Int32Kind, protoreflect.Sint32Kind, protoreflect.Sfixed32Kind:
 		value := cmd.Int(flagName)
 		if value < -2147483648 || value > 2147483647 {
 			return fmt.Errorf("%w: int value %d overflows int32 for flag %s", ErrOverflow, value, flagName)
 		}
 		msg.Set(field, protoreflect.ValueOfInt32(int32(value)))
 
-	case protoreflect.Int64Kind:
+	case protoreflect.Int64Kind, protoreflect.Sint64Kind, protoreflect.Sfixed64Kind:
 		value := cmd.Int(flagName)
 		msg.Set(field, protoreflect.ValueOfInt64(int64(value)))
 
-	case protoreflect.Uint32Kind:
+	case protoreflect.Uint32Kind, protoreflect.Fixed32Kind:
 		value := cmd.Uint(flagName)
 		if value > 4294967295 {
 			return fmt.Errorf("%w: uint value %d overflows uint32 for flag %s", ErrOverflow, value, flagName)
 		}
 		msg.Set(field, protoreflect.ValueOfUint32(uint32(value)))
 
-	case protoreflect.Uint64Kind:
+	case protoreflect.Uint64Kind, protoreflect.Fixed64Kind:
 		value := cmd.Uint(flagName)
 		msg.Set(field, protoreflect.ValueOfUint64(uint64(value)))
 
@@ -855,6 +1089,34 @@ func (l *ConfigLoader) setFieldFromFlag(cmd *cli.Command, msg protoreflect.Messa
 	case protoreflect.DoubleKind:
 		value := cmd.Float(flagName)
 		msg.Set(field, protoreflect.ValueOfFloat64(value))
+
+	case protoreflect.BytesKind:
+		// Get bytes from string flag
+		value := cmd.String(flagName)
+		msg.Set(field, protoreflect.ValueOfBytes([]byte(value)))
+
+	case protoreflect.EnumKind:
+		// Parse enum from string flag (name or number)
+		value := cmd.String(flagName)
+		enumDesc := field.Enum()
+		// Try as enum name first
+		enumVal := enumDesc.Values().ByName(protoreflect.Name(value))
+		if enumVal != nil {
+			msg.Set(field, protoreflect.ValueOfEnum(enumVal.Number()))
+		} else {
+			// Try as number
+			num, err := strconv.ParseInt(value, 10, 32)
+			if err != nil {
+				return fmt.Errorf("%w: invalid enum value: %s (not a valid name or number)", ErrUnknownField, value)
+			}
+			msg.Set(field, protoreflect.ValueOfEnum(protoreflect.EnumNumber(num)))
+		}
+
+	case protoreflect.MessageKind:
+		return fmt.Errorf("%w: MessageKind cannot be set from CLI flag", ErrUnexpectedFieldValueType)
+
+	case protoreflect.GroupKind:
+		return fmt.Errorf("%w: GroupKind is deprecated and not supported", ErrUnexpectedFieldValueType)
 
 	default:
 		return fmt.Errorf("%w: unsupported field type: %s", ErrUnexpectedFieldValueType, field.Kind())

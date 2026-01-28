@@ -559,11 +559,12 @@ func generateConfigFlags(file *protogen.File, configMessageType string, cmdVarNa
 			flagCode = jen.Op("&").Qual("github.com/urfave/cli/v3", "StringFlag").Values(buildFlagDict())
 		case protoreflect.EnumKind:
 			flagCode = jen.Op("&").Qual("github.com/urfave/cli/v3", "Int32Flag").Values(buildFlagDict())
+		case protoreflect.MessageKind:
+			// MessageKind requires custom deserializers, skip auto-generation
+			continue
 		case protoreflect.GroupKind:
 			// GroupKind is deprecated in proto3 and not supported
 			fmt.Fprintf(os.Stderr, "WARNING: Field %s uses deprecated GroupKind and will not generate a CLI flag\n", field.Desc.FullName())
-			continue
-		default:
 			continue
 		}
 
