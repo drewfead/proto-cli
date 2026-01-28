@@ -8,7 +8,6 @@ package simple
 
 import (
 	context "context"
-
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -132,7 +131,7 @@ func RegisterUserServiceServer(s grpc.ServiceRegistrar, srv UserServiceServer) {
 	s.RegisterService(&UserService_ServiceDesc, srv)
 }
 
-func _UserService_GetUser_Handler(srv any, ctx context.Context, dec func(any) error, interceptor grpc.UnaryServerInterceptor) (any, error) {
+func _UserService_GetUser_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetUserRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -144,13 +143,13 @@ func _UserService_GetUser_Handler(srv any, ctx context.Context, dec func(any) er
 		Server:     srv,
 		FullMethod: UserService_GetUser_FullMethodName,
 	}
-	handler := func(ctx context.Context, req any) (any, error) {
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(UserServiceServer).GetUser(ctx, req.(*GetUserRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _UserService_CreateUser_Handler(srv any, ctx context.Context, dec func(any) error, interceptor grpc.UnaryServerInterceptor) (any, error) {
+func _UserService_CreateUser_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CreateUserRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -162,13 +161,13 @@ func _UserService_CreateUser_Handler(srv any, ctx context.Context, dec func(any)
 		Server:     srv,
 		FullMethod: UserService_CreateUser_FullMethodName,
 	}
-	handler := func(ctx context.Context, req any) (any, error) {
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(UserServiceServer).CreateUser(ctx, req.(*CreateUserRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _UserService_ListUsers_Handler(srv any, stream grpc.ServerStream) error {
+func _UserService_ListUsers_Handler(srv interface{}, stream grpc.ServerStream) error {
 	return srv.(UserServiceServer).ListUsers(&grpc.GenericServerStream[GetUserRequest, UserResponse]{ServerStream: stream})
 }
 
@@ -278,7 +277,7 @@ func RegisterAdminServiceServer(s grpc.ServiceRegistrar, srv AdminServiceServer)
 	s.RegisterService(&AdminService_ServiceDesc, srv)
 }
 
-func _AdminService_HealthCheck_Handler(srv any, ctx context.Context, dec func(any) error, interceptor grpc.UnaryServerInterceptor) (any, error) {
+func _AdminService_HealthCheck_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(AdminRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -290,7 +289,7 @@ func _AdminService_HealthCheck_Handler(srv any, ctx context.Context, dec func(an
 		Server:     srv,
 		FullMethod: AdminService_HealthCheck_FullMethodName,
 	}
-	handler := func(ctx context.Context, req any) (any, error) {
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AdminServiceServer).HealthCheck(ctx, req.(*AdminRequest))
 	}
 	return interceptor(ctx, in, info, handler)

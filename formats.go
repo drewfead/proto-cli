@@ -42,11 +42,6 @@ func (f *jsonFormat) Format(_ context.Context, cmd *cli.Command, w io.Writer, ms
 	}
 
 	_, err = w.Write(jsonBytes)
-	if err != nil {
-		return fmt.Errorf("failed to write JSON: %w", err)
-	}
-
-	_, err = w.Write([]byte("\n"))
 	return err
 }
 
@@ -58,7 +53,7 @@ func (f *goFormat) Name() string {
 }
 
 func (f *goFormat) Format(_ context.Context, _ *cli.Command, w io.Writer, msg proto.Message) error {
-	_, err := fmt.Fprintf(w, "%+v\n", msg)
+	_, err := fmt.Fprintf(w, "%+v", msg)
 	return err
 }
 
@@ -88,30 +83,55 @@ func (f *yamlFormat) Format(_ context.Context, _ *cli.Command, w io.Writer, msg 
 	}
 
 	// Simple YAML-like output (for full YAML support, use gopkg.in/yaml.v3)
-	return writeYAML(w, data, 0)
+	// Use internal function that tracks last item to avoid trailing newline
+	return writeYAMLMap(w, data, 0)
 }
 
-func writeYAML(w io.Writer, data any, indent int) error {
+func writeYAMLMap(w io.Writer, data map[string]any, indent int) error {
 	prefix := ""
 	for range indent {
 		prefix += "  "
 	}
 
-	switch v := data.(type) {
-	case map[string]any:
-		for key, val := range v {
-			if subMap, ok := val.(map[string]any); ok {
-				if _, err := fmt.Fprintf(w, "%s%s:\n", prefix, key); err != nil {
+	// Get keys in a slice so we can track the last one
+	keys := make([]string, 0, len(data))
+	for k := range data {
+		keys = append(keys, k)
+	}
+
+	for i, key := range keys {
+		val := data[key]
+		isLast := i == len(keys)-1
+
+		if subMap, ok := val.(map[string]any); ok {
+			if _, err := fmt.Fprintf(w, "%s%s:\n", prefix, key); err != nil {
+				return err
+			}
+			if err := writeYAMLValue(w, subMap, indent+1, false); err != nil {
+				return err
+			}
+			// Add newline after nested structure unless it's the last field
+			if !isLast {
+				if _, err := fmt.Fprint(w, "\n"); err != nil {
 					return err
 				}
-				if err := writeYAML(w, subMap, indent+1); err != nil {
+			}
+		} else if subSlice, ok := val.([]any); ok {
+			if _, err := fmt.Fprintf(w, "%s%s:\n", prefix, key); err != nil {
+				return err
+			}
+			if err := writeYAMLValue(w, subSlice, indent+1, false); err != nil {
+				return err
+			}
+			// Add newline after nested structure unless it's the last field
+			if !isLast {
+				if _, err := fmt.Fprint(w, "\n"); err != nil {
 					return err
 				}
-			} else if subSlice, ok := val.([]any); ok {
-				if _, err := fmt.Fprintf(w, "%s%s:\n", prefix, key); err != nil {
-					return err
-				}
-				if err := writeYAML(w, subSlice, indent+1); err != nil {
+			}
+		} else {
+			if isLast {
+				if _, err := fmt.Fprintf(w, "%s%s: %v", prefix, key, val); err != nil {
 					return err
 				}
 			} else {
@@ -120,8 +140,68 @@ func writeYAML(w io.Writer, data any, indent int) error {
 				}
 			}
 		}
+	}
+
+	return nil
+}
+
+func writeYAMLValue(w io.Writer, data any, indent int, isLast bool) error {
+	prefix := ""
+	for range indent {
+		prefix += "  "
+	}
+
+	switch v := data.(type) {
+	case map[string]any:
+		// Get keys to track the last one
+		keys := make([]string, 0, len(v))
+		for k := range v {
+			keys = append(keys, k)
+		}
+
+		for i, key := range keys {
+			fieldVal := v[key]
+			fieldIsLast := i == len(keys)-1
+
+			if subMap, ok := fieldVal.(map[string]any); ok {
+				if _, err := fmt.Fprintf(w, "%s%s:\n", prefix, key); err != nil {
+					return err
+				}
+				if err := writeYAMLValue(w, subMap, indent+1, false); err != nil {
+					return err
+				}
+				if !fieldIsLast {
+					if _, err := fmt.Fprint(w, "\n"); err != nil {
+						return err
+					}
+				}
+			} else if subSlice, ok := fieldVal.([]any); ok {
+				if _, err := fmt.Fprintf(w, "%s%s:\n", prefix, key); err != nil {
+					return err
+				}
+				if err := writeYAMLValue(w, subSlice, indent+1, false); err != nil {
+					return err
+				}
+				if !fieldIsLast {
+					if _, err := fmt.Fprint(w, "\n"); err != nil {
+						return err
+					}
+				}
+			} else {
+				if fieldIsLast {
+					if _, err := fmt.Fprintf(w, "%s%s: %v", prefix, key, fieldVal); err != nil {
+						return err
+					}
+				} else {
+					if _, err := fmt.Fprintf(w, "%s%s: %v\n", prefix, key, fieldVal); err != nil {
+						return err
+					}
+				}
+			}
+		}
 	case []any:
-		for _, item := range v {
+		for i, item := range v {
+			itemIsLast := i == len(v)-1
 			if _, err := fmt.Fprintf(w, "%s- ", prefix); err != nil {
 				return err
 			}
@@ -129,12 +209,23 @@ func writeYAML(w io.Writer, data any, indent int) error {
 				if _, err := fmt.Fprintln(w); err != nil {
 					return err
 				}
-				if err := writeYAML(w, subMap, indent+1); err != nil {
+				if err := writeYAMLValue(w, subMap, indent+1, false); err != nil {
 					return err
 				}
+				if !itemIsLast {
+					if _, err := fmt.Fprint(w, "\n"); err != nil {
+						return err
+					}
+				}
 			} else {
-				if _, err := fmt.Fprintf(w, "%v\n", item); err != nil {
-					return err
+				if itemIsLast {
+					if _, err := fmt.Fprintf(w, "%v", item); err != nil {
+						return err
+					}
+				} else {
+					if _, err := fmt.Fprintf(w, "%v\n", item); err != nil {
+						return err
+					}
 				}
 			}
 		}

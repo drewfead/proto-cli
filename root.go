@@ -283,8 +283,10 @@ func runDaemon(ctx context.Context, cmd *cli.Command, services []*ServiceCLI, op
 		for _, svc := range servicesToRegister {
 			registeredNames = append(registeredNames, svc.ServiceName)
 		}
-		fmt.Fprintf(os.Stderr, "Warning: Requested %d service(s) but only found %d: %v\n",
-			len(enabledServices), len(servicesToRegister), registeredNames)
+		slog.Warn("Requested services not all found",
+			"requested", len(enabledServices),
+			"found", len(servicesToRegister),
+			"registered", registeredNames)
 	}
 
 	// Create gRPC server with configured options

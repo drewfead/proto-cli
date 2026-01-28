@@ -9,7 +9,7 @@ INSTALL_LOCATION ?= ~/bin
 ##@ Build
 
 .PHONY: build
-build: build/gen build/example ## Build all binaries
+build: build/gen build/example build/streaming ## Build all binaries
 
 .PHONY: build/gen
 build/gen: ## Build the protoc-gen-cli code generator
@@ -25,6 +25,13 @@ build/example: generate ## Build the example usercli binary (generates proto fil
 	go build -o $(BIN_DIR)/usercli ./examples/simple/usercli
 	@echo "✓ Built: $(BIN_DIR)/usercli"
 
+.PHONY: build/streaming
+build/streaming: generate ## Build the streaming example streamcli binary
+	@echo "Building streaming example streamcli..."
+	@mkdir -p $(BIN_DIR)
+	go build -o $(BIN_DIR)/streamcli ./examples/streaming/streamcli
+	@echo "✓ Built: $(BIN_DIR)/streamcli"
+
 .PHONY: install
 install: build/gen ## Build and install protoc-gen-cli to ~/bin (override with INSTALL_LOCATION=/path)
 	@echo "Installing protoc-gen-cli to $(INSTALL_LOCATION)..."
@@ -38,6 +45,7 @@ clean: ## Clean build artifacts and generated proto files
 	rm -rf $(BIN_DIR)/
 	rm -f internal/clipb/*.pb.go
 	rm -f examples/simple/*.pb.go
+	rm -f examples/streaming/*.pb.go
 	go clean
 	@echo "✓ Clean complete"
 
@@ -54,6 +62,7 @@ generate/clean: ## Clean and regenerate all proto files
 	@echo "Cleaning generated proto files..."
 	rm -f internal/clipb/*.pb.go
 	rm -f examples/simple/*.pb.go
+	rm -f examples/streaming/*.pb.go
 	@echo "Regenerating proto files..."
 	go run github.com/bufbuild/buf/cmd/buf generate
 	@echo "✓ Clean regeneration complete"

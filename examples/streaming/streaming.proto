@@ -1,0 +1,54 @@
+syntax = "proto3";
+package streaming;
+option go_package = "github.com/drewfead/proto-cli/examples/streaming";
+
+import "internal/clipb/cli.proto";
+
+service StreamingService {
+  option (cli.service) = {
+    name: "streaming-service",
+    description: "Example streaming service"
+  };
+
+  // Server streaming: list items as they're found
+  rpc ListItems(ListItemsRequest) returns (stream ItemResponse) {
+    option (cli.command) = {
+      name: "list-items",
+      description: "Stream items from the server"
+    };
+  }
+
+  // Server streaming: watch for changes
+  rpc WatchItems(WatchRequest) returns (stream ItemEvent) {
+    option (cli.command) = {
+      name: "watch-items",
+      description: "Watch for item changes in real-time"
+    };
+  }
+}
+
+message ListItemsRequest {
+  string category = 1 [(cli.flag) = {name: "category", usage: "Filter by category"}];
+  int32 limit = 2 [(cli.flag) = {name: "limit", usage: "Max items to return"}];
+}
+
+message ItemResponse {
+  Item item = 1;
+  string message = 2;
+}
+
+message Item {
+  int64 id = 1;
+  string name = 2;
+  string category = 3;
+}
+
+message WatchRequest {
+  int64 start_id = 1 [(cli.flag) = {name: "start-id", usage: "Start watching from this ID"}];
+}
+
+message ItemEvent {
+  string event_type = 1;  // "created", "updated", "deleted"
+  Item item = 2;
+  int64 timestamp = 3;
+}

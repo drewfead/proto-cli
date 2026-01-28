@@ -5,14 +5,14 @@ package simple
 import (
 	"context"
 	"fmt"
-	"io"
-	"os"
-
 	protocli "github.com/drewfead/proto-cli"
 	v3 "github.com/urfave/cli/v3"
 	grpc "google.golang.org/grpc"
 	insecure "google.golang.org/grpc/credentials/insecure"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
+	"io"
+	"log/slog"
+	"os"
 )
 
 // getOutputWriter opens the specified output file or returns stdout
@@ -25,7 +25,7 @@ func getOutputWriter(path string) (io.Writer, error) {
 
 // UserServiceServiceCommand creates a service CLI for UserService with options
 // The implOrFactory parameter can be either a direct service implementation or a factory function
-func UserServiceServiceCommand(ctx context.Context, implOrFactory any, opts ...protocli.ServiceOption) *protocli.ServiceCLI {
+func UserServiceServiceCommand(ctx context.Context, implOrFactory interface{}, opts ...protocli.ServiceOption) *protocli.ServiceCLI {
 	options := protocli.ApplyServiceOptions(opts...)
 
 	// Determine default format (first registered format, or empty if none)
@@ -94,7 +94,7 @@ func UserServiceServiceCommand(ctx context.Context, implOrFactory any, opts ...p
 			defer func() {
 				if options.AfterCommand() != nil {
 					if err := options.AfterCommand()(cmdCtx, cmd); err != nil {
-						fmt.Fprintf(os.Stderr, "after hook failed: %v\n", err)
+						slog.Warn("after hook failed", "error", err)
 					}
 				}
 			}()
@@ -193,6 +193,10 @@ func UserServiceServiceCommand(ctx context.Context, implOrFactory any, opts ...p
 					if err := outputFmt.Format(cmdCtx, cmd, outputWriter, resp); err != nil {
 						return fmt.Errorf("format failed: %w", err)
 					}
+					// Write final newline to keep terminal clean
+					if _, err := outputWriter.Write([]byte("\n")); err != nil {
+						return fmt.Errorf("failed to write final newline: %w", err)
+					}
 					return nil
 				}
 			}
@@ -282,7 +286,7 @@ func UserServiceServiceCommand(ctx context.Context, implOrFactory any, opts ...p
 			defer func() {
 				if options.AfterCommand() != nil {
 					if err := options.AfterCommand()(cmdCtx, cmd); err != nil {
-						fmt.Fprintf(os.Stderr, "after hook failed: %v\n", err)
+						slog.Warn("after hook failed", "error", err)
 					}
 				}
 			}()
@@ -430,6 +434,10 @@ func UserServiceServiceCommand(ctx context.Context, implOrFactory any, opts ...p
 					if err := outputFmt.Format(cmdCtx, cmd, outputWriter, resp); err != nil {
 						return fmt.Errorf("format failed: %w", err)
 					}
+					// Write final newline to keep terminal clean
+					if _, err := outputWriter.Write([]byte("\n")); err != nil {
+						return fmt.Errorf("failed to write final newline: %w", err)
+					}
 					return nil
 				}
 			}
@@ -458,7 +466,7 @@ func UserServiceServiceCommand(ctx context.Context, implOrFactory any, opts ...p
 		ConfigMessageType: "UserServiceConfig",
 		ConfigPrototype:   &UserServiceConfig{},
 		FactoryOrImpl:     implOrFactory,
-		RegisterFunc: func(s *grpc.Server, impl any) {
+		RegisterFunc: func(s *grpc.Server, impl interface{}) {
 			RegisterUserServiceServer(s, impl.(UserServiceServer))
 		},
 		ServiceName: "user-service",
@@ -467,7 +475,7 @@ func UserServiceServiceCommand(ctx context.Context, implOrFactory any, opts ...p
 
 // AdminServiceServiceCommand creates a service CLI for AdminService with options
 // The implOrFactory parameter can be either a direct service implementation or a factory function
-func AdminServiceServiceCommand(ctx context.Context, implOrFactory any, opts ...protocli.ServiceOption) *protocli.ServiceCLI {
+func AdminServiceServiceCommand(ctx context.Context, implOrFactory interface{}, opts ...protocli.ServiceOption) *protocli.ServiceCLI {
 	options := protocli.ApplyServiceOptions(opts...)
 
 	// Determine default format (first registered format, or empty if none)
@@ -511,7 +519,7 @@ func AdminServiceServiceCommand(ctx context.Context, implOrFactory any, opts ...
 			defer func() {
 				if options.AfterCommand() != nil {
 					if err := options.AfterCommand()(cmdCtx, cmd); err != nil {
-						fmt.Fprintf(os.Stderr, "after hook failed: %v\n", err)
+						slog.Warn("after hook failed", "error", err)
 					}
 				}
 			}()
@@ -588,6 +596,10 @@ func AdminServiceServiceCommand(ctx context.Context, implOrFactory any, opts ...
 					if err := outputFmt.Format(cmdCtx, cmd, outputWriter, resp); err != nil {
 						return fmt.Errorf("format failed: %w", err)
 					}
+					// Write final newline to keep terminal clean
+					if _, err := outputWriter.Write([]byte("\n")); err != nil {
+						return fmt.Errorf("failed to write final newline: %w", err)
+					}
 					return nil
 				}
 			}
@@ -615,7 +627,7 @@ func AdminServiceServiceCommand(ctx context.Context, implOrFactory any, opts ...
 		},
 		ConfigMessageType: "",
 		FactoryOrImpl:     implOrFactory,
-		RegisterFunc: func(s *grpc.Server, impl any) {
+		RegisterFunc: func(s *grpc.Server, impl interface{}) {
 			RegisterAdminServiceServer(s, impl.(AdminServiceServer))
 		},
 		ServiceName: "admin",
