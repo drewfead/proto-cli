@@ -168,11 +168,13 @@ func file_examples_simple_override_test_proto_rawDescGZIP() []byte {
 	return file_examples_simple_override_test_proto_rawDescData
 }
 
-var file_examples_simple_override_test_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
-var file_examples_simple_override_test_proto_goTypes = []any{
-	(*TestOverrideRequest)(nil),  // 0: example.TestOverrideRequest
-	(*TestOverrideResponse)(nil), // 1: example.TestOverrideResponse
-}
+var (
+	file_examples_simple_override_test_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+	file_examples_simple_override_test_proto_goTypes  = []any{
+		(*TestOverrideRequest)(nil),  // 0: example.TestOverrideRequest
+		(*TestOverrideResponse)(nil), // 1: example.TestOverrideResponse
+	}
+)
 var file_examples_simple_override_test_proto_depIdxs = []int32{
 	0, // 0: example.TestOverrideService.CustomCommand:input_type -> example.TestOverrideRequest
 	0, // 1: example.TestOverrideService.DefaultKebabCaseCommand:input_type -> example.TestOverrideRequest

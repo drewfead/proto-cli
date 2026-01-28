@@ -76,12 +76,12 @@ services:
     database-url: postgresql://filetest:5432/testdb
     max-connections: 25
 `
-	err := os.WriteFile(configFile, []byte(configContent), 0600)
+	err := os.WriteFile(configFile, []byte(configContent), 0o600)
 	require.NoError(t, err)
 
 	// Create service CLI
 	ctx := context.Background()
-	userServiceCLI := simple.UserServiceServiceCommand(ctx, newUserService)
+	userServiceCLI := simple.UserServiceCommand(ctx, newUserService)
 
 	// Create root CLI
 	_ = protocli.RootCommand("testcli",
@@ -123,7 +123,7 @@ services:
     database-url: postgresql://filetest:5432/testdb
     max-connections: 20
 `
-	err := os.WriteFile(configFile, []byte(configContent), 0600)
+	err := os.WriteFile(configFile, []byte(configContent), 0o600)
 	require.NoError(t, err)
 
 	// Set environment variables
@@ -161,7 +161,7 @@ services:
     database-url: postgresql://daemontest:5432/daemondb
     max-connections: 30
 `
-	err := os.WriteFile(configFile, []byte(configContent), 0600)
+	err := os.WriteFile(configFile, []byte(configContent), 0o600)
 	require.NoError(t, err)
 
 	// Find available port
@@ -241,7 +241,7 @@ services:
     database-url: postgresql://filedb:5432/db
     max-connections: 15
 `
-	err := os.WriteFile(configFile, []byte(configContent), 0600)
+	err := os.WriteFile(configFile, []byte(configContent), 0o600)
 	require.NoError(t, err)
 
 	// Set environment variables (should override file)
@@ -274,7 +274,7 @@ services:
     database-url: postgresql://base:5432/basedb
     max-connections: 10
 `
-	err := os.WriteFile(baseConfig, []byte(baseContent), 0600)
+	err := os.WriteFile(baseConfig, []byte(baseContent), 0o600)
 	require.NoError(t, err)
 
 	// Override config
@@ -284,7 +284,7 @@ services:
   userservice:
     max-connections: 100
 `
-	err = os.WriteFile(overrideConfig, []byte(overrideContent), 0600)
+	err = os.WriteFile(overrideConfig, []byte(overrideContent), 0o600)
 	require.NoError(t, err)
 
 	// Load configs in order (base, then override)
@@ -320,7 +320,7 @@ services:
     database-url: postgresql://file:5432/filedb
     max-connections: 20
 `
-	err := os.WriteFile(configFile, []byte(configContent), 0600)
+	err := os.WriteFile(configFile, []byte(configContent), 0o600)
 	require.NoError(t, err)
 
 	// Set environment variables (should override file for max-connections)
@@ -414,7 +414,7 @@ services:
     database-url: postgresql://localhost:5432/devdb
     max-connections: 20
 `
-	err := os.WriteFile(baseConfig, []byte(baseContent), 0600)
+	err := os.WriteFile(baseConfig, []byte(baseContent), 0o600)
 	require.NoError(t, err)
 
 	// Production override (not in git, deployed separately)
@@ -425,7 +425,7 @@ services:
     database-url: postgresql://prod-db.example.com:5432/proddb
     max-connections: 100
 `
-	err = os.WriteFile(prodConfig, []byte(prodContent), 0600)
+	err = os.WriteFile(prodConfig, []byte(prodContent), 0o600)
 	require.NoError(t, err)
 
 	// Secret DB password from environment (from Kubernetes secret, etc.)

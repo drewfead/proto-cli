@@ -50,7 +50,7 @@ func TestDaemonLifecycleHooks_StartupReadyShutdown(t *testing.T) {
 
 	// Create service with lifecycle hooks
 	ctx := context.Background()
-	userServiceCLI := simple.UserServiceServiceCommand(ctx, newUserService)
+	userServiceCLI := simple.UserServiceCommand(ctx, newUserService)
 
 	rootCmd := protocli.RootCommand("testcli",
 		protocli.WithService(userServiceCLI),
@@ -97,7 +97,7 @@ func TestDaemonLifecycleHooks_StartupError(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	userServiceCLI := simple.UserServiceServiceCommand(ctx, newUserService)
+	userServiceCLI := simple.UserServiceCommand(ctx, newUserService)
 
 	rootCmd := protocli.RootCommand("testcli",
 		protocli.WithService(userServiceCLI),
@@ -156,7 +156,7 @@ func TestDaemonLifecycleHooks_MultipleHooks(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	userServiceCLI := simple.UserServiceServiceCommand(ctx, newUserService)
+	userServiceCLI := simple.UserServiceCommand(ctx, newUserService)
 
 	rootCmd := protocli.RootCommand("testcli",
 		protocli.WithService(userServiceCLI),
@@ -218,7 +218,7 @@ func TestDaemonLifecycleHooks_GracefulShutdownTimeout(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	userServiceCLI := simple.UserServiceServiceCommand(ctx, newUserService)
+	userServiceCLI := simple.UserServiceCommand(ctx, newUserService)
 
 	rootCmd := protocli.RootCommand("testcli",
 		protocli.WithService(userServiceCLI),
@@ -270,7 +270,7 @@ func TestDaemonLifecycleHooks_AccessToServerInStartup(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	userServiceCLI := simple.UserServiceServiceCommand(ctx, newUserService)
+	userServiceCLI := simple.UserServiceCommand(ctx, newUserService)
 
 	rootCmd := protocli.RootCommand("testcli",
 		protocli.WithService(userServiceCLI),

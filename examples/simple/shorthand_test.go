@@ -19,7 +19,7 @@ type aliased interface {
 func TestShorthand_FlagsPresent(t *testing.T) {
 	ctx := context.Background()
 
-	serviceCLI := simple.UserServiceServiceCommand(
+	serviceCLI := simple.UserServiceCommand(
 		ctx,
 		newUserService,
 	)
@@ -64,7 +64,7 @@ func TestShorthand_FlagsPresent(t *testing.T) {
 func TestShorthand_CreateCommandFlags(t *testing.T) {
 	ctx := context.Background()
 
-	serviceCLI := simple.UserServiceServiceCommand(
+	serviceCLI := simple.UserServiceCommand(
 		ctx,
 		newUserService,
 	)

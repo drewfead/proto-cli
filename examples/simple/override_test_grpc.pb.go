@@ -87,6 +87,7 @@ type UnimplementedTestOverrideServiceServer struct{}
 func (UnimplementedTestOverrideServiceServer) CustomCommand(context.Context, *TestOverrideRequest) (*TestOverrideResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method CustomCommand not implemented")
 }
+
 func (UnimplementedTestOverrideServiceServer) DefaultKebabCaseCommand(context.Context, *TestOverrideRequest) (*TestOverrideResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method DefaultKebabCaseCommand not implemented")
 }
@@ -218,6 +219,7 @@ type UnimplementedDefaultKebabCaseServiceServer struct{}
 func (UnimplementedDefaultKebabCaseServiceServer) AnotherTestCommand(context.Context, *TestOverrideRequest) (*TestOverrideResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method AnotherTestCommand not implemented")
 }
+
 func (UnimplementedDefaultKebabCaseServiceServer) mustEmbedUnimplementedDefaultKebabCaseServiceServer() {
 }
 func (UnimplementedDefaultKebabCaseServiceServer) testEmbeddedByValue() {}

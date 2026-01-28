@@ -108,9 +108,9 @@ func (s *localServerStream_WatchItems) RecvMsg(m any) error {
 	return fmt.Errorf("RecvMsg not supported on server streaming")
 }
 
-// StreamingServiceServiceCommand creates a service CLI for StreamingService with options
+// StreamingServiceCommand creates a CLI for StreamingService with options
 // The implOrFactory parameter can be either a direct service implementation or a factory function
-func StreamingServiceServiceCommand(ctx context.Context, implOrFactory interface{}, opts ...protocli.ServiceOption) *protocli.ServiceCLI {
+func StreamingServiceCommand(ctx context.Context, implOrFactory interface{}, opts ...protocli.ServiceOption) *protocli.ServiceCLI {
 	options := protocli.ApplyServiceOptions(opts...)
 
 	// Determine default format (first registered format, or empty if none)
@@ -121,7 +121,7 @@ func StreamingServiceServiceCommand(ctx context.Context, implOrFactory interface
 
 	var commands []*v3.Command
 
-	// Build flags for list-items (streaming)
+	// Build flags for list-items
 	flags_list_items := []v3.Flag{&v3.StringFlag{
 		Name:  "remote",
 		Usage: "Remote gRPC server address (host:port). If set, uses gRPC client instead of direct call",
@@ -142,6 +142,10 @@ func StreamingServiceServiceCommand(ctx context.Context, implOrFactory interface
 	flags_list_items = append(flags_list_items, &v3.StringFlag{
 		Name:  "category",
 		Usage: "Filter by category",
+	})
+	flags_list_items = append(flags_list_items, &v3.Int32Flag{
+		Name:  "limit",
+		Usage: "Max items to return",
 	})
 
 	// Add format-specific flags from registered formats
@@ -192,6 +196,7 @@ func StreamingServiceServiceCommand(ctx context.Context, implOrFactory interface
 				// Use auto-generated flag parsing
 				req = &ListItemsRequest{}
 				req.Category = cmd.String("category")
+				req.Limit = cmd.Int32("limit")
 			}
 
 			// Open output writer
@@ -333,7 +338,7 @@ func StreamingServiceServiceCommand(ctx context.Context, implOrFactory interface
 		Usage: "Stream items from the server",
 	})
 
-	// Build flags for watch-items (streaming)
+	// Build flags for watch-items
 	flags_watch_items := []v3.Flag{&v3.StringFlag{
 		Name:  "remote",
 		Usage: "Remote gRPC server address (host:port). If set, uses gRPC client instead of direct call",
@@ -351,7 +356,7 @@ func StreamingServiceServiceCommand(ctx context.Context, implOrFactory interface
 		Value: "\n",
 	}}
 
-	flags_watch_items = append(flags_watch_items, &v3.IntFlag{
+	flags_watch_items = append(flags_watch_items, &v3.Int64Flag{
 		Name:  "start-id",
 		Usage: "Start watching from this ID",
 	})
@@ -403,7 +408,7 @@ func StreamingServiceServiceCommand(ctx context.Context, implOrFactory interface
 			} else {
 				// Use auto-generated flag parsing
 				req = &WatchRequest{}
-				req.StartId = int64(cmd.Int("start-id"))
+				req.StartId = cmd.Int64("start-id")
 			}
 
 			// Open output writer

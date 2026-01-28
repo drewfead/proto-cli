@@ -42,7 +42,7 @@ func TestIntegration_TimestampDeserializer(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	userServiceCLI := simple.UserServiceServiceCommand(
+	userServiceCLI := simple.UserServiceCommand(
 		ctx,
 		newUserService,
 		protocli.WithFlagDeserializer("google.protobuf.Timestamp", timestampDeserializer),
@@ -70,7 +70,7 @@ func TestIntegration_TimestampDeserializer_RFC3339(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	userServiceCLI := simple.UserServiceServiceCommand(
+	userServiceCLI := simple.UserServiceCommand(
 		ctx,
 		newUserService,
 		protocli.WithFlagDeserializer("google.protobuf.Timestamp", timestampDeserializer),
@@ -114,7 +114,7 @@ func TestIntegration_TimestampDeserializer_MultipleFormats(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	userServiceCLI := simple.UserServiceServiceCommand(
+	userServiceCLI := simple.UserServiceCommand(
 		ctx,
 		newUserService,
 		protocli.WithFlagDeserializer("google.protobuf.Timestamp", timestampDeserializer),
@@ -161,7 +161,7 @@ func TestIntegration_TimestampDeserializer_RelativeTime(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	userServiceCLI := simple.UserServiceServiceCommand(
+	userServiceCLI := simple.UserServiceCommand(
 		ctx,
 		newUserService,
 		protocli.WithFlagDeserializer("google.protobuf.Timestamp", timestampDeserializer),
@@ -190,7 +190,7 @@ func TestIntegration_TimestampDeserializer_UnixEpoch(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	userServiceCLI := simple.UserServiceServiceCommand(
+	userServiceCLI := simple.UserServiceCommand(
 		ctx,
 		newUserService,
 		protocli.WithFlagDeserializer("google.protobuf.Timestamp", timestampDeserializer),

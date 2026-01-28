@@ -33,7 +33,7 @@ func TestIntegration_CustomFlagDeserializer(t *testing.T) {
 
 	// Create service with custom deserializer
 	ctx := context.Background()
-	userServiceCLI := simple.UserServiceServiceCommand(
+	userServiceCLI := simple.UserServiceCommand(
 		ctx,
 		newUserService,
 		protocli.WithFlagDeserializer("GetUserRequest", customDeserializer),
@@ -73,7 +73,7 @@ func TestIntegration_CustomDeserializer_ComplexTransformation(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	userServiceCLI := simple.UserServiceServiceCommand(
+	userServiceCLI := simple.UserServiceCommand(
 		ctx,
 		newUserService,
 		protocli.WithFlagDeserializer("CreateUserRequest", complexDeserializer),
@@ -117,7 +117,7 @@ func TestIntegration_CustomDeserializer_WithValidation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := context.Background()
-			userServiceCLI := simple.UserServiceServiceCommand(
+			userServiceCLI := simple.UserServiceCommand(
 				ctx,
 				newUserService,
 				protocli.WithFlagDeserializer("GetUserRequest", tt.deserializer),
@@ -153,7 +153,7 @@ func TestIntegration_CustomDeserializer_JSONParsing(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	userServiceCLI := simple.UserServiceServiceCommand(
+	userServiceCLI := simple.UserServiceCommand(
 		ctx,
 		newUserService,
 		protocli.WithFlagDeserializer("CreateUserRequest", jsonDeserializer),
@@ -179,7 +179,7 @@ func TestIntegration_MultipleCustomDeserializers(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	userServiceCLI := simple.UserServiceServiceCommand(
+	userServiceCLI := simple.UserServiceCommand(
 		ctx,
 		newUserService,
 		protocli.WithFlagDeserializer("GetUserRequest", getUserDeserializer),

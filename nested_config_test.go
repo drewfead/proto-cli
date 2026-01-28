@@ -370,7 +370,7 @@ services:
 		return &testUserService{}
 	}
 
-	userServiceCLI := simple.UserServiceServiceCommand(ctx, factory)
+	userServiceCLI := simple.UserServiceCommand(ctx, factory)
 
 	rootCmd := protocli.RootCommand("nestedcli",
 		protocli.WithService(userServiceCLI),

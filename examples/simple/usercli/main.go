@@ -87,7 +87,7 @@ func main() {
 
 	// Build service CLI with factory function, lifecycle hooks, and output formats
 	// Pass the factory function (not the impl) - config will be loaded automatically
-	userServiceCLI := simple.UserServiceServiceCommand(ctx, newUserService,
+	userServiceCLI := simple.UserServiceCommand(ctx, newUserService,
 		protocli.WithBeforeCommand(func(_ context.Context, cmd *v3.Command) error {
 			log.Printf("[HOOK] Starting command: %s", cmd.Name)
 			return nil
@@ -105,7 +105,7 @@ func main() {
 
 	// Build admin service CLI - demonstrates service name override
 	// Service name is "admin" (not "admin-service") due to cli.service annotation
-	adminServiceCLI := simple.AdminServiceServiceCommand(ctx, &adminService{},
+	adminServiceCLI := simple.AdminServiceCommand(ctx, &adminService{},
 		protocli.WithOutputFormats(
 			protocli.JSON(),
 		),

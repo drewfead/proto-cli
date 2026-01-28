@@ -8,7 +8,7 @@ import (
 	"google.golang.org/grpc"
 )
 
-type StreamingService struct {
+type StreamingService struct { //nolint:revive // Name matches proto-generated type
 	UnimplementedStreamingServiceServer
 }
 
@@ -62,8 +62,8 @@ func (s *StreamingService) WatchItems(req *WatchRequest, stream grpc.ServerStrea
 		},
 	}
 
-	for _, event := range events {
-		if err := stream.Send(&event); err != nil {
+	for i := range events {
+		if err := stream.Send(&events[i]); err != nil {
 			return err
 		}
 		time.Sleep(200 * time.Millisecond)
@@ -72,6 +72,6 @@ func (s *StreamingService) WatchItems(req *WatchRequest, stream grpc.ServerStrea
 	return nil
 }
 
-func (s *StreamingService) Register(ctx context.Context) error {
+func (s *StreamingService) Register(_ context.Context) error {
 	return nil
 }

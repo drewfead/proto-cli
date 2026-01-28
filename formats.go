@@ -87,12 +87,8 @@ func (f *yamlFormat) Format(_ context.Context, _ *cli.Command, w io.Writer, msg 
 	return writeYAMLMap(w, data, 0)
 }
 
-func writeYAMLMap(w io.Writer, data map[string]any, indent int) error {
-	prefix := ""
-	for range indent {
-		prefix += "  "
-	}
-
+// writeMapFields writes a map's key-value pairs with proper YAML formatting
+func writeMapFields(w io.Writer, data map[string]any, prefix string, indent int) error {
 	// Get keys in a slice so we can track the last one
 	keys := make([]string, 0, len(data))
 	for k := range data {
@@ -141,11 +137,18 @@ func writeYAMLMap(w io.Writer, data map[string]any, indent int) error {
 			}
 		}
 	}
-
 	return nil
 }
 
-func writeYAMLValue(w io.Writer, data any, indent int, isLast bool) error {
+func writeYAMLMap(w io.Writer, data map[string]any, indent int) error {
+	prefix := ""
+	for range indent {
+		prefix += "  "
+	}
+	return writeMapFields(w, data, prefix, indent)
+}
+
+func writeYAMLValue(w io.Writer, data any, indent int, _ bool) error {
 	prefix := ""
 	for range indent {
 		prefix += "  "
@@ -153,52 +156,7 @@ func writeYAMLValue(w io.Writer, data any, indent int, isLast bool) error {
 
 	switch v := data.(type) {
 	case map[string]any:
-		// Get keys to track the last one
-		keys := make([]string, 0, len(v))
-		for k := range v {
-			keys = append(keys, k)
-		}
-
-		for i, key := range keys {
-			fieldVal := v[key]
-			fieldIsLast := i == len(keys)-1
-
-			if subMap, ok := fieldVal.(map[string]any); ok {
-				if _, err := fmt.Fprintf(w, "%s%s:\n", prefix, key); err != nil {
-					return err
-				}
-				if err := writeYAMLValue(w, subMap, indent+1, false); err != nil {
-					return err
-				}
-				if !fieldIsLast {
-					if _, err := fmt.Fprint(w, "\n"); err != nil {
-						return err
-					}
-				}
-			} else if subSlice, ok := fieldVal.([]any); ok {
-				if _, err := fmt.Fprintf(w, "%s%s:\n", prefix, key); err != nil {
-					return err
-				}
-				if err := writeYAMLValue(w, subSlice, indent+1, false); err != nil {
-					return err
-				}
-				if !fieldIsLast {
-					if _, err := fmt.Fprint(w, "\n"); err != nil {
-						return err
-					}
-				}
-			} else {
-				if fieldIsLast {
-					if _, err := fmt.Fprintf(w, "%s%s: %v", prefix, key, fieldVal); err != nil {
-						return err
-					}
-				} else {
-					if _, err := fmt.Fprintf(w, "%s%s: %v\n", prefix, key, fieldVal); err != nil {
-						return err
-					}
-				}
-			}
-		}
+		return writeMapFields(w, v, prefix, indent)
 	case []any:
 		for i, item := range v {
 			itemIsLast := i == len(v)-1

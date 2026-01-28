@@ -24,13 +24,13 @@ func TestConfigDebug_FileDiscovery(t *testing.T) {
 services:
   user-service:
     database-url: "postgres://localhost/db1"
-`), 0600)
+`), 0o600)
 
 	_ = os.WriteFile(config2, []byte(`
 services:
   user-service:
     max-connections: 20
-`), 0600)
+`), 0o600)
 
 	// Create loader with debug mode enabled
 	loader := protocli.NewConfigLoader(
@@ -128,7 +128,6 @@ services:
 
 	config := &simple.UserServiceConfig{}
 	err := loader.LoadServiceConfig(nil, "user-service", config)
-
 	// Should get error with full field path
 	if err != nil {
 		// Verify error message includes path context
@@ -148,7 +147,7 @@ func TestConfigDebug_OutputFormat(t *testing.T) {
 services:
   user-service:
     database-url: "postgres://localhost/db"
-`), 0600)
+`), 0o600)
 
 	loader := protocli.NewConfigLoader(
 		protocli.DaemonMode,

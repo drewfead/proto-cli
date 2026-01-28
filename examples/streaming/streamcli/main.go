@@ -13,7 +13,7 @@ func main() {
 
 	service := streaming.NewStreamingService()
 
-	serviceCLI := streaming.StreamingServiceServiceCommand(ctx, service,
+	serviceCLI := streaming.StreamingServiceCommand(ctx, service,
 		protocli.WithOutputFormats(
 			protocli.JSON(),
 			protocli.YAML(),

@@ -14,7 +14,7 @@ import (
 func TestNaming_ServiceKebabCase(t *testing.T) {
 	ctx := context.Background()
 
-	serviceCLI := simple.UserServiceServiceCommand(
+	serviceCLI := simple.UserServiceCommand(
 		ctx,
 		newUserService,
 	)
@@ -31,7 +31,7 @@ func TestNaming_ServiceKebabCase(t *testing.T) {
 func TestNaming_CommandOverride(t *testing.T) {
 	ctx := context.Background()
 
-	serviceCLI := simple.UserServiceServiceCommand(
+	serviceCLI := simple.UserServiceCommand(
 		ctx,
 		newUserService,
 	)
@@ -62,7 +62,7 @@ func TestNaming_CommandOverride(t *testing.T) {
 func TestNaming_FlagKebabCase(t *testing.T) {
 	ctx := context.Background()
 
-	serviceCLI := simple.UserServiceServiceCommand(
+	serviceCLI := simple.UserServiceCommand(
 		ctx,
 		newUserService,
 	)
@@ -101,7 +101,7 @@ func TestNaming_FlagKebabCase(t *testing.T) {
 func TestNaming_FlagOverride(t *testing.T) {
 	ctx := context.Background()
 
-	serviceCLI := simple.UserServiceServiceCommand(
+	serviceCLI := simple.UserServiceCommand(
 		ctx,
 		newUserService,
 	)

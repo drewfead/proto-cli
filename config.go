@@ -264,8 +264,10 @@ func (l *ConfigLoader) mergeConfigWithPath(data map[string]any, target proto.Mes
 	return nil
 }
 
-var ErrUnexpectedFieldValueType = errors.New("unexpected field value type")
-var ErrOverflow = errors.New("overflow")
+var (
+	ErrUnexpectedFieldValueType = errors.New("unexpected field value type")
+	ErrOverflow                 = errors.New("overflow")
+)
 
 // setFieldValueWithPath sets a proto field value based on type.
 func (l *ConfigLoader) setFieldValueWithPath(msg protoreflect.Message, field protoreflect.FieldDescriptor, value any, fieldPath string) error {

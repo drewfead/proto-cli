@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"unicode"
 
@@ -129,6 +130,12 @@ func toKebabCase(s string) string {
 	return result.String()
 }
 
+// stripServiceSuffix removes "Service" suffix from service names to avoid redundancy.
+// Examples: UserService -> User, StreamingService -> Streaming, Admin -> Admin.
+func stripServiceSuffix(s string) string {
+	return strings.TrimSuffix(s, "Service")
+}
+
 // getServiceOptions extracts (cli.service) annotation from a service.
 func getServiceOptions(service *protogen.Service) *clipb.ServiceOptions {
 	opts := service.Desc.Options()
@@ -170,10 +177,10 @@ func getMethodCommandOptions(method *protogen.Method) *clipb.CommandOptions {
 }
 
 func generateServiceCLI(f *jen.File, file *protogen.File, service *protogen.Service) {
-	// Generate the ServiceCommand function
-	funcName := service.GoName + "ServiceCommand"
+	// Generate the Command function
+	funcName := service.GoName + "Command"
 
-	f.Commentf("%s creates a service CLI for %s with options", funcName, service.GoName)
+	f.Commentf("%s creates a CLI for %s with options", funcName, service.GoName)
 	f.Commentf("The implOrFactory parameter can be either a direct service implementation or a factory function")
 	f.Func().Id(funcName).Params(
 		jen.Id("ctx").Qual("context", "Context"),
@@ -244,7 +251,7 @@ func generateServiceCommands(file *protogen.File, service *protogen.Service) []j
 	}
 
 	// Get service description from annotation or use default
-	serviceDescription := "CLI for " + service.GoName
+	serviceDescription := stripServiceSuffix(service.GoName) + " commands"
 	if serviceOpts != nil && serviceOpts.Description != "" {
 		serviceDescription = serviceOpts.Description
 	}
@@ -290,7 +297,7 @@ func generateMethodCommand(service *protogen.Service, method *protogen.Method, c
 
 	// Get command name from annotation or use kebab-case default
 	cmdName := toKebabCase(method.GoName)
-	cmdUsage := "Call " + method.GoName + " RPC"
+	cmdUsage := method.GoName
 
 	cmdOpts := getMethodCommandOptions(method)
 	if cmdOpts != nil {
@@ -419,12 +426,28 @@ func generateFlag(field *protogen.Field) jen.Code {
 	}
 
 	switch field.Desc.Kind() {
-	case protoreflect.Int64Kind:
-		return jen.Op("&").Qual("github.com/urfave/cli/v3", "IntFlag").Values(buildFlagDict())
+	case protoreflect.Int32Kind, protoreflect.Sint32Kind, protoreflect.Sfixed32Kind:
+		return jen.Op("&").Qual("github.com/urfave/cli/v3", "Int32Flag").Values(buildFlagDict())
+	case protoreflect.Int64Kind, protoreflect.Sint64Kind, protoreflect.Sfixed64Kind:
+		return jen.Op("&").Qual("github.com/urfave/cli/v3", "Int64Flag").Values(buildFlagDict())
+	case protoreflect.Uint32Kind, protoreflect.Fixed32Kind:
+		return jen.Op("&").Qual("github.com/urfave/cli/v3", "Uint32Flag").Values(buildFlagDict())
+	case protoreflect.Uint64Kind, protoreflect.Fixed64Kind:
+		return jen.Op("&").Qual("github.com/urfave/cli/v3", "Uint64Flag").Values(buildFlagDict())
+	case protoreflect.FloatKind:
+		return jen.Op("&").Qual("github.com/urfave/cli/v3", "Float32Flag").Values(buildFlagDict())
+	case protoreflect.DoubleKind:
+		return jen.Op("&").Qual("github.com/urfave/cli/v3", "Float64Flag").Values(buildFlagDict())
 	case protoreflect.StringKind:
 		return jen.Op("&").Qual("github.com/urfave/cli/v3", "StringFlag").Values(buildFlagDict())
 	case protoreflect.BoolKind:
 		return jen.Op("&").Qual("github.com/urfave/cli/v3", "BoolFlag").Values(buildFlagDict())
+	case protoreflect.BytesKind:
+		// Represent bytes as string flag, user will need to decode
+		return jen.Op("&").Qual("github.com/urfave/cli/v3", "StringFlag").Values(buildFlagDict())
+	case protoreflect.EnumKind:
+		// Enums are represented as int32 in Go
+		return jen.Op("&").Qual("github.com/urfave/cli/v3", "Int32Flag").Values(buildFlagDict())
 	case protoreflect.MessageKind:
 		// For message fields (e.g., google.protobuf.Timestamp, nested messages),
 		// generate a StringFlag that custom deserializers can parse
@@ -444,6 +467,10 @@ func generateFlag(field *protogen.Field) jen.Code {
 			dict[jen.Id("Aliases")] = jen.Index().String().Values(jen.Lit(shorthand))
 		}
 		return jen.Op("&").Qual("github.com/urfave/cli/v3", "StringFlag").Values(dict)
+	case protoreflect.GroupKind:
+		// GroupKind is deprecated in proto3 and not supported
+		fmt.Fprintf(os.Stderr, "WARNING: Field %s uses deprecated GroupKind and will not generate a CLI flag\n", field.Desc.FullName())
+		return nil
 	default:
 		return nil
 	}
@@ -512,12 +539,30 @@ func generateConfigFlags(file *protogen.File, configMessageType string, cmdVarNa
 		// Generate flag based on field type
 		var flagCode jen.Code
 		switch field.Desc.Kind() {
-		case protoreflect.Int64Kind, protoreflect.Int32Kind:
-			flagCode = jen.Op("&").Qual("github.com/urfave/cli/v3", "IntFlag").Values(buildFlagDict())
+		case protoreflect.Int32Kind, protoreflect.Sint32Kind, protoreflect.Sfixed32Kind:
+			flagCode = jen.Op("&").Qual("github.com/urfave/cli/v3", "Int32Flag").Values(buildFlagDict())
+		case protoreflect.Int64Kind, protoreflect.Sint64Kind, protoreflect.Sfixed64Kind:
+			flagCode = jen.Op("&").Qual("github.com/urfave/cli/v3", "Int64Flag").Values(buildFlagDict())
+		case protoreflect.Uint32Kind, protoreflect.Fixed32Kind:
+			flagCode = jen.Op("&").Qual("github.com/urfave/cli/v3", "Uint32Flag").Values(buildFlagDict())
+		case protoreflect.Uint64Kind, protoreflect.Fixed64Kind:
+			flagCode = jen.Op("&").Qual("github.com/urfave/cli/v3", "Uint64Flag").Values(buildFlagDict())
+		case protoreflect.FloatKind:
+			flagCode = jen.Op("&").Qual("github.com/urfave/cli/v3", "Float32Flag").Values(buildFlagDict())
+		case protoreflect.DoubleKind:
+			flagCode = jen.Op("&").Qual("github.com/urfave/cli/v3", "Float64Flag").Values(buildFlagDict())
 		case protoreflect.StringKind:
 			flagCode = jen.Op("&").Qual("github.com/urfave/cli/v3", "StringFlag").Values(buildFlagDict())
 		case protoreflect.BoolKind:
 			flagCode = jen.Op("&").Qual("github.com/urfave/cli/v3", "BoolFlag").Values(buildFlagDict())
+		case protoreflect.BytesKind:
+			flagCode = jen.Op("&").Qual("github.com/urfave/cli/v3", "StringFlag").Values(buildFlagDict())
+		case protoreflect.EnumKind:
+			flagCode = jen.Op("&").Qual("github.com/urfave/cli/v3", "Int32Flag").Values(buildFlagDict())
+		case protoreflect.GroupKind:
+			// GroupKind is deprecated in proto3 and not supported
+			fmt.Fprintf(os.Stderr, "WARNING: Field %s uses deprecated GroupKind and will not generate a CLI flag\n", field.Desc.FullName())
+			continue
 		default:
 			continue
 		}
@@ -619,11 +664,29 @@ func generateRequestFieldAssignments(file *protogen.File, method *protogen.Metho
 				),
 			)
 
-		case protoreflect.Int64Kind:
+		case protoreflect.Int32Kind, protoreflect.Sint32Kind, protoreflect.Sfixed32Kind:
 			statements = append(statements,
-				jen.Id("req").Dot(field.GoName).Op("=").Int64().Call(
-					jen.Id("cmd").Dot("Int").Call(jen.Lit(flagName)),
-				),
+				jen.Id("req").Dot(field.GoName).Op("=").Id("cmd").Dot("Int32").Call(jen.Lit(flagName)),
+			)
+		case protoreflect.Int64Kind, protoreflect.Sint64Kind, protoreflect.Sfixed64Kind:
+			statements = append(statements,
+				jen.Id("req").Dot(field.GoName).Op("=").Id("cmd").Dot("Int64").Call(jen.Lit(flagName)),
+			)
+		case protoreflect.Uint32Kind, protoreflect.Fixed32Kind:
+			statements = append(statements,
+				jen.Id("req").Dot(field.GoName).Op("=").Id("cmd").Dot("Uint32").Call(jen.Lit(flagName)),
+			)
+		case protoreflect.Uint64Kind, protoreflect.Fixed64Kind:
+			statements = append(statements,
+				jen.Id("req").Dot(field.GoName).Op("=").Id("cmd").Dot("Uint64").Call(jen.Lit(flagName)),
+			)
+		case protoreflect.FloatKind:
+			statements = append(statements,
+				jen.Id("req").Dot(field.GoName).Op("=").Id("cmd").Dot("Float32").Call(jen.Lit(flagName)),
+			)
+		case protoreflect.DoubleKind:
+			statements = append(statements,
+				jen.Id("req").Dot(field.GoName).Op("=").Id("cmd").Dot("Float64").Call(jen.Lit(flagName)),
 			)
 		case protoreflect.StringKind:
 			statements = append(statements,
@@ -633,10 +696,46 @@ func generateRequestFieldAssignments(file *protogen.File, method *protogen.Metho
 			statements = append(statements,
 				jen.Id("req").Dot(field.GoName).Op("=").Id("cmd").Dot("Bool").Call(jen.Lit(flagName)),
 			)
+		case protoreflect.BytesKind:
+			statements = append(statements,
+				jen.Id("req").Dot(field.GoName).Op("=").Index().Byte().Call(
+					jen.Id("cmd").Dot("String").Call(jen.Lit(flagName)),
+				),
+			)
+		case protoreflect.EnumKind:
+			// Enums are int32 in Go protobuf
+			statements = append(statements,
+				jen.Id("req").Dot(field.GoName).Op("=").Id("cmd").Dot("Int32").Call(jen.Lit(flagName)),
+			)
+		case protoreflect.GroupKind:
+			// GroupKind is deprecated and not supported - generate runtime error
+			fmt.Fprintf(os.Stderr, "WARNING: Field %s uses deprecated GroupKind - generating code that will return a runtime error\n", field.Desc.FullName())
+			statements = append(statements,
+				jen.Return(jen.Qual("fmt", "Errorf").Call(
+					jen.Lit(fmt.Sprintf("field %s uses deprecated proto2 GroupKind which is not supported - please update your proto definition to use a message type instead", field.GoName)),
+				)),
+			)
 		}
 	}
 
 	return statements
+}
+
+// generateOutputWriterOpening generates code to open the output writer and set up cleanup
+func generateOutputWriterOpening() []jen.Code {
+	return []jen.Code{
+		jen.Comment("Open output writer"),
+		jen.List(jen.Id("outputWriter"), jen.Err()).Op(":=").Id("getOutputWriter").Call(
+			jen.Id("cmd").Dot("String").Call(jen.Lit("output")),
+		),
+		jen.If(jen.Err().Op("!=").Nil()).Block(
+			jen.Return(jen.Qual("fmt", "Errorf").Call(jen.Lit("failed to open output: %w"), jen.Err())),
+		),
+		jen.If(jen.Id("closer").Op(",").Id("ok").Op(":=").Id("outputWriter").Assert(jen.Qual("io", "Closer")), jen.Id("ok")).Block(
+			jen.Defer().Id("closer").Dot("Close").Call(),
+		),
+		jen.Line(),
+	}
 }
 
 func generateActionBodyWithHooks(file *protogen.File, service *protogen.Service, method *protogen.Method, configMessageType string) []jen.Code {
@@ -784,19 +883,7 @@ func generateActionBodyWithHooks(file *protogen.File, service *protogen.Service,
 	)
 
 	// Handle output formatting
-	statements = append(statements,
-		jen.Comment("Open output writer"),
-		jen.List(jen.Id("outputWriter"), jen.Err()).Op(":=").Id("getOutputWriter").Call(
-			jen.Id("cmd").Dot("String").Call(jen.Lit("output")),
-		),
-		jen.If(jen.Err().Op("!=").Nil()).Block(
-			jen.Return(jen.Qual("fmt", "Errorf").Call(jen.Lit("failed to open output: %w"), jen.Err())),
-		),
-		jen.If(jen.Id("closer").Op(",").Id("ok").Op(":=").Id("outputWriter").Assert(jen.Qual("io", "Closer")), jen.Id("ok")).Block(
-			jen.Defer().Id("closer").Dot("Close").Call(),
-		),
-		jen.Line(),
-	)
+	statements = append(statements, generateOutputWriterOpening()...)
 
 	statements = append(statements,
 		jen.Comment("Find and use the appropriate output format"),
@@ -931,7 +1018,7 @@ func generateServerStreamingCommand(service *protogen.Service, method *protogen.
 
 	// Get command name from annotation or use kebab-case default
 	cmdName := toKebabCase(method.GoName)
-	cmdUsage := "Call " + method.GoName + " streaming RPC"
+	cmdUsage := method.GoName + " (streaming)"
 
 	cmdOpts := getMethodCommandOptions(method)
 	if cmdOpts != nil {
@@ -948,7 +1035,7 @@ func generateServerStreamingCommand(service *protogen.Service, method *protogen.
 
 	// Build flags dynamically with output format support and delimiter
 	statements = append(statements,
-		jen.Comment("Build flags for "+cmdName+" (streaming)"),
+		jen.Comment("Build flags for "+cmdName),
 		jen.Id("flags_"+cmdVarName).Op(":=").Index().Qual("github.com/urfave/cli/v3", "Flag").Values(
 			jen.Op("&").Qual("github.com/urfave/cli/v3", "StringFlag").Values(jen.Dict{
 				jen.Id("Name"):  jen.Lit("remote"),
@@ -1135,19 +1222,7 @@ func generateServerStreamingActionBody(file *protogen.File, service *protogen.Se
 	statements = append(statements, deserializerCheck...)
 
 	// Open output writer
-	statements = append(statements,
-		jen.Comment("Open output writer"),
-		jen.List(jen.Id("outputWriter"), jen.Err()).Op(":=").Id("getOutputWriter").Call(
-			jen.Id("cmd").Dot("String").Call(jen.Lit("output")),
-		),
-		jen.If(jen.Err().Op("!=").Nil()).Block(
-			jen.Return(jen.Qual("fmt", "Errorf").Call(jen.Lit("failed to open output: %w"), jen.Err())),
-		),
-		jen.If(jen.Id("closer").Op(",").Id("ok").Op(":=").Id("outputWriter").Assert(jen.Qual("io", "Closer")), jen.Id("ok")).Block(
-			jen.Defer().Id("closer").Dot("Close").Call(),
-		),
-		jen.Line(),
-	)
+	statements = append(statements, generateOutputWriterOpening()...)
 
 	// Find output format
 	statements = append(statements,
@@ -1207,7 +1282,7 @@ func generateServerStreamingActionBody(file *protogen.File, service *protogen.Se
 }
 
 // generateRemoteStreamingCall generates code for remote streaming gRPC calls
-func generateRemoteStreamingCall(service *protogen.Service, method *protogen.Method, clientType string) []jen.Code {
+func generateRemoteStreamingCall(_ *protogen.Service, method *protogen.Method, clientType string) []jen.Code {
 	return []jen.Code{
 		jen.Comment("Remote gRPC streaming call"),
 		jen.List(jen.Id("conn"), jen.Id("connErr")).Op(":=").Qual("google.golang.org/grpc", "NewClient").Call(

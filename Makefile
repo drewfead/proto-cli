@@ -90,7 +90,7 @@ lint: ## Run linter on all files
 .PHONY: fmt
 fmt: ## Auto-format code
 	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint fmt ./...
-	go fmt ./...
+	go run mvdan.cc/gofumpt -l -w .
 
 ##@ Misc.
 

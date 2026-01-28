@@ -23,9 +23,9 @@ func getOutputWriter(path string) (io.Writer, error) {
 	return os.Create(path)
 }
 
-// UserServiceServiceCommand creates a service CLI for UserService with options
+// UserServiceCommand creates a CLI for UserService with options
 // The implOrFactory parameter can be either a direct service implementation or a factory function
-func UserServiceServiceCommand(ctx context.Context, implOrFactory interface{}, opts ...protocli.ServiceOption) *protocli.ServiceCLI {
+func UserServiceCommand(ctx context.Context, implOrFactory interface{}, opts ...protocli.ServiceOption) *protocli.ServiceCLI {
 	options := protocli.ApplyServiceOptions(opts...)
 
 	// Determine default format (first registered format, or empty if none)
@@ -50,7 +50,7 @@ func UserServiceServiceCommand(ctx context.Context, implOrFactory interface{}, o
 		Value: "-",
 	}}
 
-	flags_get = append(flags_get, &v3.IntFlag{
+	flags_get = append(flags_get, &v3.Int64Flag{
 		Aliases: []string{"i"},
 		Name:    "id",
 		Usage:   "User ID to retrieve",
@@ -66,9 +66,13 @@ func UserServiceServiceCommand(ctx context.Context, implOrFactory interface{}, o
 		Name:  "db-url",
 		Usage: "PostgreSQL connection URL",
 	})
-	flags_get = append(flags_get, &v3.IntFlag{
+	flags_get = append(flags_get, &v3.Int64Flag{
 		Name:  "max-conns",
 		Usage: "Maximum database connections",
+	})
+	flags_get = append(flags_get, &v3.Int32Flag{
+		Name:  "log-level",
+		Usage: "Logging level",
 	})
 	flags_get = append(flags_get, &v3.StringFlag{
 		Name:  "allowed-origins",
@@ -124,7 +128,7 @@ func UserServiceServiceCommand(ctx context.Context, implOrFactory interface{}, o
 			} else {
 				// Use auto-generated flag parsing
 				req = &GetUserRequest{}
-				req.Id = int64(cmd.Int("id"))
+				req.Id = cmd.Int64("id")
 				req.IncludeDetails = cmd.Bool("include-details")
 			}
 
@@ -258,9 +262,13 @@ func UserServiceServiceCommand(ctx context.Context, implOrFactory interface{}, o
 		Name:  "db-url",
 		Usage: "PostgreSQL connection URL",
 	})
-	flags_create = append(flags_create, &v3.IntFlag{
+	flags_create = append(flags_create, &v3.Int64Flag{
 		Name:  "max-conns",
 		Usage: "Maximum database connections",
+	})
+	flags_create = append(flags_create, &v3.Int32Flag{
+		Name:  "log-level",
+		Usage: "Logging level",
 	})
 	flags_create = append(flags_create, &v3.StringFlag{
 		Name:  "allowed-origins",
@@ -461,7 +469,7 @@ func UserServiceServiceCommand(ctx context.Context, implOrFactory interface{}, o
 		Command: &v3.Command{
 			Commands: commands,
 			Name:     "user-service",
-			Usage:    "CLI for UserService",
+			Usage:    "User commands",
 		},
 		ConfigMessageType: "UserServiceConfig",
 		ConfigPrototype:   &UserServiceConfig{},
@@ -473,9 +481,9 @@ func UserServiceServiceCommand(ctx context.Context, implOrFactory interface{}, o
 	}
 }
 
-// AdminServiceServiceCommand creates a service CLI for AdminService with options
+// AdminServiceCommand creates a CLI for AdminService with options
 // The implOrFactory parameter can be either a direct service implementation or a factory function
-func AdminServiceServiceCommand(ctx context.Context, implOrFactory interface{}, opts ...protocli.ServiceOption) *protocli.ServiceCLI {
+func AdminServiceCommand(ctx context.Context, implOrFactory interface{}, opts ...protocli.ServiceOption) *protocli.ServiceCLI {
 	options := protocli.ApplyServiceOptions(opts...)
 
 	// Determine default format (first registered format, or empty if none)

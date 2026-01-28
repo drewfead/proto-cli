@@ -47,6 +47,7 @@ linters:
     - modernize          # Modernization suggestions less critical
     - unparam            # Flags interface implementations, etc
     - noinlineerr        # Yeah IDK, I like inline errors
+    - unqueryvet         # False positives on jen.Select() (Go select, not SQL)
 
 linters-settings:
   wsl_v5:

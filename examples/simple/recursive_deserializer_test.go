@@ -50,7 +50,7 @@ func TestIntegration_RecursiveDeserializer_NestedMessage(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	userServiceCLI := simple.UserServiceServiceCommand(
+	userServiceCLI := simple.UserServiceCommand(
 		ctx,
 		newUserService,
 		// Register deserializer using fully qualified proto name
@@ -89,7 +89,7 @@ func TestIntegration_RecursiveDeserializer_TopLevelAndNested(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	userServiceCLI := simple.UserServiceServiceCommand(
+	userServiceCLI := simple.UserServiceCommand(
 		ctx,
 		newUserService,
 		protocli.WithFlagDeserializer("example.Address", addressDeserializer),
@@ -132,7 +132,7 @@ func TestIntegration_RecursiveDeserializer_FullyQualifiedNames(t *testing.T) {
 			}
 
 			ctx := context.Background()
-			userServiceCLI := simple.UserServiceServiceCommand(
+			userServiceCLI := simple.UserServiceCommand(
 				ctx,
 				newUserService,
 				protocli.WithFlagDeserializer(tt.protoTypeName, deserializer),
@@ -192,7 +192,7 @@ func TestIntegration_RecursiveDeserializer_RealWorldExample(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	userServiceCLI := simple.UserServiceServiceCommand(
+	userServiceCLI := simple.UserServiceCommand(
 		ctx,
 		newUserService,
 		protocli.WithFlagDeserializer("example.Address", addressDeserializer),
@@ -232,7 +232,7 @@ func TestIntegration_RecursiveDeserializer_ValidationInNested(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	userServiceCLI := simple.UserServiceServiceCommand(
+	userServiceCLI := simple.UserServiceCommand(
 		ctx,
 		newUserService,
 		protocli.WithFlagDeserializer("example.Address", addressDeserializer),
@@ -271,7 +271,7 @@ func TestIntegration_RecursiveDeserializer_CompositionPattern(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	userServiceCLI := simple.UserServiceServiceCommand(
+	userServiceCLI := simple.UserServiceCommand(
 		ctx,
 		newUserService,
 		protocli.WithFlagDeserializer("example.Address", addressDeserializer),

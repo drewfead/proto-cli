@@ -31,7 +31,7 @@ func TestIntegration_NilHandling_DeserializerReturnsNil(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	userServiceCLI := simple.UserServiceServiceCommand(
+	userServiceCLI := simple.UserServiceCommand(
 		ctx,
 		newUserService,
 		protocli.WithFlagDeserializer("google.protobuf.Timestamp", timestampDeserializer),
@@ -52,7 +52,7 @@ func TestIntegration_NilHandling_OptionalFields(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	userServiceCLI := simple.UserServiceServiceCommand(
+	userServiceCLI := simple.UserServiceCommand(
 		ctx,
 		newUserService,
 		protocli.WithFlagDeserializer("google.protobuf.Timestamp", timestampDeserializer),
@@ -68,7 +68,7 @@ func TestIntegration_NilHandling_NoDeserializerNoValue(t *testing.T) {
 	ctx := context.Background()
 
 	// Create service without timestamp deserializer
-	userServiceCLI := simple.UserServiceServiceCommand(
+	userServiceCLI := simple.UserServiceCommand(
 		ctx,
 		newUserService,
 	)
@@ -95,7 +95,7 @@ func TestIntegration_NilHandling_MixedNilAndNonNil(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	userServiceCLI := simple.UserServiceServiceCommand(
+	userServiceCLI := simple.UserServiceCommand(
 		ctx,
 		newUserService,
 		protocli.WithFlagDeserializer("example.Address", addressDeserializer),

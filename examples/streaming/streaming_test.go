@@ -20,7 +20,7 @@ func TestServerStreaming_ListItems_Local(t *testing.T) {
 	ctx := context.Background()
 	service := streaming.NewStreamingService()
 
-	serviceCLI := streaming.StreamingServiceServiceCommand(ctx, service,
+	serviceCLI := streaming.StreamingServiceCommand(ctx, service,
 		protocli.WithOutputFormats(protocli.JSON()),
 	)
 
@@ -30,10 +30,12 @@ func TestServerStreaming_ListItems_Local(t *testing.T) {
 
 	// Run command with --output to write to temp file
 	tempFile := t.TempDir() + "/output.txt"
-	args := []string{"streamcli", "streaming-service", "list-items",
+	args := []string{
+		"streamcli", "streaming-service", "list-items",
 		"--category", "test",
 		"--format", "json",
-		"--output", tempFile}
+		"--output", tempFile,
+	}
 
 	if err := rootCmd.Run(ctx, args); err != nil {
 		t.Fatalf("Command failed: %v", err)
@@ -76,11 +78,16 @@ func TestServerStreaming_ListItems_Remote(t *testing.T) {
 	defer cancel()
 
 	// Start gRPC server
-	lis, err := net.Listen("tcp", "localhost:0")
+	lc := &net.ListenConfig{}
+	lis, err := lc.Listen(ctx, "tcp", "localhost:0")
 	if err != nil {
 		t.Fatalf("Failed to listen: %v", err)
 	}
-	port := lis.Addr().(*net.TCPAddr).Port
+	tcpAddr, ok := lis.Addr().(*net.TCPAddr)
+	if !ok {
+		t.Fatalf("Failed to get TCP address")
+	}
+	port := tcpAddr.Port
 
 	server := grpc.NewServer()
 	service := streaming.NewStreamingService()
@@ -95,7 +102,7 @@ func TestServerStreaming_ListItems_Remote(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Create CLI and run remote command
-	serviceCLI := streaming.StreamingServiceServiceCommand(ctx, service,
+	serviceCLI := streaming.StreamingServiceCommand(ctx, service,
 		protocli.WithOutputFormats(protocli.JSON()),
 	)
 
@@ -105,11 +112,13 @@ func TestServerStreaming_ListItems_Remote(t *testing.T) {
 
 	// Write output to temp file
 	tempFile := t.TempDir() + "/output.txt"
-	args := []string{"streamcli", "streaming-service", "list-items",
+	args := []string{
+		"streamcli", "streaming-service", "list-items",
 		"--remote", fmt.Sprintf("localhost:%d", port),
 		"--category", "remote",
 		"--format", "json",
-		"--output", tempFile}
+		"--output", tempFile,
+	}
 
 	if err := rootCmd.Run(ctx, args); err != nil {
 		t.Fatalf("Remote command failed: %v", err)
@@ -148,7 +157,8 @@ func TestServerStreaming_DirectGRPCClient(t *testing.T) {
 	defer cancel()
 
 	// Start gRPC server
-	lis, err := net.Listen("tcp", "localhost:0")
+	lc := &net.ListenConfig{}
+	lis, err := lc.Listen(ctx, "tcp", "localhost:0")
 	if err != nil {
 		t.Fatalf("Failed to listen: %v", err)
 	}
@@ -168,7 +178,11 @@ func TestServerStreaming_DirectGRPCClient(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to connect: %v", err)
 	}
-	defer conn.Close()
+	defer func() {
+		if err := conn.Close(); err != nil {
+			t.Logf("Failed to close connection: %v", err)
+		}
+	}()
 
 	client := streaming.NewStreamingServiceClient(conn)
 

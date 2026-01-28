@@ -379,8 +379,10 @@ type RootOption interface {
 // It implements both ServiceOption and RootOption interfaces.
 type SharedOption func(baseOptions)
 
-var _ ServiceOption = SharedOption(nil)
-var _ RootOption = SharedOption(nil)
+var (
+	_ ServiceOption = SharedOption(nil)
+	_ RootOption    = SharedOption(nil)
+)
 
 func (fn SharedOption) applyToServiceConfig(opts *serviceCommandOptions) {
 	fn(opts)
