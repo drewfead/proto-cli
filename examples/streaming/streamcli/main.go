@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 
 	protocli "github.com/drewfead/proto-cli"
@@ -22,9 +23,13 @@ func main() {
 	)
 
 	// Create root CLI with the streaming service
-	rootCmd := protocli.RootCommand("streamcli",
+	rootCmd, err := protocli.RootCommand("streamcli",
 		protocli.WithService(serviceCLI),
 	)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating root command: %v\n", err)
+		os.Exit(1)
+	}
 
 	rootCmd.Usage = "Streaming Service CLI - Server streaming examples"
 	rootCmd.Description = `This CLI demonstrates server streaming support.

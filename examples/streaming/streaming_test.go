@@ -11,6 +11,7 @@ import (
 
 	protocli "github.com/drewfead/proto-cli"
 	"github.com/drewfead/proto-cli/examples/streaming"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -24,9 +25,10 @@ func TestServerStreaming_ListItems_Local(t *testing.T) {
 		protocli.WithOutputFormats(protocli.JSON()),
 	)
 
-	rootCmd := protocli.RootCommand("streamcli",
+	rootCmd, err := protocli.RootCommand("streamcli",
 		protocli.WithService(serviceCLI),
 	)
+	require.NoError(t, err)
 
 	// Run command with --output to write to temp file
 	tempFile := t.TempDir() + "/output.txt"
@@ -106,9 +108,10 @@ func TestServerStreaming_ListItems_Remote(t *testing.T) {
 		protocli.WithOutputFormats(protocli.JSON()),
 	)
 
-	rootCmd := protocli.RootCommand("streamcli",
+	rootCmd, err := protocli.RootCommand("streamcli",
 		protocli.WithService(serviceCLI),
 	)
+	require.NoError(t, err)
 
 	// Write output to temp file
 	tempFile := t.TempDir() + "/output.txt"

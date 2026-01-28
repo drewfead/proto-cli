@@ -588,3 +588,490 @@ func StreamingServiceCommand(ctx context.Context, implOrFactory interface{}, opt
 		ServiceName: "streaming-service",
 	}
 }
+
+// StreamingServiceCommandsFlat creates a flat command structure for StreamingService (for single-service CLIs)
+// This returns RPC commands directly at the root level instead of nested under a service command.
+// The implOrFactory parameter can be either a direct service implementation or a factory function
+// The returned slice includes all RPC commands plus a daemonize command for starting a gRPC server.
+func StreamingServiceCommandsFlat(ctx context.Context, implOrFactory interface{}, opts ...protocli.ServiceOption) []*v3.Command {
+	options := protocli.ApplyServiceOptions(opts...)
+
+	// Determine default format (first registered format, or empty if none)
+	var defaultFormat string
+	if len(options.OutputFormats()) > 0 {
+		defaultFormat = options.OutputFormats()[0].Name()
+	}
+
+	var commands []*v3.Command
+
+	// Build flags for list-items
+	flags_list_items := []v3.Flag{&v3.StringFlag{
+		Name:  "remote",
+		Usage: "Remote gRPC server address (host:port). If set, uses gRPC client instead of direct call",
+	}, &v3.StringFlag{
+		Name:  "format",
+		Usage: "Output format (use --format to see available formats)",
+		Value: defaultFormat,
+	}, &v3.StringFlag{
+		Name:  "output",
+		Usage: "Output file (- for stdout)",
+		Value: "-",
+	}, &v3.StringFlag{
+		Name:  "delimiter",
+		Usage: "Delimiter between streamed messages",
+		Value: "\n",
+	}}
+
+	flags_list_items = append(flags_list_items, &v3.StringFlag{
+		Name:  "category",
+		Usage: "Filter by category",
+	})
+	flags_list_items = append(flags_list_items, &v3.Int32Flag{
+		Name:  "limit",
+		Usage: "Max items to return",
+	})
+	flags_list_items = append(flags_list_items, &v3.Int32Flag{
+		Name:  "offset",
+		Usage: "Number of items to skip",
+	})
+	flags_list_items = append(flags_list_items, &v3.StringFlag{
+		Name:  "sort-by",
+		Usage: "Sort field (name, id, category)",
+	})
+	flags_list_items = append(flags_list_items, &v3.BoolFlag{
+		Name:  "include-deleted",
+		Usage: "Include deleted items",
+	})
+
+	// Add format-specific flags from registered formats
+	for _, outputFmt := range options.OutputFormats() {
+		// Check if format implements FlagConfiguredOutputFormat
+		if flagConfigured, ok := outputFmt.(protocli.FlagConfiguredOutputFormat); ok {
+			flags_list_items = append(flags_list_items, flagConfigured.Flags()...)
+		}
+	}
+
+	commands = append(commands, &v3.Command{
+		Action: func(cmdCtx context.Context, cmd *v3.Command) error {
+			if options.BeforeCommand() != nil {
+				if err := options.BeforeCommand()(cmdCtx, cmd); err != nil {
+					return fmt.Errorf("before hook failed: %w", err)
+				}
+			}
+
+			defer func() {
+				if options.AfterCommand() != nil {
+					if err := options.AfterCommand()(cmdCtx, cmd); err != nil {
+						slog.Warn("after hook failed", "error", err)
+					}
+				}
+			}()
+
+			// Build request message
+			var req *ListItemsRequest
+
+			// Check for custom flag deserializer for streaming.ListItemsRequest
+			deserializer, hasDeserializer := options.FlagDeserializer("streaming.ListItemsRequest")
+			if hasDeserializer {
+				// Use custom deserializer for top-level request
+				requestFlags := protocli.NewFlagContainer(cmd, "")
+				msg, err := deserializer(cmdCtx, requestFlags)
+				if err != nil {
+					return fmt.Errorf("custom deserializer failed: %w", err)
+				}
+				if msg == nil {
+					return fmt.Errorf("custom deserializer returned nil message")
+				}
+				var ok bool
+				req, ok = msg.(*ListItemsRequest)
+				if !ok {
+					return fmt.Errorf("custom deserializer returned wrong type: expected *%s, got %T", "ListItemsRequest", msg)
+				}
+			} else {
+				// Use auto-generated flag parsing
+				req = &ListItemsRequest{}
+				req.Category = cmd.String("category")
+				req.Limit = cmd.Int32("limit")
+				if cmd.IsSet("offset") {
+					val := cmd.Int32("offset")
+					req.Offset = &val
+				}
+				if cmd.IsSet("sort-by") {
+					val := cmd.String("sort-by")
+					req.SortBy = &val
+				}
+				if cmd.IsSet("include-deleted") {
+					val := cmd.Bool("include-deleted")
+					req.IncludeDeleted = &val
+				}
+			}
+
+			// Open output writer
+			outputWriter, err := getOutputWriter(cmd.String("output"))
+			if err != nil {
+				return fmt.Errorf("failed to open output: %w", err)
+			}
+			if closer, ok := outputWriter.(io.Closer); ok {
+				defer closer.Close()
+			}
+
+			// Find the appropriate output format
+			formatName := cmd.String("format")
+			var outputFmt protocli.OutputFormat
+			for _, f := range options.OutputFormats() {
+				if f.Name() == formatName {
+					outputFmt = f
+					break
+				}
+			}
+			if outputFmt == nil {
+				var availableFormats []string
+				for _, f := range options.OutputFormats() {
+					availableFormats = append(availableFormats, f.Name())
+				}
+				return fmt.Errorf("unknown format %q (available: %v)", formatName, availableFormats)
+			}
+
+			// Get delimiter for separating streamed messages
+			delimiter := cmd.String("delimiter")
+
+			// Check if using remote gRPC call or direct implementation call
+			remoteAddr := cmd.String("remote")
+
+			if remoteAddr != "" {
+				// Remote gRPC streaming call
+				conn, connErr := grpc.NewClient(remoteAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+				if connErr != nil {
+					return fmt.Errorf("failed to connect to remote %s: %w", remoteAddr, connErr)
+				}
+				defer conn.Close()
+
+				client := NewStreamingServiceClient(conn)
+				stream, err := client.ListItems(cmdCtx, req)
+				if err != nil {
+					return fmt.Errorf("failed to start stream: %w", err)
+				}
+
+				// Receive and format each message in the stream
+				var messageCount int
+				for {
+					msg, recvErr := stream.Recv()
+					if recvErr == io.EOF {
+						break
+					}
+					if recvErr != nil {
+						return fmt.Errorf("stream receive error: %w", recvErr)
+					}
+
+					// Format and write the message
+					if err := outputFmt.Format(cmdCtx, cmd, outputWriter, msg); err != nil {
+						return fmt.Errorf("format failed: %w", err)
+					}
+
+					// Write delimiter
+					if _, err := outputWriter.Write([]byte(delimiter)); err != nil {
+						return fmt.Errorf("failed to write delimiter: %w", err)
+					}
+					messageCount++
+				}
+
+				// Write final newline to keep terminal clean (only if delimiter doesn't already end with newline)
+				if messageCount > 0 && !strings.HasSuffix(delimiter, "\n") {
+					if _, err := outputWriter.Write([]byte("\n")); err != nil {
+						return fmt.Errorf("failed to write final newline: %w", err)
+					}
+				}
+			} else {
+				// Direct implementation call (no config)
+				svcImpl := implOrFactory.(StreamingServiceServer)
+
+				// Create local stream wrapper for direct call
+				localStream := &localServerStream_ListItems{
+					ctx:       cmdCtx,
+					errors:    make(chan error),
+					responses: make(chan *ItemResponse),
+				}
+
+				// Call streaming method in goroutine
+				go func() {
+					var methodErr error
+					methodErr = svcImpl.ListItems(req, localStream)
+					close(localStream.responses)
+					if methodErr != nil {
+						localStream.errors <- methodErr
+					}
+					close(localStream.errors)
+				}()
+
+				// Receive and format each message in the stream
+				var messageCount int
+				for {
+					select {
+					case msg, ok := <-localStream.responses:
+						if !ok {
+							// Stream closed, check for errors
+							if streamErr := <-localStream.errors; streamErr != nil {
+								return fmt.Errorf("stream error: %w", streamErr)
+							}
+							// Write final newline to keep terminal clean (only if delimiter doesn't already end with newline)
+							if messageCount > 0 && !strings.HasSuffix(delimiter, "\n") {
+								if _, err := outputWriter.Write([]byte("\n")); err != nil {
+									return fmt.Errorf("failed to write final newline: %w", err)
+								}
+							}
+							return nil
+						}
+
+						// Format and write the message
+						if err := outputFmt.Format(cmdCtx, cmd, outputWriter, msg); err != nil {
+							return fmt.Errorf("format failed: %w", err)
+						}
+
+						// Write delimiter
+						if _, err := outputWriter.Write([]byte(delimiter)); err != nil {
+							return fmt.Errorf("failed to write delimiter: %w", err)
+						}
+						messageCount++
+					case <-cmdCtx.Done():
+						return cmdCtx.Err()
+					}
+				}
+			}
+
+			return nil
+		},
+		Flags: flags_list_items,
+		Name:  "list-items",
+		Usage: "Stream items from the server",
+	})
+
+	// Build flags for watch-items
+	flags_watch_items := []v3.Flag{&v3.StringFlag{
+		Name:  "remote",
+		Usage: "Remote gRPC server address (host:port). If set, uses gRPC client instead of direct call",
+	}, &v3.StringFlag{
+		Name:  "format",
+		Usage: "Output format (use --format to see available formats)",
+		Value: defaultFormat,
+	}, &v3.StringFlag{
+		Name:  "output",
+		Usage: "Output file (- for stdout)",
+		Value: "-",
+	}, &v3.StringFlag{
+		Name:  "delimiter",
+		Usage: "Delimiter between streamed messages",
+		Value: "\n",
+	}}
+
+	flags_watch_items = append(flags_watch_items, &v3.Int64Flag{
+		Name:  "start-id",
+		Usage: "Start watching from this ID",
+	})
+
+	// Add format-specific flags from registered formats
+	for _, outputFmt := range options.OutputFormats() {
+		// Check if format implements FlagConfiguredOutputFormat
+		if flagConfigured, ok := outputFmt.(protocli.FlagConfiguredOutputFormat); ok {
+			flags_watch_items = append(flags_watch_items, flagConfigured.Flags()...)
+		}
+	}
+
+	commands = append(commands, &v3.Command{
+		Action: func(cmdCtx context.Context, cmd *v3.Command) error {
+			if options.BeforeCommand() != nil {
+				if err := options.BeforeCommand()(cmdCtx, cmd); err != nil {
+					return fmt.Errorf("before hook failed: %w", err)
+				}
+			}
+
+			defer func() {
+				if options.AfterCommand() != nil {
+					if err := options.AfterCommand()(cmdCtx, cmd); err != nil {
+						slog.Warn("after hook failed", "error", err)
+					}
+				}
+			}()
+
+			// Build request message
+			var req *WatchRequest
+
+			// Check for custom flag deserializer for streaming.WatchRequest
+			deserializer, hasDeserializer := options.FlagDeserializer("streaming.WatchRequest")
+			if hasDeserializer {
+				// Use custom deserializer for top-level request
+				requestFlags := protocli.NewFlagContainer(cmd, "")
+				msg, err := deserializer(cmdCtx, requestFlags)
+				if err != nil {
+					return fmt.Errorf("custom deserializer failed: %w", err)
+				}
+				if msg == nil {
+					return fmt.Errorf("custom deserializer returned nil message")
+				}
+				var ok bool
+				req, ok = msg.(*WatchRequest)
+				if !ok {
+					return fmt.Errorf("custom deserializer returned wrong type: expected *%s, got %T", "WatchRequest", msg)
+				}
+			} else {
+				// Use auto-generated flag parsing
+				req = &WatchRequest{}
+				req.StartId = cmd.Int64("start-id")
+			}
+
+			// Open output writer
+			outputWriter, err := getOutputWriter(cmd.String("output"))
+			if err != nil {
+				return fmt.Errorf("failed to open output: %w", err)
+			}
+			if closer, ok := outputWriter.(io.Closer); ok {
+				defer closer.Close()
+			}
+
+			// Find the appropriate output format
+			formatName := cmd.String("format")
+			var outputFmt protocli.OutputFormat
+			for _, f := range options.OutputFormats() {
+				if f.Name() == formatName {
+					outputFmt = f
+					break
+				}
+			}
+			if outputFmt == nil {
+				var availableFormats []string
+				for _, f := range options.OutputFormats() {
+					availableFormats = append(availableFormats, f.Name())
+				}
+				return fmt.Errorf("unknown format %q (available: %v)", formatName, availableFormats)
+			}
+
+			// Get delimiter for separating streamed messages
+			delimiter := cmd.String("delimiter")
+
+			// Check if using remote gRPC call or direct implementation call
+			remoteAddr := cmd.String("remote")
+
+			if remoteAddr != "" {
+				// Remote gRPC streaming call
+				conn, connErr := grpc.NewClient(remoteAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+				if connErr != nil {
+					return fmt.Errorf("failed to connect to remote %s: %w", remoteAddr, connErr)
+				}
+				defer conn.Close()
+
+				client := NewStreamingServiceClient(conn)
+				stream, err := client.WatchItems(cmdCtx, req)
+				if err != nil {
+					return fmt.Errorf("failed to start stream: %w", err)
+				}
+
+				// Receive and format each message in the stream
+				var messageCount int
+				for {
+					msg, recvErr := stream.Recv()
+					if recvErr == io.EOF {
+						break
+					}
+					if recvErr != nil {
+						return fmt.Errorf("stream receive error: %w", recvErr)
+					}
+
+					// Format and write the message
+					if err := outputFmt.Format(cmdCtx, cmd, outputWriter, msg); err != nil {
+						return fmt.Errorf("format failed: %w", err)
+					}
+
+					// Write delimiter
+					if _, err := outputWriter.Write([]byte(delimiter)); err != nil {
+						return fmt.Errorf("failed to write delimiter: %w", err)
+					}
+					messageCount++
+				}
+
+				// Write final newline to keep terminal clean (only if delimiter doesn't already end with newline)
+				if messageCount > 0 && !strings.HasSuffix(delimiter, "\n") {
+					if _, err := outputWriter.Write([]byte("\n")); err != nil {
+						return fmt.Errorf("failed to write final newline: %w", err)
+					}
+				}
+			} else {
+				// Direct implementation call (no config)
+				svcImpl := implOrFactory.(StreamingServiceServer)
+
+				// Create local stream wrapper for direct call
+				localStream := &localServerStream_WatchItems{
+					ctx:       cmdCtx,
+					errors:    make(chan error),
+					responses: make(chan *ItemEvent),
+				}
+
+				// Call streaming method in goroutine
+				go func() {
+					var methodErr error
+					methodErr = svcImpl.WatchItems(req, localStream)
+					close(localStream.responses)
+					if methodErr != nil {
+						localStream.errors <- methodErr
+					}
+					close(localStream.errors)
+				}()
+
+				// Receive and format each message in the stream
+				var messageCount int
+				for {
+					select {
+					case msg, ok := <-localStream.responses:
+						if !ok {
+							// Stream closed, check for errors
+							if streamErr := <-localStream.errors; streamErr != nil {
+								return fmt.Errorf("stream error: %w", streamErr)
+							}
+							// Write final newline to keep terminal clean (only if delimiter doesn't already end with newline)
+							if messageCount > 0 && !strings.HasSuffix(delimiter, "\n") {
+								if _, err := outputWriter.Write([]byte("\n")); err != nil {
+									return fmt.Errorf("failed to write final newline: %w", err)
+								}
+							}
+							return nil
+						}
+
+						// Format and write the message
+						if err := outputFmt.Format(cmdCtx, cmd, outputWriter, msg); err != nil {
+							return fmt.Errorf("format failed: %w", err)
+						}
+
+						// Write delimiter
+						if _, err := outputWriter.Write([]byte(delimiter)); err != nil {
+							return fmt.Errorf("failed to write delimiter: %w", err)
+						}
+						messageCount++
+					case <-cmdCtx.Done():
+						return cmdCtx.Err()
+					}
+				}
+			}
+
+			return nil
+		},
+		Flags: flags_watch_items,
+		Name:  "watch-items",
+		Usage: "Watch for item changes in real-time",
+	})
+
+	// Create ServiceCLI for daemonize command
+	serviceCLI := &protocli.ServiceCLI{
+		ConfigMessageType: "",
+		FactoryOrImpl:     implOrFactory,
+		RegisterFunc: func(s *grpc.Server, impl interface{}) {
+			RegisterStreamingServiceServer(s, impl.(StreamingServiceServer))
+		},
+		ServiceName: "streaming-service",
+	}
+
+	// Create daemonize command for starting gRPC server
+	daemonCmd := protocli.NewDaemonizeCommand(ctx, []*protocli.ServiceCLI{serviceCLI}, options)
+
+	// Append daemonize command to the list
+	commands = append(commands, daemonCmd)
+
+	return commands
+}

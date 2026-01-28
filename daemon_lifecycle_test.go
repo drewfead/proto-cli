@@ -13,6 +13,7 @@ import (
 	simple "github.com/drewfead/proto-cli/examples/simple"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 )
 
@@ -52,13 +53,14 @@ func TestDaemonLifecycleHooks_StartupReadyShutdown(t *testing.T) {
 	ctx := context.Background()
 	userServiceCLI := simple.UserServiceCommand(ctx, newUserService)
 
-	rootCmd := protocli.RootCommand("testcli",
+	rootCmd, err := protocli.RootCommand("testcli",
 		protocli.WithService(userServiceCLI),
 		protocli.WithOnDaemonStartup(startup),
 		protocli.WithOnDaemonReady(ready),
 		protocli.WithOnDaemonShutdown(shutdown),
 		protocli.WithGracefulShutdownTimeout(2*time.Second),
 	)
+	require.NoError(t, err)
 
 	// Start daemon in background
 	go func() {
@@ -99,13 +101,14 @@ func TestDaemonLifecycleHooks_StartupError(t *testing.T) {
 	ctx := context.Background()
 	userServiceCLI := simple.UserServiceCommand(ctx, newUserService)
 
-	rootCmd := protocli.RootCommand("testcli",
+	rootCmd, err := protocli.RootCommand("testcli",
 		protocli.WithService(userServiceCLI),
 		protocli.WithOnDaemonStartup(startupWithError),
 	)
+	require.NoError(t, err)
 
 	// Daemon should fail to start
-	err := rootCmd.Run(ctx, []string{"testcli", "daemonize", "--port", "50200"})
+	err = rootCmd.Run(ctx, []string{"testcli", "daemonize", "--port", "50200"})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "startup validation failed")
 }
@@ -158,7 +161,7 @@ func TestDaemonLifecycleHooks_MultipleHooks(t *testing.T) {
 	ctx := context.Background()
 	userServiceCLI := simple.UserServiceCommand(ctx, newUserService)
 
-	rootCmd := protocli.RootCommand("testcli",
+	rootCmd, err := protocli.RootCommand("testcli",
 		protocli.WithService(userServiceCLI),
 		protocli.WithOnDaemonStartup(startup1),
 		protocli.WithOnDaemonStartup(startup2),
@@ -168,6 +171,7 @@ func TestDaemonLifecycleHooks_MultipleHooks(t *testing.T) {
 		protocli.WithOnDaemonShutdown(shutdown2),
 		protocli.WithGracefulShutdownTimeout(2*time.Second),
 	)
+	require.NoError(t, err)
 
 	// Start daemon in background
 	go func() {
@@ -220,11 +224,12 @@ func TestDaemonLifecycleHooks_GracefulShutdownTimeout(t *testing.T) {
 	ctx := context.Background()
 	userServiceCLI := simple.UserServiceCommand(ctx, newUserService)
 
-	rootCmd := protocli.RootCommand("testcli",
+	rootCmd, err := protocli.RootCommand("testcli",
 		protocli.WithService(userServiceCLI),
 		protocli.WithOnDaemonShutdown(shutdown),
 		protocli.WithGracefulShutdownTimeout(1*time.Second),
 	)
+	require.NoError(t, err)
 
 	// Start daemon in background
 	go func() {
@@ -272,10 +277,11 @@ func TestDaemonLifecycleHooks_AccessToServerInStartup(t *testing.T) {
 	ctx := context.Background()
 	userServiceCLI := simple.UserServiceCommand(ctx, newUserService)
 
-	rootCmd := protocli.RootCommand("testcli",
+	rootCmd, err := protocli.RootCommand("testcli",
 		protocli.WithService(userServiceCLI),
 		protocli.WithOnDaemonStartup(startup),
 	)
+	require.NoError(t, err)
 
 	// Start daemon in background
 	go func() {

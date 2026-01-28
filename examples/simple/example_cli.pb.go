@@ -523,6 +523,512 @@ func UserServiceCommand(ctx context.Context, implOrFactory interface{}, opts ...
 	}
 }
 
+// UserServiceCommandsFlat creates a flat command structure for UserService (for single-service CLIs)
+// This returns RPC commands directly at the root level instead of nested under a service command.
+// The implOrFactory parameter can be either a direct service implementation or a factory function
+// The returned slice includes all RPC commands plus a daemonize command for starting a gRPC server.
+func UserServiceCommandsFlat(ctx context.Context, implOrFactory interface{}, opts ...protocli.ServiceOption) []*v3.Command {
+	options := protocli.ApplyServiceOptions(opts...)
+
+	// Determine default format (first registered format, or empty if none)
+	var defaultFormat string
+	if len(options.OutputFormats()) > 0 {
+		defaultFormat = options.OutputFormats()[0].Name()
+	}
+
+	var commands []*v3.Command
+
+	// Build flags for get
+	flags_get := []v3.Flag{&v3.StringFlag{
+		Name:  "remote",
+		Usage: "Remote gRPC server address (host:port). If set, uses gRPC client instead of direct call",
+	}, &v3.StringFlag{
+		Name:  "format",
+		Usage: "Output format (use --format to see available formats)",
+		Value: defaultFormat,
+	}, &v3.StringFlag{
+		Name:  "output",
+		Usage: "Output file (- for stdout)",
+		Value: "-",
+	}}
+
+	flags_get = append(flags_get, &v3.Int64Flag{
+		Aliases: []string{"i"},
+		Name:    "id",
+		Usage:   "User ID to retrieve",
+	})
+	flags_get = append(flags_get, &v3.BoolFlag{
+		Aliases: []string{"d"},
+		Name:    "include-details",
+		Usage:   "Include detailed user information",
+	})
+	flags_get = append(flags_get, &v3.StringFlag{
+		Aliases: []string{"f"},
+		Name:    "fields",
+		Usage:   "Comma-separated list of fields to return (e.g., 'name,email')",
+	})
+	flags_get = append(flags_get, &v3.Int32Flag{
+		Aliases: []string{"t"},
+		Name:    "timeout",
+		Usage:   "Request timeout in milliseconds",
+	})
+
+	// Add config field flags for single-command mode
+	flags_get = append(flags_get, &v3.StringFlag{
+		Name:  "db-url",
+		Usage: "PostgreSQL connection URL",
+	})
+	flags_get = append(flags_get, &v3.Int64Flag{
+		Name:  "max-conns",
+		Usage: "Maximum database connections",
+	})
+	flags_get = append(flags_get, &v3.Int32Flag{
+		Name:  "log-level",
+		Usage: "Logging level",
+	})
+	flags_get = append(flags_get, &v3.StringFlag{
+		Name:  "allowed-origins",
+		Usage: "CORS allowed origins",
+	})
+
+	// Add format-specific flags from registered formats
+	for _, outputFmt := range options.OutputFormats() {
+		// Check if format implements FlagConfiguredOutputFormat
+		if flagConfigured, ok := outputFmt.(protocli.FlagConfiguredOutputFormat); ok {
+			flags_get = append(flags_get, flagConfigured.Flags()...)
+		}
+	}
+
+	commands = append(commands, &v3.Command{
+		Action: func(cmdCtx context.Context, cmd *v3.Command) error {
+			if options.BeforeCommand() != nil {
+				if err := options.BeforeCommand()(cmdCtx, cmd); err != nil {
+					return fmt.Errorf("before hook failed: %w", err)
+				}
+			}
+
+			defer func() {
+				if options.AfterCommand() != nil {
+					if err := options.AfterCommand()(cmdCtx, cmd); err != nil {
+						slog.Warn("after hook failed", "error", err)
+					}
+				}
+			}()
+
+			// Build request message
+			var req *GetUserRequest
+
+			// Check for custom flag deserializer for example.GetUserRequest
+			deserializer, hasDeserializer := options.FlagDeserializer("example.GetUserRequest")
+			if hasDeserializer {
+				// Use custom deserializer for top-level request
+				// Create FlagContainer (deserializer can access multiple flags via Command())
+				requestFlags := protocli.NewFlagContainer(cmd, "")
+				msg, err := deserializer(cmdCtx, requestFlags)
+				if err != nil {
+					return fmt.Errorf("custom deserializer failed: %w", err)
+				}
+				// Handle nil return from deserializer
+				if msg == nil {
+					return fmt.Errorf("custom deserializer returned nil message")
+				}
+				var ok bool
+				req, ok = msg.(*GetUserRequest)
+				if !ok {
+					return fmt.Errorf("custom deserializer returned wrong type: expected *%s, got %T", "GetUserRequest", msg)
+				}
+			} else {
+				// Use auto-generated flag parsing
+				req = &GetUserRequest{}
+				req.Id = cmd.Int64("id")
+				req.IncludeDetails = cmd.Bool("include-details")
+				if cmd.IsSet("fields-filter") {
+					val := cmd.String("fields-filter")
+					req.FieldsFilter = &val
+				}
+				if cmd.IsSet("timeout-ms") {
+					val := cmd.Int32("timeout-ms")
+					req.TimeoutMs = &val
+				}
+			}
+
+			// Check if using remote gRPC call or direct implementation call
+			remoteAddr := cmd.String("remote")
+			var resp *UserResponse
+			var err error
+
+			if remoteAddr != "" {
+				// Remote gRPC call
+				conn, connErr := grpc.NewClient(remoteAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+				if connErr != nil {
+					return fmt.Errorf("failed to connect to remote %s: %w", remoteAddr, connErr)
+				}
+				defer conn.Close()
+
+				client := NewUserServiceClient(conn)
+				resp, err = client.GetUser(cmdCtx, req)
+				if err != nil {
+					return fmt.Errorf("remote call failed: %w", err)
+				}
+			} else {
+				// Load config and create service implementation
+				// Get config paths and env prefix from root command
+				rootCmd := cmd.Root()
+				configPaths := rootCmd.StringSlice("config")
+				envPrefix := rootCmd.String("env-prefix")
+
+				// Create config loader (single-command mode = uses files + env + flags)
+				loader := protocli.NewConfigLoader(protocli.SingleCommandMode, protocli.FileConfig(configPaths...), protocli.EnvPrefix(envPrefix))
+
+				// Create config instance and load configuration
+				config := &UserServiceConfig{}
+				if err := loader.LoadServiceConfig(cmd, "userservice", config); err != nil {
+					return fmt.Errorf("failed to load config: %w", err)
+				}
+
+				// Call factory to create service implementation
+				svcImpl, err := protocli.CallFactory(implOrFactory, config)
+				if err != nil {
+					return fmt.Errorf("failed to create service: %w", err)
+				}
+
+				// Call the RPC method
+				resp, err = svcImpl.(UserServiceServer).GetUser(cmdCtx, req)
+				if err != nil {
+					return fmt.Errorf("method failed: %w", err)
+				}
+			}
+
+			// Open output writer
+			outputWriter, err := getOutputWriter(cmd.String("output"))
+			if err != nil {
+				return fmt.Errorf("failed to open output: %w", err)
+			}
+			if closer, ok := outputWriter.(io.Closer); ok {
+				defer closer.Close()
+			}
+
+			// Find and use the appropriate output format
+			formatName := cmd.String("format")
+
+			// Try registered formats
+			for _, outputFmt := range options.OutputFormats() {
+				if outputFmt.Name() == formatName {
+					if err := outputFmt.Format(cmdCtx, cmd, outputWriter, resp); err != nil {
+						return fmt.Errorf("format failed: %w", err)
+					}
+					// Write final newline to keep terminal clean
+					if _, err := outputWriter.Write([]byte("\n")); err != nil {
+						return fmt.Errorf("failed to write final newline: %w", err)
+					}
+					return nil
+				}
+			}
+
+			// Format not found - build list of available formats
+			var availableFormats []string
+			for _, f := range options.OutputFormats() {
+				availableFormats = append(availableFormats, f.Name())
+			}
+			if len(availableFormats) == 0 {
+				return fmt.Errorf("no output formats registered (use WithOutputFormats to register formats)")
+			}
+			return fmt.Errorf("unknown format %q (available: %v)", formatName, availableFormats)
+		},
+		Flags: flags_get,
+		Name:  "get",
+		Usage: "Retrieve a user by ID",
+	})
+
+	// Build flags for create
+	flags_create := []v3.Flag{&v3.StringFlag{
+		Name:  "remote",
+		Usage: "Remote gRPC server address (host:port). If set, uses gRPC client instead of direct call",
+	}, &v3.StringFlag{
+		Name:  "format",
+		Usage: "Output format (use --format to see available formats)",
+		Value: defaultFormat,
+	}, &v3.StringFlag{
+		Name:  "output",
+		Usage: "Output file (- for stdout)",
+		Value: "-",
+	}}
+
+	flags_create = append(flags_create, &v3.StringFlag{
+		Aliases: []string{"n"},
+		Name:    "name",
+		Usage:   "User's full name",
+	})
+	flags_create = append(flags_create, &v3.StringFlag{
+		Aliases: []string{"e"},
+		Name:    "email",
+		Usage:   "User's email address",
+	})
+	flags_create = append(flags_create, &v3.StringFlag{
+		Name:  "address",
+		Usage: "Address (example.Address)",
+	})
+	flags_create = append(flags_create, &v3.StringFlag{
+		Name:  "registration-date",
+		Usage: "RegistrationDate (google.protobuf.Timestamp)",
+	})
+	flags_create = append(flags_create, &v3.StringFlag{
+		Name:  "phone-number",
+		Usage: "PhoneNumber",
+	})
+	flags_create = append(flags_create, &v3.StringFlag{
+		Name:  "nickname",
+		Usage: "Optional nickname for the user",
+	})
+	flags_create = append(flags_create, &v3.Int32Flag{
+		Name:  "age",
+		Usage: "User's age in years",
+	})
+	flags_create = append(flags_create, &v3.BoolFlag{
+		Name:  "verified",
+		Usage: "Whether the user email is verified",
+	})
+
+	// Add config field flags for single-command mode
+	flags_create = append(flags_create, &v3.StringFlag{
+		Name:  "db-url",
+		Usage: "PostgreSQL connection URL",
+	})
+	flags_create = append(flags_create, &v3.Int64Flag{
+		Name:  "max-conns",
+		Usage: "Maximum database connections",
+	})
+	flags_create = append(flags_create, &v3.Int32Flag{
+		Name:  "log-level",
+		Usage: "Logging level",
+	})
+	flags_create = append(flags_create, &v3.StringFlag{
+		Name:  "allowed-origins",
+		Usage: "CORS allowed origins",
+	})
+
+	// Add format-specific flags from registered formats
+	for _, outputFmt := range options.OutputFormats() {
+		// Check if format implements FlagConfiguredOutputFormat
+		if flagConfigured, ok := outputFmt.(protocli.FlagConfiguredOutputFormat); ok {
+			flags_create = append(flags_create, flagConfigured.Flags()...)
+		}
+	}
+
+	commands = append(commands, &v3.Command{
+		Action: func(cmdCtx context.Context, cmd *v3.Command) error {
+			if options.BeforeCommand() != nil {
+				if err := options.BeforeCommand()(cmdCtx, cmd); err != nil {
+					return fmt.Errorf("before hook failed: %w", err)
+				}
+			}
+
+			defer func() {
+				if options.AfterCommand() != nil {
+					if err := options.AfterCommand()(cmdCtx, cmd); err != nil {
+						slog.Warn("after hook failed", "error", err)
+					}
+				}
+			}()
+
+			// Build request message
+			var req *CreateUserRequest
+
+			// Check for custom flag deserializer for example.CreateUserRequest
+			deserializer, hasDeserializer := options.FlagDeserializer("example.CreateUserRequest")
+			if hasDeserializer {
+				// Use custom deserializer for top-level request
+				// Create FlagContainer (deserializer can access multiple flags via Command())
+				requestFlags := protocli.NewFlagContainer(cmd, "")
+				msg, err := deserializer(cmdCtx, requestFlags)
+				if err != nil {
+					return fmt.Errorf("custom deserializer failed: %w", err)
+				}
+				// Handle nil return from deserializer
+				if msg == nil {
+					return fmt.Errorf("custom deserializer returned nil message")
+				}
+				var ok bool
+				req, ok = msg.(*CreateUserRequest)
+				if !ok {
+					return fmt.Errorf("custom deserializer returned wrong type: expected *%s, got %T", "CreateUserRequest", msg)
+				}
+			} else {
+				// Use auto-generated flag parsing
+				req = &CreateUserRequest{}
+				req.Name = cmd.String("name")
+				req.Email = cmd.String("email")
+				// Field Address: check for custom deserializer for example.Address
+				if fieldDeserializer, hasFieldDeserializer := options.FlagDeserializer("example.Address"); hasFieldDeserializer {
+					// Use custom deserializer for nested message
+					// Create FlagContainer for field flag: address
+					fieldFlags := protocli.NewFlagContainer(cmd, "address")
+					fieldMsg, fieldErr := fieldDeserializer(cmdCtx, fieldFlags)
+					if fieldErr != nil {
+						return fmt.Errorf("failed to deserialize field Address: %w", fieldErr)
+					}
+					// Handle nil return from deserializer (means skip/use default)
+					if fieldMsg != nil {
+						typedField, fieldOk := fieldMsg.(*Address)
+						if !fieldOk {
+							return fmt.Errorf("custom deserializer for example.Address returned wrong type: expected *Address, got %T", fieldMsg)
+						}
+						req.Address = typedField
+					}
+				} else {
+					// No custom deserializer - check if user provided a value
+					if cmd.IsSet("address") {
+						return fmt.Errorf("flag --address requires a custom deserializer for example.Address (register with protocli.WithFlagDeserializer)")
+					}
+					// No value provided - leave field as nil
+				}
+				// Field RegistrationDate: check for custom deserializer for google.protobuf.Timestamp
+				if fieldDeserializer, hasFieldDeserializer := options.FlagDeserializer("google.protobuf.Timestamp"); hasFieldDeserializer {
+					// Use custom deserializer for nested message
+					// Create FlagContainer for field flag: registration-date
+					fieldFlags := protocli.NewFlagContainer(cmd, "registration-date")
+					fieldMsg, fieldErr := fieldDeserializer(cmdCtx, fieldFlags)
+					if fieldErr != nil {
+						return fmt.Errorf("failed to deserialize field RegistrationDate: %w", fieldErr)
+					}
+					// Handle nil return from deserializer (means skip/use default)
+					if fieldMsg != nil {
+						typedField, fieldOk := fieldMsg.(*timestamppb.Timestamp)
+						if !fieldOk {
+							return fmt.Errorf("custom deserializer for google.protobuf.Timestamp returned wrong type: expected *Timestamp, got %T", fieldMsg)
+						}
+						req.RegistrationDate = typedField
+					}
+				} else {
+					// No custom deserializer - check if user provided a value
+					if cmd.IsSet("registration-date") {
+						return fmt.Errorf("flag --registration-date requires a custom deserializer for google.protobuf.Timestamp (register with protocli.WithFlagDeserializer)")
+					}
+					// No value provided - leave field as nil
+				}
+				req.PhoneNumber = cmd.String("phone-number")
+				if cmd.IsSet("nickname") {
+					val := cmd.String("nickname")
+					req.Nickname = &val
+				}
+				if cmd.IsSet("age") {
+					val := cmd.Int32("age")
+					req.Age = &val
+				}
+				if cmd.IsSet("verified") {
+					val := cmd.Bool("verified")
+					req.Verified = &val
+				}
+			}
+
+			// Check if using remote gRPC call or direct implementation call
+			remoteAddr := cmd.String("remote")
+			var resp *UserResponse
+			var err error
+
+			if remoteAddr != "" {
+				// Remote gRPC call
+				conn, connErr := grpc.NewClient(remoteAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+				if connErr != nil {
+					return fmt.Errorf("failed to connect to remote %s: %w", remoteAddr, connErr)
+				}
+				defer conn.Close()
+
+				client := NewUserServiceClient(conn)
+				resp, err = client.CreateUser(cmdCtx, req)
+				if err != nil {
+					return fmt.Errorf("remote call failed: %w", err)
+				}
+			} else {
+				// Load config and create service implementation
+				// Get config paths and env prefix from root command
+				rootCmd := cmd.Root()
+				configPaths := rootCmd.StringSlice("config")
+				envPrefix := rootCmd.String("env-prefix")
+
+				// Create config loader (single-command mode = uses files + env + flags)
+				loader := protocli.NewConfigLoader(protocli.SingleCommandMode, protocli.FileConfig(configPaths...), protocli.EnvPrefix(envPrefix))
+
+				// Create config instance and load configuration
+				config := &UserServiceConfig{}
+				if err := loader.LoadServiceConfig(cmd, "userservice", config); err != nil {
+					return fmt.Errorf("failed to load config: %w", err)
+				}
+
+				// Call factory to create service implementation
+				svcImpl, err := protocli.CallFactory(implOrFactory, config)
+				if err != nil {
+					return fmt.Errorf("failed to create service: %w", err)
+				}
+
+				// Call the RPC method
+				resp, err = svcImpl.(UserServiceServer).CreateUser(cmdCtx, req)
+				if err != nil {
+					return fmt.Errorf("method failed: %w", err)
+				}
+			}
+
+			// Open output writer
+			outputWriter, err := getOutputWriter(cmd.String("output"))
+			if err != nil {
+				return fmt.Errorf("failed to open output: %w", err)
+			}
+			if closer, ok := outputWriter.(io.Closer); ok {
+				defer closer.Close()
+			}
+
+			// Find and use the appropriate output format
+			formatName := cmd.String("format")
+
+			// Try registered formats
+			for _, outputFmt := range options.OutputFormats() {
+				if outputFmt.Name() == formatName {
+					if err := outputFmt.Format(cmdCtx, cmd, outputWriter, resp); err != nil {
+						return fmt.Errorf("format failed: %w", err)
+					}
+					// Write final newline to keep terminal clean
+					if _, err := outputWriter.Write([]byte("\n")); err != nil {
+						return fmt.Errorf("failed to write final newline: %w", err)
+					}
+					return nil
+				}
+			}
+
+			// Format not found - build list of available formats
+			var availableFormats []string
+			for _, f := range options.OutputFormats() {
+				availableFormats = append(availableFormats, f.Name())
+			}
+			if len(availableFormats) == 0 {
+				return fmt.Errorf("no output formats registered (use WithOutputFormats to register formats)")
+			}
+			return fmt.Errorf("unknown format %q (available: %v)", formatName, availableFormats)
+		},
+		Flags: flags_create,
+		Name:  "create",
+		Usage: "Create a new user",
+	})
+
+	// Create ServiceCLI for daemonize command
+	serviceCLI := &protocli.ServiceCLI{
+		ConfigMessageType: "UserServiceConfig",
+		ConfigPrototype:   &UserServiceConfig{},
+		FactoryOrImpl:     implOrFactory,
+		RegisterFunc: func(s *grpc.Server, impl interface{}) {
+			RegisterUserServiceServer(s, impl.(UserServiceServer))
+		},
+		ServiceName: "user-service",
+	}
+
+	// Create daemonize command for starting gRPC server
+	daemonCmd := protocli.NewDaemonizeCommand(ctx, []*protocli.ServiceCLI{serviceCLI}, options)
+
+	// Append daemonize command to the list
+	commands = append(commands, daemonCmd)
+
+	return commands
+}
+
 // AdminServiceCommand creates a CLI for AdminService with options
 // The implOrFactory parameter can be either a direct service implementation or a factory function
 func AdminServiceCommand(ctx context.Context, implOrFactory interface{}, opts ...protocli.ServiceOption) *protocli.ServiceCLI {
@@ -682,4 +1188,171 @@ func AdminServiceCommand(ctx context.Context, implOrFactory interface{}, opts ..
 		},
 		ServiceName: "admin",
 	}
+}
+
+// AdminServiceCommandsFlat creates a flat command structure for AdminService (for single-service CLIs)
+// This returns RPC commands directly at the root level instead of nested under a service command.
+// The implOrFactory parameter can be either a direct service implementation or a factory function
+// The returned slice includes all RPC commands plus a daemonize command for starting a gRPC server.
+func AdminServiceCommandsFlat(ctx context.Context, implOrFactory interface{}, opts ...protocli.ServiceOption) []*v3.Command {
+	options := protocli.ApplyServiceOptions(opts...)
+
+	// Determine default format (first registered format, or empty if none)
+	var defaultFormat string
+	if len(options.OutputFormats()) > 0 {
+		defaultFormat = options.OutputFormats()[0].Name()
+	}
+
+	var commands []*v3.Command
+
+	// Build flags for health
+	flags_health := []v3.Flag{&v3.StringFlag{
+		Name:  "remote",
+		Usage: "Remote gRPC server address (host:port). If set, uses gRPC client instead of direct call",
+	}, &v3.StringFlag{
+		Name:  "format",
+		Usage: "Output format (use --format to see available formats)",
+		Value: defaultFormat,
+	}, &v3.StringFlag{
+		Name:  "output",
+		Usage: "Output file (- for stdout)",
+		Value: "-",
+	}}
+
+	// Add format-specific flags from registered formats
+	for _, outputFmt := range options.OutputFormats() {
+		// Check if format implements FlagConfiguredOutputFormat
+		if flagConfigured, ok := outputFmt.(protocli.FlagConfiguredOutputFormat); ok {
+			flags_health = append(flags_health, flagConfigured.Flags()...)
+		}
+	}
+
+	commands = append(commands, &v3.Command{
+		Action: func(cmdCtx context.Context, cmd *v3.Command) error {
+			if options.BeforeCommand() != nil {
+				if err := options.BeforeCommand()(cmdCtx, cmd); err != nil {
+					return fmt.Errorf("before hook failed: %w", err)
+				}
+			}
+
+			defer func() {
+				if options.AfterCommand() != nil {
+					if err := options.AfterCommand()(cmdCtx, cmd); err != nil {
+						slog.Warn("after hook failed", "error", err)
+					}
+				}
+			}()
+
+			// Build request message
+			var req *AdminRequest
+
+			// Check for custom flag deserializer for example.AdminRequest
+			deserializer, hasDeserializer := options.FlagDeserializer("example.AdminRequest")
+			if hasDeserializer {
+				// Use custom deserializer for top-level request
+				// Create FlagContainer (deserializer can access multiple flags via Command())
+				requestFlags := protocli.NewFlagContainer(cmd, "")
+				msg, err := deserializer(cmdCtx, requestFlags)
+				if err != nil {
+					return fmt.Errorf("custom deserializer failed: %w", err)
+				}
+				// Handle nil return from deserializer
+				if msg == nil {
+					return fmt.Errorf("custom deserializer returned nil message")
+				}
+				var ok bool
+				req, ok = msg.(*AdminRequest)
+				if !ok {
+					return fmt.Errorf("custom deserializer returned wrong type: expected *%s, got %T", "AdminRequest", msg)
+				}
+			} else {
+				// Use auto-generated flag parsing
+				req = &AdminRequest{}
+			}
+
+			// Check if using remote gRPC call or direct implementation call
+			remoteAddr := cmd.String("remote")
+			var resp *AdminResponse
+			var err error
+
+			if remoteAddr != "" {
+				// Remote gRPC call
+				conn, connErr := grpc.NewClient(remoteAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+				if connErr != nil {
+					return fmt.Errorf("failed to connect to remote %s: %w", remoteAddr, connErr)
+				}
+				defer conn.Close()
+
+				client := NewAdminServiceClient(conn)
+				resp, err = client.HealthCheck(cmdCtx, req)
+				if err != nil {
+					return fmt.Errorf("remote call failed: %w", err)
+				}
+			} else {
+				// Direct implementation call (no config)
+				svcImpl := implOrFactory.(AdminServiceServer)
+				resp, err = svcImpl.HealthCheck(cmdCtx, req)
+				if err != nil {
+					return fmt.Errorf("method failed: %w", err)
+				}
+			}
+
+			// Open output writer
+			outputWriter, err := getOutputWriter(cmd.String("output"))
+			if err != nil {
+				return fmt.Errorf("failed to open output: %w", err)
+			}
+			if closer, ok := outputWriter.(io.Closer); ok {
+				defer closer.Close()
+			}
+
+			// Find and use the appropriate output format
+			formatName := cmd.String("format")
+
+			// Try registered formats
+			for _, outputFmt := range options.OutputFormats() {
+				if outputFmt.Name() == formatName {
+					if err := outputFmt.Format(cmdCtx, cmd, outputWriter, resp); err != nil {
+						return fmt.Errorf("format failed: %w", err)
+					}
+					// Write final newline to keep terminal clean
+					if _, err := outputWriter.Write([]byte("\n")); err != nil {
+						return fmt.Errorf("failed to write final newline: %w", err)
+					}
+					return nil
+				}
+			}
+
+			// Format not found - build list of available formats
+			var availableFormats []string
+			for _, f := range options.OutputFormats() {
+				availableFormats = append(availableFormats, f.Name())
+			}
+			if len(availableFormats) == 0 {
+				return fmt.Errorf("no output formats registered (use WithOutputFormats to register formats)")
+			}
+			return fmt.Errorf("unknown format %q (available: %v)", formatName, availableFormats)
+		},
+		Flags: flags_health,
+		Name:  "health",
+		Usage: "Check service health",
+	})
+
+	// Create ServiceCLI for daemonize command
+	serviceCLI := &protocli.ServiceCLI{
+		ConfigMessageType: "",
+		FactoryOrImpl:     implOrFactory,
+		RegisterFunc: func(s *grpc.Server, impl interface{}) {
+			RegisterAdminServiceServer(s, impl.(AdminServiceServer))
+		},
+		ServiceName: "admin",
+	}
+
+	// Create daemonize command for starting gRPC server
+	daemonCmd := protocli.NewDaemonizeCommand(ctx, []*protocli.ServiceCLI{serviceCLI}, options)
+
+	// Append daemonize command to the list
+	commands = append(commands, daemonCmd)
+
+	return commands
 }

@@ -8,15 +8,21 @@
 //   - Support both direct invocation and remote gRPC calls
 //   - Handle custom deserializers for complex types (timestamps, nested messages)
 //   - Load configuration from files and environment variables
+//   - Use optional proto3 fields with explicit presence tracking
 //
 // The example includes two services:
 //   - UserService: Demonstrates CRUD operations with custom config loading
 //   - AdminService: Shows service name overrides and simple operations
 //
+// Command Structures:
+//   - Nested (default): go run ./usercli user-service get --id 1
+//   - Flat (single-service): go run ./usercli_flat get --id 1
+//
 // To run the example:
 //
-//	go run ./usercli userservice getuser --id 1
+//	go run ./usercli user-service get --id 1
 //	go run ./usercli admin health-check
+//	go run ./usercli_flat get --id 1  # flat structure
 //
 // Generated code in this package should not be edited manually.
 // To regenerate after modifying example.proto, run: go generate

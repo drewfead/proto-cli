@@ -190,6 +190,22 @@ func generateServiceCLI(f *jen.File, file *protogen.File, service *protogen.Serv
 		generateServiceCommands(file, service)...,
 	)
 	f.Line()
+
+	// Generate the Flat Command function for single-service CLIs
+	funcNameFlat := service.GoName + "CommandsFlat"
+
+	f.Commentf("%s creates a flat command structure for %s (for single-service CLIs)", funcNameFlat, service.GoName)
+	f.Commentf("This returns RPC commands directly at the root level instead of nested under a service command.")
+	f.Commentf("The implOrFactory parameter can be either a direct service implementation or a factory function")
+	f.Commentf("The returned slice includes all RPC commands plus a daemonize command for starting a gRPC server.")
+	f.Func().Id(funcNameFlat).Params(
+		jen.Id("ctx").Qual("context", "Context"),
+		jen.Id("implOrFactory").Interface(),
+		jen.Id("opts").Op("...").Qual("github.com/drewfead/proto-cli", "ServiceOption"),
+	).Index().Op("*").Qual("github.com/urfave/cli/v3", "Command").Block(
+		generateServiceCommandsFlat(file, service)...,
+	)
+	f.Line()
 }
 
 func generateServiceCommands(file *protogen.File, service *protogen.Service) []jen.Code {
@@ -287,6 +303,120 @@ func generateServiceCommands(file *protogen.File, service *protogen.Service) []j
 	statements = append(statements,
 		jen.Line(),
 		jen.Return(jen.Op("&").Qual("github.com/drewfead/proto-cli", "ServiceCLI").Values(serviceCLIDict)),
+	)
+
+	return statements
+}
+
+func generateServiceCommandsFlat(file *protogen.File, service *protogen.Service) []jen.Code {
+	var statements []jen.Code
+
+	// Check for service config annotation
+	configOpts := getServiceConfigOptions(service)
+	var configMessageType string
+	if configOpts != nil && configOpts.ConfigMessage != "" {
+		configMessageType = configOpts.ConfigMessage
+	}
+
+	// Apply service options
+	statements = append(statements,
+		jen.Id("options").Op(":=").Qual("github.com/drewfead/proto-cli", "ApplyServiceOptions").Call(jen.Id("opts").Op("...")),
+		jen.Line(),
+	)
+
+	// Determine default format
+	statements = append(statements,
+		jen.Comment("Determine default format (first registered format, or empty if none)"),
+		jen.Var().Id("defaultFormat").String(),
+		jen.If(jen.Len(jen.Id("options").Dot("OutputFormats").Call()).Op(">").Lit(0)).Block(
+			jen.Id("defaultFormat").Op("=").Id("options").Dot("OutputFormats").Call().Index(jen.Lit(0)).Dot("Name").Call(),
+		),
+		jen.Line(),
+	)
+
+	// Create commands slice
+	statements = append(statements,
+		jen.Var().Id("commands").Index().Op("*").Qual("github.com/urfave/cli/v3", "Command"),
+		jen.Line(),
+	)
+
+	// Generate command for each method
+	for _, method := range service.Methods {
+		isClientStreaming := method.Desc.IsStreamingClient()
+		isServerStreaming := method.Desc.IsStreamingServer()
+
+		if isClientStreaming {
+			// Skip client streaming and bidi for Phase 1
+			continue
+		}
+
+		if isServerStreaming {
+			// Generate server streaming command
+			statements = append(statements, generateServerStreamingCommand(service, method, configMessageType, file)...)
+		} else {
+			// Generate unary command (existing logic)
+			statements = append(statements, generateMethodCommand(service, method, configMessageType, file)...)
+		}
+	}
+
+	// Get service name and register func
+	serviceName := toKebabCase(service.GoName)
+	serviceOpts := getServiceOptions(service)
+	if serviceOpts != nil && serviceOpts.Name != "" {
+		serviceName = serviceOpts.Name
+	}
+
+	registerFunc := "Register" + service.GoName + "Server"
+
+	// Create service CLI for daemonize command
+	serviceCLIDict := jen.Dict{
+		jen.Id("ServiceName"):       jen.Lit(serviceName),
+		jen.Id("ConfigMessageType"): jen.Lit(configMessageType),
+		jen.Id("FactoryOrImpl"):     jen.Id("implOrFactory"),
+		jen.Id("RegisterFunc"): jen.Func().Params(
+			jen.Id("s").Op("*").Qual("google.golang.org/grpc", "Server"),
+			jen.Id("impl").Interface(),
+		).Block(
+			jen.Id(registerFunc).Call(
+				jen.Id("s"),
+				jen.Id("impl").Assert(jen.Id(service.GoName+"Server")),
+			),
+		),
+	}
+
+	// Add ConfigPrototype if there's a config message
+	if configMessageType != "" {
+		serviceCLIDict[jen.Id("ConfigPrototype")] = jen.Op("&").Id(configMessageType).Values()
+	}
+
+	statements = append(statements,
+		jen.Line(),
+		jen.Comment("Create ServiceCLI for daemonize command"),
+		jen.Id("serviceCLI").Op(":=").Op("&").Qual("github.com/drewfead/proto-cli", "ServiceCLI").Values(serviceCLIDict),
+		jen.Line(),
+	)
+
+	// Create daemonize command
+	statements = append(statements,
+		jen.Comment("Create daemonize command for starting gRPC server"),
+		jen.Id("daemonCmd").Op(":=").Qual("github.com/drewfead/proto-cli", "NewDaemonizeCommand").Call(
+			jen.Id("ctx"),
+			jen.Index().Op("*").Qual("github.com/drewfead/proto-cli", "ServiceCLI").Values(jen.Id("serviceCLI")),
+			jen.Id("options"),
+		),
+		jen.Line(),
+	)
+
+	// Append daemonize to commands
+	statements = append(statements,
+		jen.Comment("Append daemonize command to the list"),
+		jen.Id("commands").Op("=").Append(jen.Id("commands"), jen.Id("daemonCmd")),
+		jen.Line(),
+	)
+
+	// Return commands slice
+	statements = append(statements,
+		jen.Return(jen.Id("commands")),
 	)
 
 	return statements

@@ -84,12 +84,13 @@ services:
 	userServiceCLI := simple.UserServiceCommand(ctx, newUserService)
 
 	// Create root CLI
-	_ = protocli.RootCommand("testcli",
+	_, err = protocli.RootCommand("testcli",
 		protocli.WithService(userServiceCLI),
 		protocli.WithConfigFactory("userservice", newUserService),
 		protocli.WithEnvPrefix("TESTCLI"),
 		protocli.WithConfigFile(configFile),
 	)
+	require.NoError(t, err)
 
 	// For this integration test, we verify config loading by creating
 	// the service directly with the expected config

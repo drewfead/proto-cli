@@ -372,12 +372,13 @@ services:
 
 	userServiceCLI := simple.UserServiceCommand(ctx, factory)
 
-	rootCmd := protocli.RootCommand("nestedcli",
+	rootCmd, err := protocli.RootCommand("nestedcli",
 		protocli.WithService(userServiceCLI),
 		protocli.WithConfigFactory("userservice", factory),
 		protocli.WithEnvPrefix("NESTEDCLI"),
 		protocli.WithConfigFile(tmpFile.Name()),
 	)
+	require.NoError(t, err)
 
 	// Run daemonize command (which loads config)
 	go func() {

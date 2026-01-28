@@ -70,23 +70,10 @@ func (s *userService) CreateUser(_ context.Context, req *simple.CreateUserReques
 	}, nil
 }
 
-// adminService implements simple.AdminServiceServer.
-type adminService struct {
-	simple.UnimplementedAdminServiceServer
-}
-
-func (s *adminService) HealthCheck(_ context.Context, _ *simple.AdminRequest) (*simple.AdminResponse, error) {
-	return &simple.AdminResponse{
-		Message: "Service is healthy",
-		Success: true,
-	}, nil
-}
-
 func main() {
 	ctx := context.Background()
 
-	// Build service CLI with factory function, lifecycle hooks, and output formats
-	// Pass the factory function (not the impl) - config will be loaded automatically
+	// Create service CLI with configuration
 	userServiceCLI := simple.UserServiceCommand(ctx, newUserService,
 		protocli.WithBeforeCommand(func(_ context.Context, cmd *v3.Command) error {
 			log.Printf("[HOOK] Starting command: %s", cmd.Name)
@@ -103,46 +90,28 @@ func main() {
 		),
 	)
 
-	// Build admin service CLI - demonstrates service name override
-	// Service name is "admin" (not "admin-service") due to cli.service annotation
-	adminServiceCLI := simple.AdminServiceCommand(ctx, &adminService{},
-		protocli.WithOutputFormats(
-			protocli.JSON(),
-		),
-	)
-
-	// Create root CLI with all services using the new API
-	rootCmd, err := protocli.RootCommand("usercli",
-		protocli.WithService(userServiceCLI),
-		protocli.WithService(adminServiceCLI),
-		protocli.WithConfigFactory("userservice", newUserService),
+	// Create root command with hoisted service (flat command structure)
+	// RPC commands appear at root level as siblings of daemonize
+	rootCmd, err := protocli.RootCommand("usercli-flat",
+		protocli.WithService(userServiceCLI, protocli.Hoisted()),
 		protocli.WithEnvPrefix("USERCLI"),
-		// Config files are loaded from:
-		//   ./usercli.yaml (default)
-		//   ~/.config/usercli/config.yaml (default)
-		// Add custom paths with:
-		// protocli.WithConfigFile("/path/to/custom.yaml"),
 	)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error creating root command: %v\n", err)
 		os.Exit(1)
 	}
 
-	rootCmd.Usage = "User Service CLI - Multi-service support"
-	rootCmd.Description = `This CLI was generated from protobuf definitions.
+	rootCmd.Description = `This CLI demonstrates the flat command structure using protocli.Hoisted().
 
-Commands are organized by service:
-  ./usercli <service> <rpc> [flags]
+Commands are at the root level:
+  ./usercli-flat get --id 1
+  ./usercli-flat create --name "Alice" --email "alice@example.com"
 
-Example:
-  ./usercli userservice getuser --id 1
-  ./usercli userservice createuser --name "Alice" --email "alice@example.com"
+Start a gRPC server:
+  ./usercli-flat daemonize --port 50051
 
-You can also start a gRPC server with all services:
-  ./usercli daemonize --port 50051
-
-And call it remotely:
-  ./usercli userservice getuser --id 1 --remote localhost:50051`
+Call it remotely:
+  ./usercli-flat get --id 1 --remote localhost:50051`
 
 	if err := rootCmd.Run(ctx, os.Args); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)

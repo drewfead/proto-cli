@@ -92,12 +92,43 @@ func setupSlog(ctx context.Context, cmd *cli.Command, isDaemon bool, slogConfig 
 	slog.SetDefault(logger)
 }
 
+// NewDaemonizeCommand creates a daemonize command for the given services.
+// This is useful for single-service CLIs using the flat command structure.
+func NewDaemonizeCommand(_ context.Context, services []*ServiceCLI, _ ServiceConfig) *cli.Command {
+	return &cli.Command{
+		Name:  "daemonize",
+		Usage: "Start a gRPC server",
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:  "host",
+				Value: "0.0.0.0",
+				Usage: "Host to bind the gRPC server to",
+			},
+			&cli.IntFlag{
+				Name:  "port",
+				Value: 50051,
+				Usage: "Port to bind the gRPC server to",
+			},
+		},
+		Action: func(ctx context.Context, cmd *cli.Command) error {
+			// Create minimal root options for single-service mode
+			rootOpts := ApplyRootOptions()
+			for _, svc := range services {
+				rootOpts = ApplyRootOptions(WithService(svc))
+			}
+			return runDaemon(ctx, cmd, services, rootOpts)
+		},
+	}
+}
+
 // RootCommand creates a root CLI command with the given app name and options.
-func RootCommand(appName string, opts ...RootOption) *cli.Command {
+// Returns an error if there are naming collisions between hoisted service commands.
+func RootCommand(appName string, opts ...RootOption) (*cli.Command, error) {
 	options := ApplyRootOptions(opts...)
 
 	var commands []*cli.Command
 	services := options.Services()
+	commandNames := make(map[string]bool) // Track command names for collision detection
 
 	// Setup default config paths if not provided
 	configPaths := options.ConfigPaths()
@@ -105,9 +136,41 @@ func RootCommand(appName string, opts ...RootOption) *cli.Command {
 		configPaths = DefaultConfigPaths(appName)
 	}
 
-	// Add each service as a subcommand
-	for _, svc := range services {
-		commands = append(commands, svc.Command)
+	// Access service registrations to check hoisting
+	// Type assert to access internal registrations
+	if opts, ok := options.(*rootCommandOptions); ok {
+		for _, reg := range opts.ServiceRegistrations() {
+			if reg.hoisted {
+				// Hoisted: add RPC commands directly to root level
+				for _, rpcCmd := range reg.service.Command.Commands {
+					if commandNames[rpcCmd.Name] {
+						return nil, fmt.Errorf("%w: command '%s' from service '%s'",
+							ErrAmbiguousCommandInvocation, rpcCmd.Name, reg.service.ServiceName)
+					}
+					commandNames[rpcCmd.Name] = true
+					commands = append(commands, rpcCmd)
+				}
+			} else {
+				// Not hoisted: add service command as nested
+				if commandNames[reg.service.Command.Name] {
+					return nil, fmt.Errorf("%w: service command '%s'",
+						ErrAmbiguousCommandInvocation, reg.service.Command.Name)
+				}
+				commandNames[reg.service.Command.Name] = true
+				commands = append(commands, reg.service.Command)
+			}
+		}
+	} else {
+		// Fallback to old behavior if type assertion fails
+		for _, svc := range services {
+			commands = append(commands, svc.Command)
+		}
+	}
+
+	// Check if daemonize command name would collide
+	if commandNames["daemonize"] {
+		return nil, fmt.Errorf("%w: 'daemonize' is reserved and conflicts with a hoisted service command",
+			ErrAmbiguousCommandInvocation)
 	}
 
 	// Add daemonize command that registers all services
@@ -173,10 +236,13 @@ func RootCommand(appName string, opts ...RootOption) *cli.Command {
 		return ctx, nil
 	}
 
-	return rootCmd
+	return rootCmd, nil
 }
 
-var ErrWrongConfigType = errors.New("wrong config type")
+var (
+	ErrWrongConfigType            = errors.New("wrong config type")
+	ErrAmbiguousCommandInvocation = errors.New("more than one action registered for the same command")
+)
 
 // createServiceImpl loads config and creates service implementation.
 func createServiceImpl(

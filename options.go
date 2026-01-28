@@ -243,8 +243,14 @@ func (c *slogConfigContext) Level() slog.Level {
 }
 
 // rootCommandOptions holds configuration for the root CLI command.
+// serviceRegistration tracks a service and how it should be registered.
+type serviceRegistration struct {
+	service *ServiceCLI
+	hoisted bool // If true, RPC commands added to root instead of nested
+}
+
 type rootCommandOptions struct {
-	services                []*ServiceCLI
+	serviceRegistrations    []*serviceRegistration
 	beforeCommand           func(context.Context, *cli.Command) error
 	afterCommand            func(context.Context, *cli.Command) error
 	outputFormats           []OutputFormat
@@ -277,13 +283,25 @@ func (o *rootCommandOptions) SetOutputFormats(formats []OutputFormat) {
 }
 
 // AddService adds a service to the root command.
-func (o *rootCommandOptions) AddService(service *ServiceCLI) {
-	o.services = append(o.services, service)
+func (o *rootCommandOptions) AddService(service *ServiceCLI, hoisted bool) {
+	o.serviceRegistrations = append(o.serviceRegistrations, &serviceRegistration{
+		service: service,
+		hoisted: hoisted,
+	})
 }
 
 // Services returns the registered services.
 func (o *rootCommandOptions) Services() []*ServiceCLI {
-	return o.services
+	services := make([]*ServiceCLI, 0, len(o.serviceRegistrations))
+	for _, reg := range o.serviceRegistrations {
+		services = append(services, reg.service)
+	}
+	return services
+}
+
+// ServiceRegistrations returns the service registrations (for internal use by RootCommand).
+func (o *rootCommandOptions) ServiceRegistrations() []*serviceRegistration {
+	return o.serviceRegistrations
 }
 
 // BeforeCommand returns the root before hook, or nil if not set.
@@ -465,11 +483,32 @@ func WithFlagDeserializer(messageName string, deserializer FlagDeserializer) Ser
 
 // Root-only options
 
+// ServiceRegistrationOption configures how a service is registered in the root command.
+type ServiceRegistrationOption func(*serviceRegistration)
+
+// Hoisted returns an option that hoists service RPC commands to the root level.
+// When hoisted, RPC commands appear as siblings of the daemonize command instead of nested under the service name.
+// Multiple services can be hoisted - naming collisions will cause a runtime error.
+// Example: protocli.WithService(serviceCLI, protocli.Hoisted())
+func Hoisted() ServiceRegistrationOption {
+	return func(reg *serviceRegistration) {
+		reg.hoisted = true
+	}
+}
+
 // WithService registers a service CLI (root level only).
+// Accepts optional ServiceRegistrationOptions to customize registration (e.g., Hoisted()).
 // Type-safe: only works with RootOptions.
-func WithService(service *ServiceCLI) RootOnlyOption {
+func WithService(service *ServiceCLI, opts ...ServiceRegistrationOption) RootOnlyOption {
 	return RootOnlyOption(func(o *rootCommandOptions) {
-		o.AddService(service)
+		reg := &serviceRegistration{
+			service: service,
+			hoisted: false,
+		}
+		for _, opt := range opts {
+			opt(reg)
+		}
+		o.serviceRegistrations = append(o.serviceRegistrations, reg)
 	})
 }
 
