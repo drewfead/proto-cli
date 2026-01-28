@@ -563,10 +563,12 @@ func (x *User) GetAddress() *Address {
 
 // Request to get a user by ID
 type GetUserRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	// Field with partial annotation - demonstrates name defaults to kebab-case
+	IncludeDetails bool `protobuf:"varint,2,opt,name=include_details,json=includeDetails,proto3" json:"include_details,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *GetUserRequest) Reset() {
@@ -606,6 +608,13 @@ func (x *GetUserRequest) GetId() int64 {
 	return 0
 }
 
+func (x *GetUserRequest) GetIncludeDetails() bool {
+	if x != nil {
+		return x.IncludeDetails
+	}
+	return false
+}
+
 // Request to create a new user
 type CreateUserRequest struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
@@ -613,8 +622,10 @@ type CreateUserRequest struct {
 	Email            string                 `protobuf:"bytes,2,opt,name=email,proto3" json:"email,omitempty"`
 	Address          *Address               `protobuf:"bytes,3,opt,name=address,proto3" json:"address,omitempty"`                                           // Nested address - demonstrates recursive deserializers
 	RegistrationDate *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=registration_date,json=registrationDate,proto3" json:"registration_date,omitempty"` // External type to test import qualification
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// Field without annotation - demonstrates kebab-case default
+	PhoneNumber   string `protobuf:"bytes,5,opt,name=phone_number,json=phoneNumber,proto3" json:"phone_number,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CreateUserRequest) Reset() {
@@ -675,6 +686,13 @@ func (x *CreateUserRequest) GetRegistrationDate() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *CreateUserRequest) GetPhoneNumber() string {
+	if x != nil {
+		return x.PhoneNumber
+	}
+	return ""
+}
+
 // Response containing a user
 type UserResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -726,6 +744,96 @@ func (x *UserResponse) GetMessage() string {
 		return x.Message
 	}
 	return ""
+}
+
+// Empty request for admin operations
+type AdminRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AdminRequest) Reset() {
+	*x = AdminRequest{}
+	mi := &file_examples_simple_example_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdminRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdminRequest) ProtoMessage() {}
+
+func (x *AdminRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_examples_simple_example_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdminRequest.ProtoReflect.Descriptor instead.
+func (*AdminRequest) Descriptor() ([]byte, []int) {
+	return file_examples_simple_example_proto_rawDescGZIP(), []int{9}
+}
+
+// Response for admin operations
+type AdminResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Message       string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
+	Success       bool                   `protobuf:"varint,2,opt,name=success,proto3" json:"success,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AdminResponse) Reset() {
+	*x = AdminResponse{}
+	mi := &file_examples_simple_example_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AdminResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AdminResponse) ProtoMessage() {}
+
+func (x *AdminResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_examples_simple_example_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AdminResponse.ProtoReflect.Descriptor instead.
+func (*AdminResponse) Descriptor() ([]byte, []int) {
+	return file_examples_simple_example_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *AdminResponse) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+func (x *AdminResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
 }
 
 var File_examples_simple_example_proto protoreflect.FileDescriptor
@@ -780,38 +888,45 @@ const file_examples_simple_example_proto_rawDesc = "" +
 	"\x05email\x18\x03 \x01(\tR\x05email\x129\n" +
 	"\n" +
 	"created_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12*\n" +
-	"\aaddress\x18\x05 \x01(\v2\x10.example.AddressR\aaddress\"D\n" +
+	"\aaddress\x18\x05 \x01(\v2\x10.example.AddressR\aaddress\"\x99\x01\n" +
 	"\x0eGetUserRequest\x122\n" +
 	"\x02id\x18\x01 \x01(\x03B\"\x92\xb5\x18\x1e\n" +
-	"\x02id\x12\x01i\x1a\x13User ID to retrieve \x01R\x02id\"\xfd\x01\n" +
+	"\x02id\x12\x01i\x1a\x13User ID to retrieve \x01R\x02id\x12S\n" +
+	"\x0finclude_details\x18\x02 \x01(\bB*\x92\xb5\x18&\x12\x01d\x1a!Include detailed user informationR\x0eincludeDetails\"\xa0\x02\n" +
 	"\x11CreateUserRequest\x125\n" +
 	"\x04name\x18\x01 \x01(\tB!\x92\xb5\x18\x1d\n" +
 	"\x04name\x12\x01n\x1a\x10User's full name \x01R\x04name\x12<\n" +
 	"\x05email\x18\x02 \x01(\tB&\x92\xb5\x18\"\n" +
 	"\x05email\x12\x01e\x1a\x14User's email address \x01R\x05email\x12*\n" +
 	"\aaddress\x18\x03 \x01(\v2\x10.example.AddressR\aaddress\x12G\n" +
-	"\x11registration_date\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x10registrationDate\"K\n" +
+	"\x11registration_date\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x10registrationDate\x12!\n" +
+	"\fphone_number\x18\x05 \x01(\tR\vphoneNumber\"K\n" +
 	"\fUserResponse\x12!\n" +
 	"\x04user\x18\x01 \x01(\v2\r.example.UserR\x04user\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage*O\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"\x0e\n" +
+	"\fAdminRequest\"C\n" +
+	"\rAdminResponse\x12\x18\n" +
+	"\amessage\x18\x01 \x01(\tR\amessage\x12\x18\n" +
+	"\asuccess\x18\x02 \x01(\bR\asuccess*O\n" +
 	"\bLogLevel\x12\x19\n" +
 	"\x15LOG_LEVEL_UNSPECIFIED\x10\x00\x12\t\n" +
 	"\x05DEBUG\x10\x01\x12\b\n" +
 	"\x04INFO\x10\x02\x12\b\n" +
 	"\x04WARN\x10\x03\x12\t\n" +
-	"\x05ERROR\x10\x042\xd4\x02\n" +
-	"\vUserService\x12a\n" +
-	"\aGetUser\x12\x17.example.GetUserRequest\x1a\x15.example.UserResponse\"&\x8a\xb5\x18\"\n" +
-	"\x04user\n" +
-	"\x03get\x12\x15Retrieve a user by ID\x12f\n" +
+	"\x05ERROR\x10\x042\xc2\x02\n" +
+	"\vUserService\x12[\n" +
+	"\aGetUser\x12\x17.example.GetUserRequest\x1a\x15.example.UserResponse\" \x8a\xb5\x18\x1c\n" +
+	"\x03get\x12\x15Retrieve a user by ID\x12`\n" +
 	"\n" +
-	"CreateUser\x12\x1a.example.CreateUserRequest\x1a\x15.example.UserResponse\"%\x8a\xb5\x18!\n" +
-	"\x04user\n" +
-	"\x06create\x12\x11Create a new user\x12a\n" +
-	"\tListUsers\x12\x17.example.GetUserRequest\x1a\x15.example.UserResponse\" \x8a\xb5\x18\x1c\n" +
-	"\x04user\n" +
+	"CreateUser\x12\x1a.example.CreateUserRequest\x1a\x15.example.UserResponse\"\x1f\x8a\xb5\x18\x1b\n" +
+	"\x06create\x12\x11Create a new user\x12[\n" +
+	"\tListUsers\x12\x17.example.GetUserRequest\x1a\x15.example.UserResponse\"\x1a\x8a\xb5\x18\x16\n" +
 	"\x04list\x12\x0eList all users(\x010\x01\x1a\x17\x9a\xb5\x18\x13\n" +
-	"\x11UserServiceConfigB\x86\x01\n" +
+	"\x11UserServiceConfig2\x98\x01\n" +
+	"\fAdminService\x12`\n" +
+	"\vHealthCheck\x12\x15.example.AdminRequest\x1a\x16.example.AdminResponse\"\"\x8a\xb5\x18\x1e\n" +
+	"\x06health\x12\x14Check service health\x1a&\x82\xb5\x18\"\n" +
+	"\x05admin\x12\x19Administrative operationsB\x86\x01\n" +
 	"\vcom.exampleB\fExampleProtoP\x01Z-github.com/drewfead/proto-cli/examples/simple\xa2\x02\x03EXX\xaa\x02\aExample\xca\x02\aExample\xe2\x02\x13Example\\GPBMetadata\xea\x02\aExampleb\x06proto3"
 
 var (
@@ -827,7 +942,7 @@ func file_examples_simple_example_proto_rawDescGZIP() []byte {
 }
 
 var file_examples_simple_example_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_examples_simple_example_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_examples_simple_example_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_examples_simple_example_proto_goTypes = []any{
 	(LogLevel)(0),                 // 0: example.LogLevel
 	(*DatabaseConfig)(nil),        // 1: example.DatabaseConfig
@@ -839,28 +954,32 @@ var file_examples_simple_example_proto_goTypes = []any{
 	(*GetUserRequest)(nil),        // 7: example.GetUserRequest
 	(*CreateUserRequest)(nil),     // 8: example.CreateUserRequest
 	(*UserResponse)(nil),          // 9: example.UserResponse
-	nil,                           // 10: example.UserServiceConfig.FeatureFlagsEntry
-	(*timestamppb.Timestamp)(nil), // 11: google.protobuf.Timestamp
+	(*AdminRequest)(nil),          // 10: example.AdminRequest
+	(*AdminResponse)(nil),         // 11: example.AdminResponse
+	nil,                           // 12: example.UserServiceConfig.FeatureFlagsEntry
+	(*timestamppb.Timestamp)(nil), // 13: google.protobuf.Timestamp
 }
 var file_examples_simple_example_proto_depIdxs = []int32{
 	1,  // 0: example.UserServiceConfig.database:type_name -> example.DatabaseConfig
 	0,  // 1: example.UserServiceConfig.log_level:type_name -> example.LogLevel
-	10, // 2: example.UserServiceConfig.feature_flags:type_name -> example.UserServiceConfig.FeatureFlagsEntry
+	12, // 2: example.UserServiceConfig.feature_flags:type_name -> example.UserServiceConfig.FeatureFlagsEntry
 	2,  // 3: example.UserServiceConfig.postgres:type_name -> example.PostgresBackend
 	3,  // 4: example.UserServiceConfig.mysql:type_name -> example.MySQLBackend
-	11, // 5: example.User.created_at:type_name -> google.protobuf.Timestamp
+	13, // 5: example.User.created_at:type_name -> google.protobuf.Timestamp
 	5,  // 6: example.User.address:type_name -> example.Address
 	5,  // 7: example.CreateUserRequest.address:type_name -> example.Address
-	11, // 8: example.CreateUserRequest.registration_date:type_name -> google.protobuf.Timestamp
+	13, // 8: example.CreateUserRequest.registration_date:type_name -> google.protobuf.Timestamp
 	6,  // 9: example.UserResponse.user:type_name -> example.User
 	7,  // 10: example.UserService.GetUser:input_type -> example.GetUserRequest
 	8,  // 11: example.UserService.CreateUser:input_type -> example.CreateUserRequest
 	7,  // 12: example.UserService.ListUsers:input_type -> example.GetUserRequest
-	9,  // 13: example.UserService.GetUser:output_type -> example.UserResponse
-	9,  // 14: example.UserService.CreateUser:output_type -> example.UserResponse
-	9,  // 15: example.UserService.ListUsers:output_type -> example.UserResponse
-	13, // [13:16] is the sub-list for method output_type
-	10, // [10:13] is the sub-list for method input_type
+	10, // 13: example.AdminService.HealthCheck:input_type -> example.AdminRequest
+	9,  // 14: example.UserService.GetUser:output_type -> example.UserResponse
+	9,  // 15: example.UserService.CreateUser:output_type -> example.UserResponse
+	9,  // 16: example.UserService.ListUsers:output_type -> example.UserResponse
+	11, // 17: example.AdminService.HealthCheck:output_type -> example.AdminResponse
+	14, // [14:18] is the sub-list for method output_type
+	10, // [10:14] is the sub-list for method input_type
 	10, // [10:10] is the sub-list for extension type_name
 	10, // [10:10] is the sub-list for extension extendee
 	0,  // [0:10] is the sub-list for field type_name
@@ -881,9 +1000,9 @@ func file_examples_simple_example_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_examples_simple_example_proto_rawDesc), len(file_examples_simple_example_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   10,
+			NumMessages:   12,
 			NumExtensions: 0,
-			NumServices:   1,
+			NumServices:   2,
 		},
 		GoTypes:           file_examples_simple_example_proto_goTypes,
 		DependencyIndexes: file_examples_simple_example_proto_depIdxs,

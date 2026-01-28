@@ -2,10 +2,14 @@ package protocli
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
+	"log/slog"
 	"net"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
@@ -14,18 +18,81 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// ServiceCLI represents a service CLI with its command and gRPC registration function
+// ServiceCLI represents a service CLI with its command and gRPC registration function.
 type ServiceCLI struct {
 	Command             *cli.Command
-	ServiceName         string                                    // Service name (e.g., "userservice")
-	ConfigMessageType   string                                    // Config message type name (empty if no config)
-	ConfigPrototype     proto.Message                             // Prototype config message instance (for cloning)
-	FactoryOrImpl       interface{}                               // Factory function or direct service implementation
-	RegisterFunc        func(*grpc.Server, interface{})           // Register service with gRPC server (takes impl)
-	GatewayRegisterFunc func(ctx context.Context, mux any) error  // mux is *runtime.ServeMux from grpc-gateway
+	ServiceName         string                                   // Service name (e.g., "userservice")
+	ConfigMessageType   string                                   // Config message type name (empty if no config)
+	ConfigPrototype     proto.Message                            // Prototype config message instance (for cloning)
+	FactoryOrImpl       any                                      // Factory function or direct service implementation
+	RegisterFunc        func(*grpc.Server, any)                  // Register service with gRPC server (takes impl)
+	GatewayRegisterFunc func(ctx context.Context, mux any) error // mux is *runtime.ServeMux from grpc-gateway
 }
 
-// RootCommand creates a root CLI command with the given app name and options
+// parseVerbosity parses the verbosity flag value into a slog.Level.
+// Supports: "debug"/"4", "info"/"3", "warn"/"2", "error"/"1", "none"/"0".
+func parseVerbosity(value string) slog.Level {
+	value = strings.ToLower(strings.TrimSpace(value))
+
+	switch value {
+	case "debug", "4":
+		return slog.LevelDebug
+	case "info", "3":
+		return slog.LevelInfo
+	case "warn", "warning", "2":
+		return slog.LevelWarn
+	case "error", "1":
+		return slog.LevelError
+	case "none", "0":
+		// Return a very high level to effectively disable logging
+		return slog.Level(1000)
+	default:
+		return slog.LevelInfo
+	}
+}
+
+// setupSlog configures the global slog logger based on mode and verbosity.
+func setupSlog(ctx context.Context, cmd *cli.Command, isDaemon bool, slogConfig SlogConfigFunc) {
+	verbosity := cmd.String("verbosity")
+	level := parseVerbosity(verbosity)
+
+	// Create configuration context
+	configCtx := &slogConfigContext{
+		isDaemon: isDaemon,
+		level:    level,
+	}
+
+	var logger *slog.Logger
+
+	if slogConfig != nil {
+		// Use custom slog configuration
+		logger = slogConfig(ctx, configCtx)
+	} else {
+		// Use default configuration
+		var output io.Writer
+		var handler slog.Handler
+
+		if isDaemon {
+			// Daemon mode: JSON to stdout
+			output = os.Stdout
+			handler = slog.NewJSONHandler(output, &slog.HandlerOptions{
+				Level: level,
+			})
+		} else {
+			// Single command mode: Text to stderr
+			output = os.Stderr
+			handler = slog.NewTextHandler(output, &slog.HandlerOptions{
+				Level: level,
+			})
+		}
+
+		logger = slog.New(handler)
+	}
+
+	slog.SetDefault(logger)
+}
+
+// RootCommand creates a root CLI command with the given app name and options.
 func RootCommand(appName string, opts ...RootOption) *cli.Command {
 	options := ApplyRootOptions(opts...)
 
@@ -68,7 +135,7 @@ func RootCommand(appName string, opts ...RootOption) *cli.Command {
 		},
 	})
 
-	// Global flags including --config
+	// Global flags including --config and --verbosity
 	globalFlags := []cli.Flag{
 		&cli.StringSliceFlag{
 			Name:  "config",
@@ -81,23 +148,43 @@ func RootCommand(appName string, opts ...RootOption) *cli.Command {
 			Usage:  "Environment variable prefix for config overrides",
 			Hidden: true,
 		},
+		&cli.StringFlag{
+			Name:    "verbosity",
+			Aliases: []string{"v"},
+			Value:   "info",
+			Usage:   "Log verbosity level (debug/4, info/3, warn/2, error/1, none/0)",
+		},
 	}
 
-	return &cli.Command{
+	rootCmd := &cli.Command{
 		Name:     appName,
 		Usage:    fmt.Sprintf("%s - gRPC service CLI", appName),
 		Flags:    globalFlags,
 		Commands: commands,
 	}
+
+	// Add Before hook to setup slog for non-daemon commands
+	rootCmd.Before = func(ctx context.Context, cmd *cli.Command) (context.Context, error) {
+		// Setup slog for single command mode (non-daemon)
+		// For daemon mode, setupSlog is called in runDaemon
+		if cmd.Name != "daemonize" {
+			setupSlog(ctx, cmd.Root(), false, options.SlogConfig())
+		}
+		return ctx, nil
+	}
+
+	return rootCmd
 }
 
-// createServiceImpl loads config and creates service implementation
+var ErrWrongConfigType = errors.New("wrong config type")
+
+// createServiceImpl loads config and creates service implementation.
 func createServiceImpl(
 	loader *ConfigLoader,
 	cmd *cli.Command,
 	svc *ServiceCLI,
 	options RootConfig,
-) (interface{}, error) {
+) (any, error) {
 	// If no config message type, use impl directly (no config needed)
 	if svc.ConfigMessageType == "" {
 		// Assume FactoryOrImpl is a direct implementation
@@ -113,8 +200,8 @@ func createServiceImpl(
 
 	// If we don't have a config prototype, we can't instantiate config
 	if svc.ConfigPrototype == nil {
-		return nil, fmt.Errorf("service %s has config type %s but no config prototype provided",
-			svc.ServiceName, svc.ConfigMessageType)
+		return nil, fmt.Errorf("%w: service %s has config type %s but no config prototype provided",
+			ErrWrongConfigType, svc.ServiceName, svc.ConfigMessageType)
 	}
 
 	// 1. Create a new config message instance by cloning the prototype
@@ -134,7 +221,7 @@ func createServiceImpl(
 	return impl, nil
 }
 
-// filterServices filters services based on --service flag
+// filterServices filters services based on --service flag.
 func filterServices(services []*ServiceCLI, enabledNames []string) []*ServiceCLI {
 	if len(enabledNames) == 0 {
 		return services
@@ -155,14 +242,19 @@ func filterServices(services []*ServiceCLI, enabledNames []string) []*ServiceCLI
 	return filtered
 }
 
-// runDaemon implements the daemon command with proper signal handling and lifecycle hooks
+// runDaemon implements the daemon command with proper signal handling and lifecycle hooks.
 func runDaemon(ctx context.Context, cmd *cli.Command, services []*ServiceCLI, options RootConfig) error {
+	// Get root command for accessing global flags
+	rootCmd := cmd.Root()
+
+	// Setup slog for daemon mode (JSON to stdout)
+	setupSlog(ctx, rootCmd, true, options.SlogConfig())
+
 	host := cmd.String("host")
 	port := cmd.Int("port")
 	address := fmt.Sprintf("%s:%d", host, port)
 
 	// Get config paths from root command
-	rootCmd := cmd.Root()
 	configFilePaths := rootCmd.StringSlice("config")
 
 	// Create config loader (daemon mode = no flag overrides)
@@ -172,7 +264,7 @@ func runDaemon(ctx context.Context, cmd *cli.Command, services []*ServiceCLI, op
 	)
 
 	// Create service implementations with config
-	serviceImpls := make(map[string]interface{})
+	serviceImpls := make(map[string]any)
 	for _, svc := range services {
 		impl, err := createServiceImpl(loader, cmd, svc, options)
 		if err != nil {
@@ -218,12 +310,12 @@ func runDaemon(ctx context.Context, cmd *cli.Command, services []*ServiceCLI, op
 	}
 
 	// Create TCP listener
-	lis, err := net.Listen("tcp", address)
+	lis, err := (&net.ListenConfig{}).Listen(ctx, "tcp", address)
 	if err != nil {
 		return fmt.Errorf("failed to listen on %s: %w", address, err)
 	}
 
-	fmt.Fprintf(os.Stdout, "Starting gRPC server on %s with %d service(s)\n", address, len(servicesToRegister))
+	slog.Info("Starting gRPC server", "address", address, "services", len(servicesToRegister))
 
 	// Setup signal handling for graceful shutdown
 	sigChan := make(chan os.Signal, 1)
@@ -243,7 +335,7 @@ func runDaemon(ctx context.Context, cmd *cli.Command, services []*ServiceCLI, op
 	// Wait for signal or server error
 	select {
 	case sig := <-sigChan:
-		fmt.Fprintf(os.Stdout, "\nReceived signal %v, initiating graceful shutdown...\n", sig)
+		slog.Info("Received signal %v, initiating graceful shutdown...", "shutdown.signal", sig)
 		return gracefulShutdown(ctx, grpcServer, options)
 	case err := <-servErr:
 		if err != nil {
@@ -253,19 +345,19 @@ func runDaemon(ctx context.Context, cmd *cli.Command, services []*ServiceCLI, op
 	}
 }
 
-// gracefulShutdown handles graceful shutdown with timeout and hooks
+// gracefulShutdown handles graceful shutdown with timeout and hooks.
 func gracefulShutdown(ctx context.Context, grpcServer *grpc.Server, options RootConfig) error {
 	timeout := options.GracefulShutdownTimeout()
-	fmt.Fprintf(os.Stdout, "Graceful shutdown timeout: %v\n", timeout)
+	slog.Warn("Graceful shutdown timed out", "timeout.after", timeout)
 
 	// Create shutdown context with timeout
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
 	defer cancel()
 
 	// Run OnDaemonShutdown hooks in REVERSE order
 	hooks := options.DaemonShutdownHooks()
 	for i := len(hooks) - 1; i >= 0; i-- {
-		hooks[i](shutdownCtx)
+		hooks[i](ctx)
 	}
 
 	// Channel to signal when graceful stop completes
@@ -280,10 +372,10 @@ func gracefulShutdown(ctx context.Context, grpcServer *grpc.Server, options Root
 	// Wait for graceful stop or timeout
 	select {
 	case <-stopped:
-		fmt.Fprintf(os.Stdout, "Graceful shutdown completed\n")
+		slog.Info("Graceful shutdown complete")
 		return nil
-	case <-shutdownCtx.Done():
-		fmt.Fprintf(os.Stderr, "Graceful shutdown timeout exceeded, forcing stop\n")
+	case <-ctx.Done():
+		slog.Warn("Graceful shutdown interrupted, forcing stop")
 		grpcServer.Stop()
 		return nil
 	}

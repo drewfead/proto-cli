@@ -14,11 +14,11 @@ import (
 )
 
 // TestIntegration_RecursiveDeserializer_NestedMessage tests that deserializers
-// can be registered for nested message types using fully qualified proto names
+// can be registered for nested message types using fully qualified proto names.
 func TestIntegration_RecursiveDeserializer_NestedMessage(t *testing.T) {
 	// Custom deserializer for Address (nested message type)
 	// Uses fully qualified proto name: example.Address
-	addressDeserializer := func(ctx context.Context, flags protocli.FlagContainer) (proto.Message, error) {
+	addressDeserializer := func(_ context.Context, flags protocli.FlagContainer) (proto.Message, error) {
 		// Parse address from comma-separated string: street,city,state,zip,country
 		addressStr := flags.StringNamed("address")
 
@@ -62,10 +62,10 @@ func TestIntegration_RecursiveDeserializer_NestedMessage(t *testing.T) {
 }
 
 // TestIntegration_RecursiveDeserializer_TopLevelAndNested demonstrates
-// registering deserializers at both top-level and nested levels
+// registering deserializers at both top-level and nested levels.
 func TestIntegration_RecursiveDeserializer_TopLevelAndNested(t *testing.T) {
 	// Deserializer for nested Address message
-	addressDeserializer := func(ctx context.Context, flags protocli.FlagContainer) (proto.Message, error) {
+	addressDeserializer := func(_ context.Context, flags protocli.FlagContainer) (proto.Message, error) {
 		return &simple.Address{
 			Street:  flags.StringNamed("street"),
 			City:    flags.StringNamed("city"),
@@ -77,7 +77,7 @@ func TestIntegration_RecursiveDeserializer_TopLevelAndNested(t *testing.T) {
 
 	// Top-level deserializer for CreateUserRequest
 	// This can use the address deserializer for its nested field
-	createUserDeserializer := func(ctx context.Context, flags protocli.FlagContainer) (proto.Message, error) {
+	createUserDeserializer := func(_ context.Context, flags protocli.FlagContainer) (proto.Message, error) {
 		// Build the CreateUserRequest
 		// The nested Address field will be handled by its own deserializer
 		return &simple.CreateUserRequest{
@@ -101,7 +101,7 @@ func TestIntegration_RecursiveDeserializer_TopLevelAndNested(t *testing.T) {
 }
 
 // TestIntegration_RecursiveDeserializer_FullyQualifiedNames verifies
-// that fully qualified proto names are used for lookups
+// that fully qualified proto names are used for lookups.
 func TestIntegration_RecursiveDeserializer_FullyQualifiedNames(t *testing.T) {
 	tests := []struct {
 		name              string
@@ -127,7 +127,7 @@ func TestIntegration_RecursiveDeserializer_FullyQualifiedNames(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			deserializer := func(ctx context.Context, flags protocli.FlagContainer) (proto.Message, error) {
+			deserializer := func(_ context.Context, _ protocli.FlagContainer) (proto.Message, error) {
 				return &simple.Address{}, nil
 			}
 
@@ -145,10 +145,10 @@ func TestIntegration_RecursiveDeserializer_FullyQualifiedNames(t *testing.T) {
 }
 
 // TestIntegration_RecursiveDeserializer_RealWorldExample shows a practical
-// example of parsing complex address formats
+// example of parsing complex address formats.
 func TestIntegration_RecursiveDeserializer_RealWorldExample(t *testing.T) {
 	// Example: Parse addresses from various formats
-	addressDeserializer := func(ctx context.Context, flags protocli.FlagContainer) (proto.Message, error) {
+	addressDeserializer := func(_ context.Context, flags protocli.FlagContainer) (proto.Message, error) {
 		// Support multiple input methods:
 
 		// Method 1: Individual flags
@@ -203,10 +203,10 @@ func TestIntegration_RecursiveDeserializer_RealWorldExample(t *testing.T) {
 }
 
 // TestIntegration_RecursiveDeserializer_ValidationInNested demonstrates
-// validation in nested message deserializers
+// validation in nested message deserializers.
 func TestIntegration_RecursiveDeserializer_ValidationInNested(t *testing.T) {
 	// Address deserializer with validation
-	addressDeserializer := func(ctx context.Context, flags protocli.FlagContainer) (proto.Message, error) {
+	addressDeserializer := func(_ context.Context, flags protocli.FlagContainer) (proto.Message, error) {
 		city := flags.StringNamed("city")
 		state := flags.StringNamed("state")
 
@@ -243,7 +243,7 @@ func TestIntegration_RecursiveDeserializer_ValidationInNested(t *testing.T) {
 }
 
 // TestIntegration_RecursiveDeserializer_CompositionPattern shows how
-// deserializers can compose together
+// deserializers can compose together.
 func TestIntegration_RecursiveDeserializer_CompositionPattern(t *testing.T) {
 	// Helper function to build address (could be reused)
 	buildAddress := func(flags protocli.FlagContainer) *simple.Address {
@@ -257,12 +257,12 @@ func TestIntegration_RecursiveDeserializer_CompositionPattern(t *testing.T) {
 	}
 
 	// Address deserializer using helper
-	addressDeserializer := func(ctx context.Context, flags protocli.FlagContainer) (proto.Message, error) {
+	addressDeserializer := func(_ context.Context, flags protocli.FlagContainer) (proto.Message, error) {
 		return buildAddress(flags), nil
 	}
 
 	// Top-level deserializer could manually build nested messages
-	createUserDeserializer := func(ctx context.Context, flags protocli.FlagContainer) (proto.Message, error) {
+	createUserDeserializer := func(_ context.Context, flags protocli.FlagContainer) (proto.Message, error) {
 		return &simple.CreateUserRequest{
 			Name:    flags.StringNamed("name"),
 			Email:   flags.StringNamed("email"),
@@ -282,9 +282,9 @@ func TestIntegration_RecursiveDeserializer_CompositionPattern(t *testing.T) {
 	t.Log("Composition pattern works for building complex messages")
 }
 
-// BenchmarkRecursiveDeserializer benchmarks nested message deserialization
+// BenchmarkRecursiveDeserializer benchmarks nested message deserialization.
 func BenchmarkRecursiveDeserializer(b *testing.B) {
-	addressDeserializer := func(ctx context.Context, flags protocli.FlagContainer) (proto.Message, error) {
+	addressDeserializer := func(_ context.Context, flags protocli.FlagContainer) (proto.Message, error) {
 		return &simple.Address{
 			Street:  flags.StringNamed("street"),
 			City:    flags.StringNamed("city"),

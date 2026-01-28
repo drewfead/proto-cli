@@ -11,7 +11,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// jsonFormat formats proto messages as JSON
+// jsonFormat formats proto messages as JSON.
 type jsonFormat struct{}
 
 func (f *jsonFormat) Name() string {
@@ -27,7 +27,7 @@ func (f *jsonFormat) Flags() []cli.Flag {
 	}
 }
 
-func (f *jsonFormat) Format(ctx context.Context, cmd *cli.Command, w io.Writer, msg proto.Message) error {
+func (f *jsonFormat) Format(_ context.Context, cmd *cli.Command, w io.Writer, msg proto.Message) error {
 	marshaler := protojson.MarshalOptions{
 		EmitUnpopulated: true,
 	}
@@ -50,26 +50,26 @@ func (f *jsonFormat) Format(ctx context.Context, cmd *cli.Command, w io.Writer, 
 	return err
 }
 
-// goFormat formats proto messages using Go's default %+v formatting
+// goFormat formats proto messages using Go's default %+v formatting.
 type goFormat struct{}
 
 func (f *goFormat) Name() string {
 	return "go"
 }
 
-func (f *goFormat) Format(ctx context.Context, cmd *cli.Command, w io.Writer, msg proto.Message) error {
+func (f *goFormat) Format(_ context.Context, _ *cli.Command, w io.Writer, msg proto.Message) error {
 	_, err := fmt.Fprintf(w, "%+v\n", msg)
 	return err
 }
 
-// yamlFormat formats proto messages as YAML
+// yamlFormat formats proto messages as YAML.
 type yamlFormat struct{}
 
 func (f *yamlFormat) Name() string {
 	return "yaml"
 }
 
-func (f *yamlFormat) Format(ctx context.Context, cmd *cli.Command, w io.Writer, msg proto.Message) error {
+func (f *yamlFormat) Format(_ context.Context, _ *cli.Command, w io.Writer, msg proto.Message) error {
 	// Convert to JSON first, then to YAML-like format
 	marshaler := protojson.MarshalOptions{
 		EmitUnpopulated: true,
@@ -101,33 +101,47 @@ func writeYAML(w io.Writer, data any, indent int) error {
 	case map[string]any:
 		for key, val := range v {
 			if subMap, ok := val.(map[string]any); ok {
-				fmt.Fprintf(w, "%s%s:\n", prefix, key)
+				if _, err := fmt.Fprintf(w, "%s%s:\n", prefix, key); err != nil {
+					return err
+				}
 				if err := writeYAML(w, subMap, indent+1); err != nil {
 					return err
 				}
 			} else if subSlice, ok := val.([]any); ok {
-				fmt.Fprintf(w, "%s%s:\n", prefix, key)
+				if _, err := fmt.Fprintf(w, "%s%s:\n", prefix, key); err != nil {
+					return err
+				}
 				if err := writeYAML(w, subSlice, indent+1); err != nil {
 					return err
 				}
 			} else {
-				fmt.Fprintf(w, "%s%s: %v\n", prefix, key, val)
+				if _, err := fmt.Fprintf(w, "%s%s: %v\n", prefix, key, val); err != nil {
+					return err
+				}
 			}
 		}
 	case []any:
 		for _, item := range v {
-			fmt.Fprintf(w, "%s- ", prefix)
+			if _, err := fmt.Fprintf(w, "%s- ", prefix); err != nil {
+				return err
+			}
 			if subMap, ok := item.(map[string]any); ok {
-				fmt.Fprintln(w)
+				if _, err := fmt.Fprintln(w); err != nil {
+					return err
+				}
 				if err := writeYAML(w, subMap, indent+1); err != nil {
 					return err
 				}
 			} else {
-				fmt.Fprintf(w, "%v\n", item)
+				if _, err := fmt.Fprintf(w, "%v\n", item); err != nil {
+					return err
+				}
 			}
 		}
 	default:
-		fmt.Fprintf(w, "%s%v\n", prefix, v)
+		if _, err := fmt.Fprintf(w, "%s%v\n", prefix, v); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -135,17 +149,17 @@ func writeYAML(w io.Writer, data any, indent int) error {
 
 // Factory functions for built-in formats
 
-// JSON returns a new JSON output format with optional --pretty flag
+// JSON returns a new JSON output format with optional --pretty flag.
 func JSON() OutputFormat {
 	return &jsonFormat{}
 }
 
-// YAML returns a new YAML output format
+// YAML returns a new YAML output format.
 func YAML() OutputFormat {
 	return &yamlFormat{}
 }
 
-// Go returns a new Go-style output format (uses %+v)
+// Go returns a new Go-style output format (uses %+v).
 func Go() OutputFormat {
 	return &goFormat{}
 }

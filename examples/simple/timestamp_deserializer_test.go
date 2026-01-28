@@ -15,11 +15,11 @@ import (
 )
 
 // TestIntegration_TimestampDeserializer demonstrates parsing RFC3339 timestamps
-// from CLI flags using a custom deserializer
+// from CLI flags using a custom deserializer.
 func TestIntegration_TimestampDeserializer(t *testing.T) {
 	// Custom deserializer for google.protobuf.Timestamp
 	// Parses RFC3339 format strings like "2024-01-26T10:00:00Z"
-	timestampDeserializer := func(ctx context.Context, flags protocli.FlagContainer) (proto.Message, error) {
+	timestampDeserializer := func(_ context.Context, flags protocli.FlagContainer) (proto.Message, error) {
 		// Get the timestamp string from the flag
 		timestampStr := flags.String()
 
@@ -53,9 +53,9 @@ func TestIntegration_TimestampDeserializer(t *testing.T) {
 	t.Log("Timestamp deserializer registered successfully")
 }
 
-// TestIntegration_TimestampDeserializer_RFC3339 tests parsing RFC3339 timestamps
+// TestIntegration_TimestampDeserializer_RFC3339 tests parsing RFC3339 timestamps.
 func TestIntegration_TimestampDeserializer_RFC3339(t *testing.T) {
-	timestampDeserializer := func(ctx context.Context, flags protocli.FlagContainer) (proto.Message, error) {
+	timestampDeserializer := func(_ context.Context, flags protocli.FlagContainer) (proto.Message, error) {
 		timestampStr := flags.String()
 		if timestampStr == "" {
 			return timestamppb.Now(), nil
@@ -81,9 +81,9 @@ func TestIntegration_TimestampDeserializer_RFC3339(t *testing.T) {
 }
 
 // TestIntegration_TimestampDeserializer_MultipleFormats demonstrates
-// supporting multiple timestamp formats in a single deserializer
+// supporting multiple timestamp formats in a single deserializer.
 func TestIntegration_TimestampDeserializer_MultipleFormats(t *testing.T) {
-	timestampDeserializer := func(ctx context.Context, flags protocli.FlagContainer) (proto.Message, error) {
+	timestampDeserializer := func(_ context.Context, flags protocli.FlagContainer) (proto.Message, error) {
 		timestampStr := flags.String()
 		if timestampStr == "" {
 			return timestamppb.Now(), nil
@@ -127,7 +127,7 @@ func TestIntegration_TimestampDeserializer_MultipleFormats(t *testing.T) {
 // TestIntegration_TimestampDeserializer_RelativeTime demonstrates
 // parsing relative time expressions like "now", "1h", "30m", etc.
 func TestIntegration_TimestampDeserializer_RelativeTime(t *testing.T) {
-	timestampDeserializer := func(ctx context.Context, flags protocli.FlagContainer) (proto.Message, error) {
+	timestampDeserializer := func(_ context.Context, flags protocli.FlagContainer) (proto.Message, error) {
 		timestampStr := flags.String()
 
 		// Handle special keywords
@@ -172,9 +172,9 @@ func TestIntegration_TimestampDeserializer_RelativeTime(t *testing.T) {
 }
 
 // TestIntegration_TimestampDeserializer_UnixEpoch demonstrates
-// parsing Unix timestamps (seconds since epoch)
+// parsing Unix timestamps (seconds since epoch).
 func TestIntegration_TimestampDeserializer_UnixEpoch(t *testing.T) {
-	timestampDeserializer := func(ctx context.Context, flags protocli.FlagContainer) (proto.Message, error) {
+	timestampDeserializer := func(_ context.Context, flags protocli.FlagContainer) (proto.Message, error) {
 		timestampStr := flags.String()
 		if timestampStr == "" {
 			return timestamppb.Now(), nil
@@ -200,9 +200,9 @@ func TestIntegration_TimestampDeserializer_UnixEpoch(t *testing.T) {
 	t.Log("Unix epoch timestamp deserializer registered")
 }
 
-// BenchmarkTimestampDeserializer benchmarks timestamp deserialization
+// BenchmarkTimestampDeserializer benchmarks timestamp deserialization.
 func BenchmarkTimestampDeserializer(b *testing.B) {
-	timestampDeserializer := func(ctx context.Context, flags protocli.FlagContainer) (proto.Message, error) {
+	timestampDeserializer := func(_ context.Context, flags protocli.FlagContainer) (proto.Message, error) {
 		timestampStr := flags.String()
 		if timestampStr == "" {
 			return timestamppb.Now(), nil

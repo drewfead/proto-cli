@@ -113,6 +113,12 @@ message GetUserRequest {
     usage: "User ID to retrieve",
     required: true
   }];
+
+  // Field with partial annotation - demonstrates name defaults to kebab-case
+  bool include_details = 2 [(cli.flag) = {
+    shorthand: "d",
+    usage: "Include detailed user information"
+  }];
 }
 
 // Request to create a new user
@@ -131,6 +137,9 @@ message CreateUserRequest {
   }];
   Address address = 3;  // Nested address - demonstrates recursive deserializers
   google.protobuf.Timestamp registration_date = 4;  // External type to test import qualification
+
+  // Field without annotation - demonstrates kebab-case default
+  string phone_number = 5;
 }
 
 // Response containing a user
@@ -148,7 +157,7 @@ service UserService {
   // GetUser retrieves a user by ID
   rpc GetUser(GetUserRequest) returns (UserResponse) {
     option (cli.command) = {
-      command: ["user", "get"],
+      name: "get",
       description: "Retrieve a user by ID"
     };
   }
@@ -156,7 +165,7 @@ service UserService {
   // CreateUser creates a new user
   rpc CreateUser(CreateUserRequest) returns (UserResponse) {
     option (cli.command) = {
-      command: ["user", "create"],
+      name: "create",
       description: "Create a new user"
     };
   }
@@ -164,8 +173,34 @@ service UserService {
   // ListUsers streams all users
   rpc ListUsers(stream GetUserRequest) returns (stream UserResponse) {
     option (cli.command) = {
-      command: ["user", "list"],
+      name: "list",
       description: "List all users"
+    };
+  }
+}
+
+// Empty request for admin operations
+message AdminRequest {}
+
+// Response for admin operations
+message AdminResponse {
+  string message = 1;
+  bool success = 2;
+}
+
+// AdminService demonstrates service name override
+// Without annotation, this would be "admin-service"
+service AdminService {
+  option (cli.service) = {
+    name: "admin",
+    description: "Administrative operations"
+  };
+
+  // Health check endpoint
+  rpc HealthCheck(AdminRequest) returns (AdminResponse) {
+    option (cli.command) = {
+      name: "health",
+      description: "Check service health"
     };
   }
 }

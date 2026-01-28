@@ -13,7 +13,7 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-// TestUnit_ConfigLoader_NestedMessages tests nested message type support
+// TestUnit_ConfigLoader_NestedMessages tests nested message type support.
 func TestUnit_ConfigLoader_NestedMessages(t *testing.T) {
 	yamlContent := `
 services:
@@ -48,7 +48,7 @@ services:
 	assert.Equal(t, int32(30), config.Database.TimeoutSeconds)
 }
 
-// TestUnit_ConfigLoader_OneofTypes tests oneof (union) type support
+// TestUnit_ConfigLoader_OneofTypes tests oneof (union) type support.
 func TestUnit_ConfigLoader_OneofTypes(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -69,6 +69,7 @@ services:
 `,
 			expectType: "postgres",
 			checkFields: func(t *testing.T, config *simple.UserServiceConfig) {
+				t.Helper()
 				postgres, ok := config.Backend.(*simple.UserServiceConfig_Postgres)
 				require.True(t, ok, "Expected postgres backend")
 				assert.Equal(t, "localhost", postgres.Postgres.Host)
@@ -90,6 +91,7 @@ services:
 `,
 			expectType: "mysql",
 			checkFields: func(t *testing.T, config *simple.UserServiceConfig) {
+				t.Helper()
 				mysql, ok := config.Backend.(*simple.UserServiceConfig_Mysql)
 				require.True(t, ok, "Expected mysql backend")
 				assert.Equal(t, "mysqlhost", mysql.Mysql.Host)
@@ -118,7 +120,7 @@ services:
 	}
 }
 
-// TestUnit_ConfigLoader_RepeatedFields tests repeated (list) field support
+// TestUnit_ConfigLoader_RepeatedFields tests repeated (list) field support.
 func TestUnit_ConfigLoader_RepeatedFields(t *testing.T) {
 	yamlContent := `
 services:
@@ -147,7 +149,7 @@ services:
 	assert.Equal(t, "http://localhost:3000", config.AllowedOrigins[2])
 }
 
-// TestUnit_ConfigLoader_MapFields tests map field support
+// TestUnit_ConfigLoader_MapFields tests map field support.
 func TestUnit_ConfigLoader_MapFields(t *testing.T) {
 	yamlContent := `
 services:
@@ -176,7 +178,7 @@ services:
 	assert.Equal(t, "false", config.FeatureFlags["debug-mode"])
 }
 
-// TestUnit_ConfigLoader_EnumFields tests enum field support
+// TestUnit_ConfigLoader_EnumFields tests enum field support.
 func TestUnit_ConfigLoader_EnumFields(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -223,17 +225,12 @@ services:
 	}
 }
 
-// TestUnit_ConfigLoader_NestedEnvVars tests environment variables with nested fields
+// TestUnit_ConfigLoader_NestedEnvVars tests environment variables with nested fields.
 func TestUnit_ConfigLoader_NestedEnvVars(t *testing.T) {
 	// Set environment variables
-	os.Setenv("TESTCLI_DATABASE_URL", "env://from-env")
-	os.Setenv("TESTCLI_DATABASE_MAX_CONNECTIONS", "50")
-	os.Setenv("TESTCLI_DATABASE_TIMEOUT_SECONDS", "60")
-	defer func() {
-		os.Unsetenv("TESTCLI_DATABASE_URL")
-		os.Unsetenv("TESTCLI_DATABASE_MAX_CONNECTIONS")
-		os.Unsetenv("TESTCLI_DATABASE_TIMEOUT_SECONDS")
-	}()
+	t.Setenv("TESTCLI_DATABASE_URL", "env://from-env")
+	t.Setenv("TESTCLI_DATABASE_MAX_CONNECTIONS", "50")
+	t.Setenv("TESTCLI_DATABASE_TIMEOUT_SECONDS", "60")
 
 	yamlContent := `
 services:
@@ -264,7 +261,7 @@ services:
 	assert.Equal(t, int32(60), config.Database.TimeoutSeconds)
 }
 
-// TestUnit_ConfigLoader_ComplexNestedStructure tests deeply nested structures
+// TestUnit_ConfigLoader_ComplexNestedStructure tests deeply nested structures.
 func TestUnit_ConfigLoader_ComplexNestedStructure(t *testing.T) {
 	yamlContent := `
 services:
@@ -330,7 +327,7 @@ services:
 	assert.Equal(t, "proddb", postgres.Postgres.Database)
 }
 
-// TestIntegration_NestedConfig_EndToEnd tests full integration with nested config
+// TestIntegration_NestedConfig_EndToEnd tests full integration with nested config.
 func TestIntegration_NestedConfig_EndToEnd(t *testing.T) {
 	yamlContent := `
 services:
@@ -354,22 +351,21 @@ services:
 `
 
 	// Create temp config file
-	tmpFile, err := os.CreateTemp("", "nested-config-*.yaml")
+	tmpFile, err := os.CreateTemp(t.TempDir(), "nested-config-*.yaml")
 	require.NoError(t, err)
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	_, err = tmpFile.Write([]byte(yamlContent))
 	require.NoError(t, err)
-	tmpFile.Close()
+	_ = tmpFile.Close()
 
 	// Set env var override
-	os.Setenv("NESTEDCLI_LOG_LEVEL", "ERROR")
-	defer os.Unsetenv("NESTEDCLI_LOG_LEVEL")
+	t.Setenv("NESTEDCLI_LOG_LEVEL", "ERROR")
 
 	ctx := context.Background()
 
 	// Factory that captures config
-	factory := func(config *simple.UserServiceConfig) simple.UserServiceServer {
+	factory := func(_ *simple.UserServiceConfig) simple.UserServiceServer {
 		// Config is loaded and validated here
 		return &testUserService{}
 	}

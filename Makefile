@@ -72,48 +72,16 @@ test/unit: ## Run unit tests only
 test/integration: ## Run integration tests only
 	go test -v -race -run "^TestIntegration_" ./...
 
-.PHONY: test/example
-test/example: build/example ## Build and test the example CLI
-	@echo "Testing example CLI..."
-	@echo "  Testing direct call..."
-	@$(BIN_DIR)/usercli userservice getuser --id 1 --format json > /dev/null 2>&1 && echo "  ✓ Direct call works" || (echo "  ✗ Direct call failed" && exit 1)
-	@echo "  Testing daemon..."
-	@$(BIN_DIR)/usercli daemonize --port 50099 > /tmp/test-daemon.log 2>&1 & \
-		DAEMON_PID=$$! && \
-		sleep 2 && \
-		$(BIN_DIR)/usercli userservice getuser --id 1 --format json --remote localhost:50099 > /dev/null 2>&1 && \
-		kill $$DAEMON_PID 2>/dev/null && \
-		echo "  ✓ Remote call works" || \
-		(kill $$DAEMON_PID 2>/dev/null; echo "  ✗ Remote call failed" && exit 1)
-	@echo "✓ Example tests passed"
-
 ##@ Lint
 
 .PHONY: lint
 lint: ## Run linter on all files
-	go run github.com/golangci/golangci-lint/cmd/golangci-lint run ./...
+	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint run ./...
 
 .PHONY: fmt
 fmt: ## Auto-format code
-	go run github.com/golangci/golangci-lint/cmd/golangci-lint fmt ./...
+	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint fmt ./...
 	go fmt ./...
-
-##@ Development
-
-.PHONY: dev/setup
-dev/setup: ## Set up development environment
-	@echo "Setting up development environment..."
-	go mod download
-	go mod tidy
-	@echo "✓ Development environment ready"
-
-.PHONY: dev/example
-dev/example: generate build/example ## Generate proto and build example for quick testing
-	@echo "✓ Example ready for testing"
-	@echo ""
-	@echo "Try these commands:"
-	@echo "  $(BIN_DIR)/usercli userservice getuser --id 1 --format json"
-	@echo "  $(BIN_DIR)/usercli daemonize --port 50051"
 
 ##@ Misc.
 

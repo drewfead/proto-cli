@@ -1,0 +1,17 @@
+{
+    "editor.formatOnSave": true,
+    "editor.formatOnPaste": true,
+    "[go]": {
+        "editor.defaultFormatter": "golang.go"
+    },
+    "go.lintTool": "golangci-lint-v2",
+    "go.lintFlags": [
+        "--config=${workspaceFolder}/.golangci.yaml"
+    ],
+    "go.lintOnSave": "package",
+    "go.testFlags": [
+        "-v",
+        "-race"
+    ],
+    "go.testTimeout": "300s"
+}

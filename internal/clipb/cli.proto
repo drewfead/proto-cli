@@ -7,9 +7,11 @@ option go_package = "github.com/drewfead/proto-cli/internal/clipb";
 import "google/protobuf/descriptor.proto";
 
 // CLI command annotation for RPC methods
-// Defines the command hierarchy (e.g., ["user", "get"] -> "mycli user get")
+// Customizes command name and description
 message CommandOptions {
-  repeated string command = 1;
+  // Custom name for the command (defaults to kebab-case of method name)
+  string name = 1;
+  // Description for the command
   string description = 2;
 }
 
@@ -20,6 +22,15 @@ message FlagOptions {
   string shorthand = 2;
   string usage = 3;
   bool required = 4;
+}
+
+// Service options annotation
+// Defines CLI customization for a service
+message ServiceOptions {
+  // Custom name for the service command (defaults to kebab-case of service name)
+  string name = 1;
+  // Description for the service command
+  string description = 2;
 }
 
 // Service config annotation
@@ -38,5 +49,6 @@ extend google.protobuf.FieldOptions {
 }
 
 extend google.protobuf.ServiceOptions {
+  ServiceOptions service = 50000;
   ServiceConfigOptions service_config = 50003;
 }

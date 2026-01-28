@@ -7,12 +7,13 @@
 package clipb
 
 import (
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
-	descriptorpb "google.golang.org/protobuf/types/descriptorpb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
+
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	descriptorpb "google.golang.org/protobuf/types/descriptorpb"
 )
 
 const (
@@ -23,11 +24,13 @@ const (
 )
 
 // CLI command annotation for RPC methods
-// Defines the command hierarchy (e.g., ["user", "get"] -> "mycli user get")
+// Customizes command name and description
 type CommandOptions struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Command       []string               `protobuf:"bytes,1,rep,name=command,proto3" json:"command,omitempty"`
-	Description   string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Custom name for the command (defaults to kebab-case of method name)
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// Description for the command
+	Description   string `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -62,11 +65,11 @@ func (*CommandOptions) Descriptor() ([]byte, []int) {
 	return file_internal_clipb_cli_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *CommandOptions) GetCommand() []string {
+func (x *CommandOptions) GetName() string {
 	if x != nil {
-		return x.Command
+		return x.Name
 	}
-	return nil
+	return ""
 }
 
 func (x *CommandOptions) GetDescription() string {
@@ -146,6 +149,62 @@ func (x *FlagOptions) GetRequired() bool {
 	return false
 }
 
+// Service options annotation
+// Defines CLI customization for a service
+type ServiceOptions struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Custom name for the service command (defaults to kebab-case of service name)
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// Description for the service command
+	Description   string `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ServiceOptions) Reset() {
+	*x = ServiceOptions{}
+	mi := &file_internal_clipb_cli_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ServiceOptions) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ServiceOptions) ProtoMessage() {}
+
+func (x *ServiceOptions) ProtoReflect() protoreflect.Message {
+	mi := &file_internal_clipb_cli_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ServiceOptions.ProtoReflect.Descriptor instead.
+func (*ServiceOptions) Descriptor() ([]byte, []int) {
+	return file_internal_clipb_cli_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *ServiceOptions) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ServiceOptions) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
 // Service config annotation
 // Defines the configuration message type for a service
 type ServiceConfigOptions struct {
@@ -158,7 +217,7 @@ type ServiceConfigOptions struct {
 
 func (x *ServiceConfigOptions) Reset() {
 	*x = ServiceConfigOptions{}
-	mi := &file_internal_clipb_cli_proto_msgTypes[2]
+	mi := &file_internal_clipb_cli_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -170,7 +229,7 @@ func (x *ServiceConfigOptions) String() string {
 func (*ServiceConfigOptions) ProtoMessage() {}
 
 func (x *ServiceConfigOptions) ProtoReflect() protoreflect.Message {
-	mi := &file_internal_clipb_cli_proto_msgTypes[2]
+	mi := &file_internal_clipb_cli_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -183,7 +242,7 @@ func (x *ServiceConfigOptions) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServiceConfigOptions.ProtoReflect.Descriptor instead.
 func (*ServiceConfigOptions) Descriptor() ([]byte, []int) {
-	return file_internal_clipb_cli_proto_rawDescGZIP(), []int{2}
+	return file_internal_clipb_cli_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ServiceConfigOptions) GetConfigMessage() string {
@@ -212,6 +271,14 @@ var file_internal_clipb_cli_proto_extTypes = []protoimpl.ExtensionInfo{
 	},
 	{
 		ExtendedType:  (*descriptorpb.ServiceOptions)(nil),
+		ExtensionType: (*ServiceOptions)(nil),
+		Field:         50000,
+		Name:          "cli.service",
+		Tag:           "bytes,50000,opt,name=service",
+		Filename:      "internal/clipb/cli.proto",
+	},
+	{
+		ExtendedType:  (*descriptorpb.ServiceOptions)(nil),
 		ExtensionType: (*ServiceConfigOptions)(nil),
 		Field:         50003,
 		Name:          "cli.service_config",
@@ -234,27 +301,33 @@ var (
 
 // Extension fields to descriptorpb.ServiceOptions.
 var (
+	// optional cli.ServiceOptions service = 50000;
+	E_Service = &file_internal_clipb_cli_proto_extTypes[2]
 	// optional cli.ServiceConfigOptions service_config = 50003;
-	E_ServiceConfig = &file_internal_clipb_cli_proto_extTypes[2]
+	E_ServiceConfig = &file_internal_clipb_cli_proto_extTypes[3]
 )
 
 var File_internal_clipb_cli_proto protoreflect.FileDescriptor
 
 const file_internal_clipb_cli_proto_rawDesc = "" +
 	"\n" +
-	"\x18internal/clipb/cli.proto\x12\x03cli\x1a google/protobuf/descriptor.proto\"L\n" +
-	"\x0eCommandOptions\x12\x18\n" +
-	"\acommand\x18\x01 \x03(\tR\acommand\x12 \n" +
+	"\x18internal/clipb/cli.proto\x12\x03cli\x1a google/protobuf/descriptor.proto\"F\n" +
+	"\x0eCommandOptions\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\"q\n" +
 	"\vFlagOptions\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1c\n" +
 	"\tshorthand\x18\x02 \x01(\tR\tshorthand\x12\x14\n" +
 	"\x05usage\x18\x03 \x01(\tR\x05usage\x12\x1a\n" +
-	"\brequired\x18\x04 \x01(\bR\brequired\"=\n" +
+	"\brequired\x18\x04 \x01(\bR\brequired\"F\n" +
+	"\x0eServiceOptions\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
+	"\vdescription\x18\x02 \x01(\tR\vdescription\"=\n" +
 	"\x14ServiceConfigOptions\x12%\n" +
 	"\x0econfig_message\x18\x01 \x01(\tR\rconfigMessage:O\n" +
 	"\acommand\x12\x1e.google.protobuf.MethodOptions\x18ц\x03 \x01(\v2\x13.cli.CommandOptionsR\acommand:E\n" +
-	"\x04flag\x12\x1d.google.protobuf.FieldOptions\x18҆\x03 \x01(\v2\x10.cli.FlagOptionsR\x04flag:c\n" +
+	"\x04flag\x12\x1d.google.protobuf.FieldOptions\x18҆\x03 \x01(\v2\x10.cli.FlagOptionsR\x04flag:P\n" +
+	"\aservice\x12\x1f.google.protobuf.ServiceOptions\x18І\x03 \x01(\v2\x13.cli.ServiceOptionsR\aservice:c\n" +
 	"\x0eservice_config\x12\x1f.google.protobuf.ServiceOptions\x18ӆ\x03 \x01(\v2\x19.cli.ServiceConfigOptionsR\rserviceConfigBm\n" +
 	"\acom.cliB\bCliProtoP\x01Z,github.com/drewfead/proto-cli/internal/clipb\xa2\x02\x03CXX\xaa\x02\x03Cli\xca\x02\x03Cli\xe2\x02\x0fCli\\GPBMetadata\xea\x02\x03Clib\x06proto3"
 
@@ -270,26 +343,29 @@ func file_internal_clipb_cli_proto_rawDescGZIP() []byte {
 	return file_internal_clipb_cli_proto_rawDescData
 }
 
-var file_internal_clipb_cli_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_internal_clipb_cli_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_internal_clipb_cli_proto_goTypes = []any{
 	(*CommandOptions)(nil),              // 0: cli.CommandOptions
 	(*FlagOptions)(nil),                 // 1: cli.FlagOptions
-	(*ServiceConfigOptions)(nil),        // 2: cli.ServiceConfigOptions
-	(*descriptorpb.MethodOptions)(nil),  // 3: google.protobuf.MethodOptions
-	(*descriptorpb.FieldOptions)(nil),   // 4: google.protobuf.FieldOptions
-	(*descriptorpb.ServiceOptions)(nil), // 5: google.protobuf.ServiceOptions
+	(*ServiceOptions)(nil),              // 2: cli.ServiceOptions
+	(*ServiceConfigOptions)(nil),        // 3: cli.ServiceConfigOptions
+	(*descriptorpb.MethodOptions)(nil),  // 4: google.protobuf.MethodOptions
+	(*descriptorpb.FieldOptions)(nil),   // 5: google.protobuf.FieldOptions
+	(*descriptorpb.ServiceOptions)(nil), // 6: google.protobuf.ServiceOptions
 }
 var file_internal_clipb_cli_proto_depIdxs = []int32{
-	3, // 0: cli.command:extendee -> google.protobuf.MethodOptions
-	4, // 1: cli.flag:extendee -> google.protobuf.FieldOptions
-	5, // 2: cli.service_config:extendee -> google.protobuf.ServiceOptions
-	0, // 3: cli.command:type_name -> cli.CommandOptions
-	1, // 4: cli.flag:type_name -> cli.FlagOptions
-	2, // 5: cli.service_config:type_name -> cli.ServiceConfigOptions
-	6, // [6:6] is the sub-list for method output_type
-	6, // [6:6] is the sub-list for method input_type
-	3, // [3:6] is the sub-list for extension type_name
-	0, // [0:3] is the sub-list for extension extendee
+	4, // 0: cli.command:extendee -> google.protobuf.MethodOptions
+	5, // 1: cli.flag:extendee -> google.protobuf.FieldOptions
+	6, // 2: cli.service:extendee -> google.protobuf.ServiceOptions
+	6, // 3: cli.service_config:extendee -> google.protobuf.ServiceOptions
+	0, // 4: cli.command:type_name -> cli.CommandOptions
+	1, // 5: cli.flag:type_name -> cli.FlagOptions
+	2, // 6: cli.service:type_name -> cli.ServiceOptions
+	3, // 7: cli.service_config:type_name -> cli.ServiceConfigOptions
+	8, // [8:8] is the sub-list for method output_type
+	8, // [8:8] is the sub-list for method input_type
+	4, // [4:8] is the sub-list for extension type_name
+	0, // [0:4] is the sub-list for extension extendee
 	0, // [0:0] is the sub-list for field type_name
 }
 
@@ -304,8 +380,8 @@ func file_internal_clipb_cli_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_internal_clipb_cli_proto_rawDesc), len(file_internal_clipb_cli_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   3,
-			NumExtensions: 3,
+			NumMessages:   4,
+			NumExtensions: 4,
 			NumServices:   0,
 		},
 		GoTypes:           file_internal_clipb_cli_proto_goTypes,

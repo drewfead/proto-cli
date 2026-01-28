@@ -1,6 +1,7 @@
 package protocli
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -16,49 +17,77 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// ConfigMode determines which config sources are used
+// ConfigMode determines which config sources are used.
 type ConfigMode int
 
 const (
-	// SingleCommandMode uses files + env + flags (all sources)
+	// SingleCommandMode uses files + env + flags (all sources).
 	SingleCommandMode ConfigMode = iota
-	// DaemonMode uses files + env only (no CLI flag overrides)
+	// DaemonMode uses files + env only (no CLI flag overrides).
 	DaemonMode
 )
 
-// ConfigLoader loads configuration with precedence: CLI flags > env vars > files
+// ConfigDebugInfo tracks config loading for debugging.
+type ConfigDebugInfo struct {
+	PathsChecked   []string          // All paths that were checked
+	FilesLoaded    []string          // Paths that were successfully loaded
+	FilesFailed    map[string]string // Paths that failed with error message
+	EnvVarsApplied map[string]string // Env vars that were applied (name -> value)
+	FlagsApplied   map[string]string // CLI flags that were applied (name -> value)
+	FinalConfig    any               // Final merged config (for display)
+}
+
+// ConfigLoader loads configuration with precedence: CLI flags > env vars > files.
 type ConfigLoader struct {
 	configPaths   []string
 	configReaders []io.Reader
 	envPrefix     string
 	mode          ConfigMode
+	debug         bool
+	debugInfo     *ConfigDebugInfo
 }
 
-// ConfigLoaderOption is a functional option for configuring a ConfigLoader
+// ConfigLoaderOption is a functional option for configuring a ConfigLoader.
 type ConfigLoaderOption func(*ConfigLoader)
 
-// FileConfig adds config file paths to load
+// FileConfig adds config file paths to load.
 func FileConfig(paths ...string) ConfigLoaderOption {
 	return func(l *ConfigLoader) {
 		l.configPaths = append(l.configPaths, paths...)
 	}
 }
 
-// ReaderConfig adds io.Readers to load config from (for testing)
+// ReaderConfig adds io.Readers to load config from (for testing).
 func ReaderConfig(readers ...io.Reader) ConfigLoaderOption {
 	return func(l *ConfigLoader) {
 		l.configReaders = append(l.configReaders, readers...)
 	}
 }
 
-// EnvPrefix sets the environment variable prefix for config overrides
+// EnvPrefix sets the environment variable prefix for config overrides.
 func EnvPrefix(prefix string) ConfigLoaderOption {
 	return func(l *ConfigLoader) {
 		l.envPrefix = prefix
 	}
 }
 
-// NewConfigLoader creates a new config loader with options
+// DebugMode enables config loading debug information.
+func DebugMode(enabled bool) ConfigLoaderOption {
+	return func(l *ConfigLoader) {
+		l.debug = enabled
+		if enabled && l.debugInfo == nil {
+			l.debugInfo = &ConfigDebugInfo{
+				PathsChecked:   []string{},
+				FilesLoaded:    []string{},
+				FilesFailed:    make(map[string]string),
+				EnvVarsApplied: make(map[string]string),
+				FlagsApplied:   make(map[string]string),
+			}
+		}
+	}
+}
+
+// NewConfigLoader creates a new config loader with options.
 func NewConfigLoader(mode ConfigMode, opts ...ConfigLoaderOption) *ConfigLoader {
 	loader := &ConfigLoader{
 		mode: mode,
@@ -69,16 +98,23 @@ func NewConfigLoader(mode ConfigMode, opts ...ConfigLoaderOption) *ConfigLoader 
 	return loader
 }
 
-// DefaultConfigPaths returns default paths for config files
+// DebugInfo returns the config debug information (only populated if debug mode is enabled).
+func (l *ConfigLoader) DebugInfo() *ConfigDebugInfo {
+	return l.debugInfo
+}
+
+// DefaultConfigPaths returns default paths for config files.
 func DefaultConfigPaths(rootCommandName string) []string {
 	home, _ := os.UserHomeDir()
+
 	return []string{
 		fmt.Sprintf("./%s.yaml", rootCommandName),
 		filepath.Join(home, ".config", rootCommandName, "config.yaml"),
 	}
 }
 
-// LoadServiceConfig loads config for a specific service
+// LoadServiceConfig loads config for a specific service.
+//
 // serviceName: lowercase service name (e.g., "userservice")
 // target: pointer to config message instance
 func (l *ConfigLoader) LoadServiceConfig(
@@ -103,25 +139,47 @@ func (l *ConfigLoader) LoadServiceConfig(
 		}
 	}
 
+	// 4. Save final config for debugging
+	if l.debug {
+		l.debugInfo.FinalConfig = target
+	}
+
 	return nil
 }
 
-// loadFromFiles loads and deep merges config from multiple YAML files and readers
+// loadFromFiles loads and deep merges config from multiple YAML files and readers.
 func (l *ConfigLoader) loadFromFiles(serviceName string, target proto.Message) error {
 	// Load from file paths
 	for _, path := range l.configPaths {
+		if l.debug {
+			l.debugInfo.PathsChecked = append(l.debugInfo.PathsChecked, path)
+		}
+
 		// Skip if file doesn't exist (silent ignore for default paths)
 		if _, err := os.Stat(path); os.IsNotExist(err) {
+			if l.debug {
+				l.debugInfo.FilesFailed[path] = "file does not exist"
+			}
 			continue
 		}
 
 		data, err := os.ReadFile(path)
 		if err != nil {
+			if l.debug {
+				l.debugInfo.FilesFailed[path] = err.Error()
+			}
 			return fmt.Errorf("failed to read %s: %w", path, err)
 		}
 
 		if err := l.loadYAMLServiceFromData(data, serviceName, target); err != nil {
+			if l.debug {
+				l.debugInfo.FilesFailed[path] = err.Error()
+			}
 			return fmt.Errorf("failed to load %s: %w", path, err)
+		}
+
+		if l.debug {
+			l.debugInfo.FilesLoaded = append(l.debugInfo.FilesLoaded, path)
 		}
 	}
 
@@ -140,23 +198,23 @@ func (l *ConfigLoader) loadFromFiles(serviceName string, target proto.Message) e
 	return nil
 }
 
-// loadYAMLServiceFromData loads YAML from bytes and extracts service section
+// loadYAMLServiceFromData loads YAML from bytes and extracts service section.
 func (l *ConfigLoader) loadYAMLServiceFromData(data []byte, serviceName string, target proto.Message) error {
 	// Parse YAML into map
-	var root map[string]interface{}
+	var root map[string]any
 	if err := yaml.Unmarshal(data, &root); err != nil {
 		return fmt.Errorf("invalid YAML: %w", err)
 	}
 
 	// Extract services section
-	services, ok := root["services"].(map[string]interface{})
+	services, ok := root["services"].(map[string]any)
 	if !ok {
 		// No services section, skip this file
 		return nil
 	}
 
 	// Extract service-specific section
-	serviceConfig, ok := services[serviceName].(map[string]interface{})
+	serviceConfig, ok := services[serviceName].(map[string]any)
 	if !ok {
 		// No config for this service, skip
 		return nil
@@ -166,14 +224,26 @@ func (l *ConfigLoader) loadYAMLServiceFromData(data []byte, serviceName string, 
 	return l.mergeConfig(serviceConfig, target)
 }
 
-// mergeConfig deep merges YAML data into proto message using reflection
-func (l *ConfigLoader) mergeConfig(data map[string]interface{}, target proto.Message) error {
+// mergeConfig deep merges YAML data into proto message using reflection.
+func (l *ConfigLoader) mergeConfig(data map[string]any, target proto.Message) error {
+	return l.mergeConfigWithPath(data, target, "")
+}
+
+var ErrUnknownField = errors.New("unknown field")
+
+func (l *ConfigLoader) mergeConfigWithPath(data map[string]any, target proto.Message, fieldPath string) error {
 	msg := target.ProtoReflect()
 	fields := msg.Descriptor().Fields()
 
 	for key, value := range data {
 		// Convert kebab-case to snake_case for field lookup
 		fieldName := strings.ReplaceAll(key, "-", "_")
+
+		// Build nested field path for error messages
+		currentPath := key
+		if fieldPath != "" {
+			currentPath = fieldPath + "." + key
+		}
 
 		// Find field by name
 		field := fields.ByName(protoreflect.Name(fieldName))
@@ -182,39 +252,48 @@ func (l *ConfigLoader) mergeConfig(data map[string]interface{}, target proto.Mes
 			field = fields.ByJSONName(key)
 		}
 		if field == nil {
-			return fmt.Errorf("unknown field: %s", key)
+			return fmt.Errorf("%w: %s", ErrUnknownField, currentPath)
 		}
 
 		// Set field value
-		if err := l.setFieldValue(msg, field, value); err != nil {
-			return fmt.Errorf("failed to set field %s: %w", key, err)
+		if err := l.setFieldValueWithPath(msg, field, value, currentPath); err != nil {
+			return err
 		}
 	}
 
 	return nil
 }
 
-// setFieldValue sets a proto field value based on type
-func (l *ConfigLoader) setFieldValue(msg protoreflect.Message, field protoreflect.FieldDescriptor, value interface{}) error {
+var ErrUnexpectedFieldValueType = errors.New("unexpected field value type")
+var ErrOverflow = errors.New("overflow")
+
+// setFieldValueWithPath sets a proto field value based on type.
+func (l *ConfigLoader) setFieldValueWithPath(msg protoreflect.Message, field protoreflect.FieldDescriptor, value any, fieldPath string) error {
 	// Handle repeated fields (lists)
 	if field.IsList() {
-		return l.setListField(msg, field, value)
+		if err := l.setListField(msg, field, value); err != nil {
+			return fmt.Errorf("field %s: %w", fieldPath, err)
+		}
+		return nil
 	}
 
 	// Handle map fields
 	if field.IsMap() {
-		return l.setMapField(msg, field, value)
+		if err := l.setMapField(msg, field, value); err != nil {
+			return fmt.Errorf("field %s: %w", fieldPath, err)
+		}
+		return nil
 	}
 
 	switch field.Kind() {
 	case protoreflect.MessageKind:
-		// Handle nested message types
-		return l.setMessageField(msg, field, value)
+		// Handle nested message types with field path
+		return l.setMessageFieldWithPath(msg, field, value, fieldPath)
 
 	case protoreflect.StringKind:
 		str, ok := value.(string)
 		if !ok {
-			return fmt.Errorf("expected string, got %T", value)
+			return fmt.Errorf("%w - field %s: expected string, got %T", ErrUnexpectedFieldValueType, fieldPath, value)
 		}
 		msg.Set(field, protoreflect.ValueOfString(str))
 
@@ -230,7 +309,7 @@ func (l *ConfigLoader) setFieldValue(msg protoreflect.Message, field protoreflec
 		case float64:
 			intVal = int64(v)
 		default:
-			return fmt.Errorf("expected int, got %T", value)
+			return fmt.Errorf("%w - field %s: expected int, got %T", ErrUnexpectedFieldValueType, fieldPath, value)
 		}
 		msg.Set(field, protoreflect.ValueOfInt64(intVal))
 
@@ -238,6 +317,9 @@ func (l *ConfigLoader) setFieldValue(msg protoreflect.Message, field protoreflec
 		var uintVal uint64
 		switch v := value.(type) {
 		case int:
+			if v < 0 {
+				return fmt.Errorf("%w: cannot convert negative int %d to uint64", ErrOverflow, v)
+			}
 			uintVal = uint64(v)
 		case uint:
 			uintVal = uint64(v)
@@ -248,14 +330,14 @@ func (l *ConfigLoader) setFieldValue(msg protoreflect.Message, field protoreflec
 		case float64:
 			uintVal = uint64(v)
 		default:
-			return fmt.Errorf("expected uint, got %T", value)
+			return fmt.Errorf("%w: expected uint, got %T", ErrUnexpectedFieldValueType, value)
 		}
 		msg.Set(field, protoreflect.ValueOfUint64(uintVal))
 
 	case protoreflect.BoolKind:
 		boolVal, ok := value.(bool)
 		if !ok {
-			return fmt.Errorf("expected bool, got %T", value)
+			return fmt.Errorf("%w: expected bool, got %T", ErrUnexpectedFieldValueType, value)
 		}
 		msg.Set(field, protoreflect.ValueOfBool(boolVal))
 
@@ -269,7 +351,7 @@ func (l *ConfigLoader) setFieldValue(msg protoreflect.Message, field protoreflec
 		case int:
 			floatVal = float64(v)
 		default:
-			return fmt.Errorf("expected float, got %T", value)
+			return fmt.Errorf("%w: expected float, got %T", ErrUnexpectedFieldValueType, value)
 		}
 		msg.Set(field, protoreflect.ValueOfFloat64(floatVal))
 
@@ -277,18 +359,17 @@ func (l *ConfigLoader) setFieldValue(msg protoreflect.Message, field protoreflec
 		return l.setEnumField(msg, field, value)
 
 	default:
-		return fmt.Errorf("unsupported field type: %s", field.Kind())
+		return fmt.Errorf("%w: unsupported field type: %s", ErrUnexpectedFieldValueType, field.Kind())
 	}
 
 	return nil
 }
 
-// setMessageField handles nested message types
-func (l *ConfigLoader) setMessageField(msg protoreflect.Message, field protoreflect.FieldDescriptor, value interface{}) error {
+func (l *ConfigLoader) setMessageFieldWithPath(msg protoreflect.Message, field protoreflect.FieldDescriptor, value any, fieldPath string) error {
 	// Value should be a map for nested messages
-	nestedMap, ok := value.(map[string]interface{})
+	nestedMap, ok := value.(map[string]any)
 	if !ok {
-		return fmt.Errorf("expected map for message field, got %T", value)
+		return fmt.Errorf("%w: field %s: expected map for message field, got %T", ErrUnexpectedFieldValueType, fieldPath, value)
 	}
 
 	// Check if this field belongs to a oneof
@@ -299,9 +380,9 @@ func (l *ConfigLoader) setMessageField(msg protoreflect.Message, field protorefl
 	// Create new message instance
 	nestedMsg := msg.NewField(field).Message()
 
-	// Recursively merge config into nested message
-	if err := l.mergeConfig(nestedMap, nestedMsg.Interface()); err != nil {
-		return fmt.Errorf("failed to merge nested message: %w", err)
+	// Recursively merge config into nested message with path
+	if err := l.mergeConfigWithPath(nestedMap, nestedMsg.Interface(), fieldPath); err != nil {
+		return err
 	}
 
 	// Set the nested message on the parent
@@ -310,8 +391,8 @@ func (l *ConfigLoader) setMessageField(msg protoreflect.Message, field protorefl
 	return nil
 }
 
-// setOneofField handles oneof (union) types
-func (l *ConfigLoader) setOneofField(msg protoreflect.Message, field protoreflect.FieldDescriptor, oneof protoreflect.OneofDescriptor, value map[string]interface{}) error {
+// setOneofField handles oneof (union) types.
+func (l *ConfigLoader) setOneofField(msg protoreflect.Message, field protoreflect.FieldDescriptor, _ protoreflect.OneofDescriptor, value map[string]any) error {
 	// Clear any currently set field in this oneof
 	msg.Clear(field)
 
@@ -320,7 +401,7 @@ func (l *ConfigLoader) setOneofField(msg protoreflect.Message, field protoreflec
 
 	// Recursively merge config into nested message
 	if err := l.mergeConfig(value, nestedMsg.Interface()); err != nil {
-		return fmt.Errorf("failed to merge oneof field: %w", err)
+		return fmt.Errorf("%w: failed to merge oneof field: %w", ErrUnexpectedFieldValueType, err)
 	}
 
 	// Set the oneof field
@@ -329,12 +410,12 @@ func (l *ConfigLoader) setOneofField(msg protoreflect.Message, field protoreflec
 	return nil
 }
 
-// setListField handles repeated fields
-func (l *ConfigLoader) setListField(msg protoreflect.Message, field protoreflect.FieldDescriptor, value interface{}) error {
+// setListField handles repeated fields.
+func (l *ConfigLoader) setListField(msg protoreflect.Message, field protoreflect.FieldDescriptor, value any) error {
 	// Value should be a slice
-	slice, ok := value.([]interface{})
+	slice, ok := value.([]any)
 	if !ok {
-		return fmt.Errorf("expected slice for list field, got %T", value)
+		return fmt.Errorf("%w: expected slice for list field, got %T", ErrUnexpectedFieldValueType, value)
 	}
 
 	list := msg.Mutable(field).List()
@@ -347,21 +428,21 @@ func (l *ConfigLoader) setListField(msg protoreflect.Message, field protoreflect
 	// Append each element
 	for i, elem := range slice {
 		if err := l.appendListElement(list, field, elem); err != nil {
-			return fmt.Errorf("failed to append element %d: %w", i, err)
+			return fmt.Errorf("%w: failed to append element %d: %w", ErrUnexpectedFieldValueType, i, err)
 		}
 	}
 
 	return nil
 }
 
-// appendListElement appends a single element to a list field
-func (l *ConfigLoader) appendListElement(list protoreflect.List, field protoreflect.FieldDescriptor, value interface{}) error {
+// appendListElement appends a single element to a list field.
+func (l *ConfigLoader) appendListElement(list protoreflect.List, field protoreflect.FieldDescriptor, value any) error {
 	switch field.Kind() {
 	case protoreflect.MessageKind:
 		// Nested message in list
-		nestedMap, ok := value.(map[string]interface{})
+		nestedMap, ok := value.(map[string]any)
 		if !ok {
-			return fmt.Errorf("expected map for message element, got %T", value)
+			return fmt.Errorf("%w: expected map for message element, got %T", ErrUnexpectedFieldValueType, value)
 		}
 
 		// Create new message
@@ -374,7 +455,7 @@ func (l *ConfigLoader) appendListElement(list protoreflect.List, field protorefl
 	case protoreflect.StringKind:
 		str, ok := value.(string)
 		if !ok {
-			return fmt.Errorf("expected string, got %T", value)
+			return fmt.Errorf("%w: expected string, got %T", ErrUnexpectedFieldValueType, value)
 		}
 		list.Append(protoreflect.ValueOfString(str))
 
@@ -388,36 +469,36 @@ func (l *ConfigLoader) appendListElement(list protoreflect.List, field protorefl
 		case float64:
 			intVal = int64(v)
 		default:
-			return fmt.Errorf("expected int, got %T", value)
+			return fmt.Errorf("%w: expected int, got %T", ErrUnexpectedFieldValueType, value)
 		}
 		list.Append(protoreflect.ValueOfInt64(intVal))
 
 	case protoreflect.BoolKind:
 		boolVal, ok := value.(bool)
 		if !ok {
-			return fmt.Errorf("expected bool, got %T", value)
+			return fmt.Errorf("%w: expected bool, got %T", ErrUnexpectedFieldValueType, value)
 		}
 		list.Append(protoreflect.ValueOfBool(boolVal))
 
 	default:
-		return fmt.Errorf("unsupported list element type: %s", field.Kind())
+		return fmt.Errorf("%w: unsupported list element type: %s", ErrUnexpectedFieldValueType, field.Kind())
 	}
 
 	return nil
 }
 
-// setMapField handles map fields
-func (l *ConfigLoader) setMapField(msg protoreflect.Message, field protoreflect.FieldDescriptor, value interface{}) error {
+// setMapField handles map fields.
+func (l *ConfigLoader) setMapField(msg protoreflect.Message, field protoreflect.FieldDescriptor, value any) error {
 	// Value should be a map
-	yamlMap, ok := value.(map[string]interface{})
+	yamlMap, ok := value.(map[string]any)
 	if !ok {
-		return fmt.Errorf("expected map for map field, got %T", value)
+		return fmt.Errorf("%w: expected map for map field, got %T", ErrUnexpectedFieldValueType, value)
 	}
 
 	mapValue := msg.Mutable(field).Map()
 
 	// Clear existing entries
-	mapValue.Range(func(k protoreflect.MapKey, v protoreflect.Value) bool {
+	mapValue.Range(func(k protoreflect.MapKey, _ protoreflect.Value) bool {
 		mapValue.Clear(k)
 		return true
 	})
@@ -431,21 +512,21 @@ func (l *ConfigLoader) setMapField(msg protoreflect.Message, field protoreflect.
 		switch valueField.Kind() {
 		case protoreflect.MessageKind:
 			// Nested message as map value
-			nestedMap, ok := v.(map[string]interface{})
+			nestedMap, ok := v.(map[string]any)
 			if !ok {
-				return fmt.Errorf("expected map for message value, got %T", v)
+				return fmt.Errorf("%w: expected map for message value, got %T", ErrUnexpectedFieldValueType, v)
 			}
 
 			elemMsg := mapValue.NewValue().Message()
 			if err := l.mergeConfig(nestedMap, elemMsg.Interface()); err != nil {
-				return fmt.Errorf("failed to merge map value for key %s: %w", k, err)
+				return fmt.Errorf("%w: failed to merge map value for key %s: %w", ErrUnexpectedFieldValueType, k, err)
 			}
 			mapVal = protoreflect.ValueOfMessage(elemMsg)
 
 		case protoreflect.StringKind:
 			str, ok := v.(string)
 			if !ok {
-				return fmt.Errorf("expected string, got %T", v)
+				return fmt.Errorf("%w: expected string, got %T", ErrUnexpectedFieldValueType, v)
 			}
 			mapVal = protoreflect.ValueOfString(str)
 
@@ -459,12 +540,12 @@ func (l *ConfigLoader) setMapField(msg protoreflect.Message, field protoreflect.
 			case float64:
 				intVal = int64(val)
 			default:
-				return fmt.Errorf("expected int, got %T", v)
+				return fmt.Errorf("%w: expected int, got %T", ErrUnexpectedFieldValueType, v)
 			}
 			mapVal = protoreflect.ValueOfInt64(intVal)
 
 		default:
-			return fmt.Errorf("unsupported map value type: %s", valueField.Kind())
+			return fmt.Errorf("%w: unsupported map value type: %s", ErrUnexpectedFieldValueType, valueField.Kind())
 		}
 
 		mapValue.Set(mapKey, mapVal)
@@ -473,8 +554,8 @@ func (l *ConfigLoader) setMapField(msg protoreflect.Message, field protoreflect.
 	return nil
 }
 
-// setEnumField handles enum fields
-func (l *ConfigLoader) setEnumField(msg protoreflect.Message, field protoreflect.FieldDescriptor, value interface{}) error {
+// setEnumField handles enum fields.
+func (l *ConfigLoader) setEnumField(msg protoreflect.Message, field protoreflect.FieldDescriptor, value any) error {
 	enumDesc := field.Enum()
 
 	// Value can be string (enum name) or int (enum number)
@@ -483,7 +564,7 @@ func (l *ConfigLoader) setEnumField(msg protoreflect.Message, field protoreflect
 		// Look up enum by name
 		enumVal := enumDesc.Values().ByName(protoreflect.Name(v))
 		if enumVal == nil {
-			return fmt.Errorf("unknown enum value: %s", v)
+			return fmt.Errorf("%w: unknown enum value: %s", ErrUnknownField, v)
 		}
 		msg.Set(field, protoreflect.ValueOfEnum(enumVal.Number()))
 
@@ -492,24 +573,33 @@ func (l *ConfigLoader) setEnumField(msg protoreflect.Message, field protoreflect
 		var num int32
 		switch val := v.(type) {
 		case int:
+			if val < -2147483648 || val > 2147483647 {
+				return fmt.Errorf("%w: int value %d overflows int32", ErrOverflow, val)
+			}
 			num = int32(val)
 		case int32:
 			num = val
 		case int64:
+			if val < -2147483648 || val > 2147483647 {
+				return fmt.Errorf("%w: int64 value %d overflows int32", ErrOverflow, val)
+			}
 			num = int32(val)
 		case float64:
+			if val < -2147483648 || val > 2147483647 {
+				return fmt.Errorf("%w: float64 value %f overflows int32", ErrOverflow, val)
+			}
 			num = int32(val)
 		}
 		msg.Set(field, protoreflect.ValueOfEnum(protoreflect.EnumNumber(num)))
 
 	default:
-		return fmt.Errorf("expected string or int for enum, got %T", value)
+		return fmt.Errorf("%w: expected string or int for enum, got %T", ErrUnexpectedFieldValueType, value)
 	}
 
 	return nil
 }
 
-// applyEnvVars overrides fields with environment variables
+// applyEnvVars overrides fields with environment variables.
 func (l *ConfigLoader) applyEnvVars(target proto.Message) error {
 	if l.envPrefix == "" {
 		return nil
@@ -518,8 +608,12 @@ func (l *ConfigLoader) applyEnvVars(target proto.Message) error {
 	return l.applyEnvVarsRecursive(target.ProtoReflect(), l.envPrefix)
 }
 
-// applyEnvVarsRecursive recursively applies environment variables to nested messages
+// applyEnvVarsRecursive recursively applies environment variables to nested messages.
 func (l *ConfigLoader) applyEnvVarsRecursive(msg protoreflect.Message, prefix string) error {
+	return l.applyEnvVarsWithPath(msg, prefix, "")
+}
+
+func (l *ConfigLoader) applyEnvVarsWithPath(msg protoreflect.Message, prefix string, fieldPath string) error {
 	fields := msg.Descriptor().Fields()
 
 	for i := 0; i < fields.Len(); i++ {
@@ -529,6 +623,12 @@ func (l *ConfigLoader) applyEnvVarsRecursive(msg protoreflect.Message, prefix st
 		// Convert snake_case to UPPER_CASE
 		fieldName := string(field.Name())
 		envName := prefix + "_" + strings.ToUpper(fieldName)
+
+		// Build nested field path for error messages
+		currentPath := fieldName
+		if fieldPath != "" {
+			currentPath = fieldPath + "." + fieldName
+		}
 
 		// Handle nested messages recursively
 		if field.Kind() == protoreflect.MessageKind && !field.IsList() && !field.IsMap() {
@@ -541,7 +641,7 @@ func (l *ConfigLoader) applyEnvVarsRecursive(msg protoreflect.Message, prefix st
 
 			// Recursively apply env vars to nested message
 			nestedMsg := msg.Get(field).Message()
-			if err := l.applyEnvVarsRecursive(nestedMsg, envName); err != nil {
+			if err := l.applyEnvVarsWithPath(nestedMsg, envName, currentPath); err != nil {
 				return err
 			}
 			continue
@@ -553,22 +653,27 @@ func (l *ConfigLoader) applyEnvVarsRecursive(msg protoreflect.Message, prefix st
 			continue
 		}
 
+		// Track debug info
+		if l.debug {
+			l.debugInfo.EnvVarsApplied[envName] = envValue
+		}
+
 		// Parse and set value based on type
 		if err := l.setFieldFromString(msg, field, envValue); err != nil {
-			return fmt.Errorf("failed to set field %s from env %s: %w", fieldName, envName, err)
+			return fmt.Errorf("failed to set field %s from env %s: %w", currentPath, envName, err)
 		}
 	}
 
 	return nil
 }
 
-// applyFlags overrides fields with CLI flags (single-command mode only)
+// applyFlags overrides fields with CLI flags (single-command mode only).
 func (l *ConfigLoader) applyFlags(cmd *cli.Command, target proto.Message) error {
-	return l.applyFlagsRecursive(cmd, target.ProtoReflect(), "")
+	return l.applyFlagsRecursive(cmd, target.ProtoReflect(), "", "")
 }
 
-// applyFlagsRecursive recursively applies CLI flags to nested messages
-func (l *ConfigLoader) applyFlagsRecursive(cmd *cli.Command, msg protoreflect.Message, prefix string) error {
+// applyFlagsRecursive recursively applies CLI flags to nested messages.
+func (l *ConfigLoader) applyFlagsRecursive(cmd *cli.Command, msg protoreflect.Message, prefix string, fieldPath string) error {
 	fields := msg.Descriptor().Fields()
 
 	for i := 0; i < fields.Len(); i++ {
@@ -578,6 +683,13 @@ func (l *ConfigLoader) applyFlagsRecursive(cmd *cli.Command, msg protoreflect.Me
 		flagName := l.getFlagName(field)
 		if flagName == "" {
 			continue
+		}
+
+		// Build nested field path for error messages
+		fieldName := string(field.Name())
+		currentPath := fieldName
+		if fieldPath != "" {
+			currentPath = fieldPath + "." + fieldName
 		}
 
 		// Add prefix for nested fields (e.g., "database-url" becomes "database-url")
@@ -597,7 +709,7 @@ func (l *ConfigLoader) applyFlagsRecursive(cmd *cli.Command, msg protoreflect.Me
 
 			// Recursively apply flags to nested message
 			nestedMsg := msg.Get(field).Message()
-			if err := l.applyFlagsRecursive(cmd, nestedMsg, fullFlagName); err != nil {
+			if err := l.applyFlagsRecursive(cmd, nestedMsg, fullFlagName, currentPath); err != nil {
 				return err
 			}
 			continue
@@ -608,16 +720,22 @@ func (l *ConfigLoader) applyFlagsRecursive(cmd *cli.Command, msg protoreflect.Me
 			continue
 		}
 
+		// Track debug info
+		if l.debug {
+			flagValue := cmd.String(fullFlagName) // Simplified - works for most types
+			l.debugInfo.FlagsApplied[fullFlagName] = flagValue
+		}
+
 		// Get flag value and set field
 		if err := l.setFieldFromFlag(cmd, msg, field, fullFlagName); err != nil {
-			return fmt.Errorf("failed to set field from flag %s: %w", fullFlagName, err)
+			return fmt.Errorf("failed to set field %s from flag %s: %w", currentPath, fullFlagName, err)
 		}
 	}
 
 	return nil
 }
 
-// getFlagName extracts flag name from field using (cli.flag) annotation
+// getFlagName extracts flag name from field using (cli.flag) annotation.
 func (l *ConfigLoader) getFlagName(field protoreflect.FieldDescriptor) string {
 	// Try to read the (cli.flag) annotation
 	opts := field.Options()
@@ -633,7 +751,7 @@ func (l *ConfigLoader) getFlagName(field protoreflect.FieldDescriptor) string {
 	return strings.ReplaceAll(fieldName, "_", "-")
 }
 
-// setFieldFromString parses a string value and sets the field
+// setFieldFromString parses a string value and sets the field.
 func (l *ConfigLoader) setFieldFromString(msg protoreflect.Message, field protoreflect.FieldDescriptor, value string) error {
 	switch field.Kind() {
 	case protoreflect.StringKind:
@@ -689,13 +807,13 @@ func (l *ConfigLoader) setFieldFromString(msg protoreflect.Message, field protor
 		msg.Set(field, protoreflect.ValueOfFloat64(floatVal))
 
 	default:
-		return fmt.Errorf("unsupported field type: %s", field.Kind())
+		return fmt.Errorf("%w: unsupported field type: %s", ErrUnexpectedFieldValueType, field.Kind())
 	}
 
 	return nil
 }
 
-// setFieldFromFlag gets flag value from CLI command and sets field
+// setFieldFromFlag gets flag value from CLI command and sets field.
 func (l *ConfigLoader) setFieldFromFlag(cmd *cli.Command, msg protoreflect.Message, field protoreflect.FieldDescriptor, flagName string) error {
 	switch field.Kind() {
 	case protoreflect.StringKind:
@@ -704,6 +822,9 @@ func (l *ConfigLoader) setFieldFromFlag(cmd *cli.Command, msg protoreflect.Messa
 
 	case protoreflect.Int32Kind:
 		value := cmd.Int(flagName)
+		if value < -2147483648 || value > 2147483647 {
+			return fmt.Errorf("%w: int value %d overflows int32 for flag %s", ErrOverflow, value, flagName)
+		}
 		msg.Set(field, protoreflect.ValueOfInt32(int32(value)))
 
 	case protoreflect.Int64Kind:
@@ -712,6 +833,9 @@ func (l *ConfigLoader) setFieldFromFlag(cmd *cli.Command, msg protoreflect.Messa
 
 	case protoreflect.Uint32Kind:
 		value := cmd.Uint(flagName)
+		if value > 4294967295 {
+			return fmt.Errorf("%w: uint value %d overflows uint32 for flag %s", ErrOverflow, value, flagName)
+		}
 		msg.Set(field, protoreflect.ValueOfUint32(uint32(value)))
 
 	case protoreflect.Uint64Kind:
@@ -731,41 +855,35 @@ func (l *ConfigLoader) setFieldFromFlag(cmd *cli.Command, msg protoreflect.Messa
 		msg.Set(field, protoreflect.ValueOfFloat64(value))
 
 	default:
-		return fmt.Errorf("unsupported field type: %s", field.Kind())
+		return fmt.Errorf("%w: unsupported field type: %s", ErrUnexpectedFieldValueType, field.Kind())
 	}
 
 	return nil
 }
 
-// Helper function to get flag value generically
-func getFlagValue(cmd *cli.Command, flagName string) (interface{}, error) {
-	// This is a simplified version - in practice you'd need to determine flag type
-	return cmd.Value(flagName), nil
-}
-
-// NewConfigMessage creates a new config message instance using the proto registry
-// The configType should be a pointer to the config message type (e.g., &UserServiceConfig{})
+// NewConfigMessage creates a new config message instance using the proto registry.
+// The configType should be a pointer to the config message type (e.g., &UserServiceConfig{}).
 func NewConfigMessage(configType proto.Message) proto.Message {
 	// Use proto.Clone to create a new instance of the same type
 	return proto.Clone(configType)
 }
 
-// CallFactory calls a factory function with a config message using reflection
-// Returns the service implementation
-func CallFactory(factory interface{}, config proto.Message) (interface{}, error) {
+// CallFactory calls a factory function with a config message using reflection.
+// Returns the service implementation.
+func CallFactory(factory any, config proto.Message) (any, error) {
 	// Use type assertion to call factory with proper signature
 	// The factory should be func(*ConfigMsg) ServiceServer
 
 	// We need to use reflection since we don't know the exact types at compile time
 	factoryValue := reflect.ValueOf(factory)
 	if factoryValue.Kind() != reflect.Func {
-		return nil, fmt.Errorf("factory is not a function")
+		return nil, fmt.Errorf("%w: factory is not a function", ErrUnexpectedFieldValueType)
 	}
 
 	// Call the factory with the config
 	results := factoryValue.Call([]reflect.Value{reflect.ValueOf(config)})
 	if len(results) != 1 {
-		return nil, fmt.Errorf("factory should return exactly one value")
+		return nil, fmt.Errorf("%w: factory should return exactly one value", ErrUnexpectedFieldValueType)
 	}
 
 	return results[0].Interface(), nil

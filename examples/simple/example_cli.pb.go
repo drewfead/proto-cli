@@ -5,13 +5,14 @@ package simple
 import (
 	"context"
 	"fmt"
+	"io"
+	"os"
+
 	protocli "github.com/drewfead/proto-cli"
 	v3 "github.com/urfave/cli/v3"
 	grpc "google.golang.org/grpc"
 	insecure "google.golang.org/grpc/credentials/insecure"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
-	"io"
-	"os"
 )
 
 // getOutputWriter opens the specified output file or returns stdout
@@ -24,7 +25,7 @@ func getOutputWriter(path string) (io.Writer, error) {
 
 // UserServiceServiceCommand creates a service CLI for UserService with options
 // The implOrFactory parameter can be either a direct service implementation or a factory function
-func UserServiceServiceCommand(ctx context.Context, implOrFactory interface{}, opts ...protocli.ServiceOption) *protocli.ServiceCLI {
+func UserServiceServiceCommand(ctx context.Context, implOrFactory any, opts ...protocli.ServiceOption) *protocli.ServiceCLI {
 	options := protocli.ApplyServiceOptions(opts...)
 
 	// Determine default format (first registered format, or empty if none)
@@ -35,8 +36,8 @@ func UserServiceServiceCommand(ctx context.Context, implOrFactory interface{}, o
 
 	var commands []*v3.Command
 
-	// Build flags for getuser
-	flags_getuser := []v3.Flag{&v3.StringFlag{
+	// Build flags for get
+	flags_get := []v3.Flag{&v3.StringFlag{
 		Name:  "remote",
 		Usage: "Remote gRPC server address (host:port). If set, uses gRPC client instead of direct call",
 	}, &v3.StringFlag{
@@ -49,21 +50,27 @@ func UserServiceServiceCommand(ctx context.Context, implOrFactory interface{}, o
 		Value: "-",
 	}}
 
-	flags_getuser = append(flags_getuser, &v3.IntFlag{
-		Name:  "id",
-		Usage: "Id",
+	flags_get = append(flags_get, &v3.IntFlag{
+		Aliases: []string{"i"},
+		Name:    "id",
+		Usage:   "User ID to retrieve",
+	})
+	flags_get = append(flags_get, &v3.BoolFlag{
+		Aliases: []string{"d"},
+		Name:    "include-details",
+		Usage:   "Include detailed user information",
 	})
 
 	// Add config field flags for single-command mode
-	flags_getuser = append(flags_getuser, &v3.StringFlag{
+	flags_get = append(flags_get, &v3.StringFlag{
 		Name:  "db-url",
 		Usage: "PostgreSQL connection URL",
 	})
-	flags_getuser = append(flags_getuser, &v3.IntFlag{
+	flags_get = append(flags_get, &v3.IntFlag{
 		Name:  "max-conns",
 		Usage: "Maximum database connections",
 	})
-	flags_getuser = append(flags_getuser, &v3.StringFlag{
+	flags_get = append(flags_get, &v3.StringFlag{
 		Name:  "allowed-origins",
 		Usage: "CORS allowed origins",
 	})
@@ -72,7 +79,7 @@ func UserServiceServiceCommand(ctx context.Context, implOrFactory interface{}, o
 	for _, outputFmt := range options.OutputFormats() {
 		// Check if format implements FlagConfiguredOutputFormat
 		if flagConfigured, ok := outputFmt.(protocli.FlagConfiguredOutputFormat); ok {
-			flags_getuser = append(flags_getuser, flagConfigured.Flags()...)
+			flags_get = append(flags_get, flagConfigured.Flags()...)
 		}
 	}
 
@@ -105,6 +112,10 @@ func UserServiceServiceCommand(ctx context.Context, implOrFactory interface{}, o
 				if err != nil {
 					return fmt.Errorf("custom deserializer failed: %w", err)
 				}
+				// Handle nil return from deserializer
+				if msg == nil {
+					return fmt.Errorf("custom deserializer returned nil message")
+				}
 				var ok bool
 				req, ok = msg.(*GetUserRequest)
 				if !ok {
@@ -114,6 +125,7 @@ func UserServiceServiceCommand(ctx context.Context, implOrFactory interface{}, o
 				// Use auto-generated flag parsing
 				req = &GetUserRequest{}
 				req.Id = int64(cmd.Int("id"))
+				req.IncludeDetails = cmd.Bool("include-details")
 			}
 
 			// Check if using remote gRPC call or direct implementation call
@@ -195,13 +207,13 @@ func UserServiceServiceCommand(ctx context.Context, implOrFactory interface{}, o
 			}
 			return fmt.Errorf("unknown format %q (available: %v)", formatName, availableFormats)
 		},
-		Flags: flags_getuser,
-		Name:  "getuser",
-		Usage: "Call GetUser RPC",
+		Flags: flags_get,
+		Name:  "get",
+		Usage: "Retrieve a user by ID",
 	})
 
-	// Build flags for createuser
-	flags_createuser := []v3.Flag{&v3.StringFlag{
+	// Build flags for create
+	flags_create := []v3.Flag{&v3.StringFlag{
 		Name:  "remote",
 		Usage: "Remote gRPC server address (host:port). If set, uses gRPC client instead of direct call",
 	}, &v3.StringFlag{
@@ -214,33 +226,39 @@ func UserServiceServiceCommand(ctx context.Context, implOrFactory interface{}, o
 		Value: "-",
 	}}
 
-	flags_createuser = append(flags_createuser, &v3.StringFlag{
-		Name:  "name",
-		Usage: "Name",
+	flags_create = append(flags_create, &v3.StringFlag{
+		Aliases: []string{"n"},
+		Name:    "name",
+		Usage:   "User's full name",
 	})
-	flags_createuser = append(flags_createuser, &v3.StringFlag{
-		Name:  "email",
-		Usage: "Email",
+	flags_create = append(flags_create, &v3.StringFlag{
+		Aliases: []string{"e"},
+		Name:    "email",
+		Usage:   "User's email address",
 	})
-	flags_createuser = append(flags_createuser, &v3.StringFlag{
+	flags_create = append(flags_create, &v3.StringFlag{
 		Name:  "address",
 		Usage: "Address (example.Address)",
 	})
-	flags_createuser = append(flags_createuser, &v3.StringFlag{
-		Name:  "registrationdate",
+	flags_create = append(flags_create, &v3.StringFlag{
+		Name:  "registration-date",
 		Usage: "RegistrationDate (google.protobuf.Timestamp)",
+	})
+	flags_create = append(flags_create, &v3.StringFlag{
+		Name:  "phone-number",
+		Usage: "PhoneNumber",
 	})
 
 	// Add config field flags for single-command mode
-	flags_createuser = append(flags_createuser, &v3.StringFlag{
+	flags_create = append(flags_create, &v3.StringFlag{
 		Name:  "db-url",
 		Usage: "PostgreSQL connection URL",
 	})
-	flags_createuser = append(flags_createuser, &v3.IntFlag{
+	flags_create = append(flags_create, &v3.IntFlag{
 		Name:  "max-conns",
 		Usage: "Maximum database connections",
 	})
-	flags_createuser = append(flags_createuser, &v3.StringFlag{
+	flags_create = append(flags_create, &v3.StringFlag{
 		Name:  "allowed-origins",
 		Usage: "CORS allowed origins",
 	})
@@ -249,7 +267,7 @@ func UserServiceServiceCommand(ctx context.Context, implOrFactory interface{}, o
 	for _, outputFmt := range options.OutputFormats() {
 		// Check if format implements FlagConfiguredOutputFormat
 		if flagConfigured, ok := outputFmt.(protocli.FlagConfiguredOutputFormat); ok {
-			flags_createuser = append(flags_createuser, flagConfigured.Flags()...)
+			flags_create = append(flags_create, flagConfigured.Flags()...)
 		}
 	}
 
@@ -282,6 +300,10 @@ func UserServiceServiceCommand(ctx context.Context, implOrFactory interface{}, o
 				if err != nil {
 					return fmt.Errorf("custom deserializer failed: %w", err)
 				}
+				// Handle nil return from deserializer
+				if msg == nil {
+					return fmt.Errorf("custom deserializer returned nil message")
+				}
 				var ok bool
 				req, ok = msg.(*CreateUserRequest)
 				if !ok {
@@ -301,41 +323,46 @@ func UserServiceServiceCommand(ctx context.Context, implOrFactory interface{}, o
 					if fieldErr != nil {
 						return fmt.Errorf("failed to deserialize field Address: %w", fieldErr)
 					}
-					typedField, fieldOk := fieldMsg.(*Address)
-					if !fieldOk {
-						return fmt.Errorf("custom deserializer for example.Address returned wrong type: expected *Address, got %T", fieldMsg)
+					// Handle nil return from deserializer (means skip/use default)
+					if fieldMsg != nil {
+						typedField, fieldOk := fieldMsg.(*Address)
+						if !fieldOk {
+							return fmt.Errorf("custom deserializer for example.Address returned wrong type: expected *Address, got %T", fieldMsg)
+						}
+						req.Address = typedField
 					}
-					req.Address = typedField
 				} else {
 					// No custom deserializer - check if user provided a value
 					if cmd.IsSet("address") {
 						return fmt.Errorf("flag --address requires a custom deserializer for example.Address (register with protocli.WithFlagDeserializer)")
 					}
-					// No value provided - create empty nested message
-					req.Address = &Address{}
+					// No value provided - leave field as nil
 				}
 				// Field RegistrationDate: check for custom deserializer for google.protobuf.Timestamp
 				if fieldDeserializer, hasFieldDeserializer := options.FlagDeserializer("google.protobuf.Timestamp"); hasFieldDeserializer {
 					// Use custom deserializer for nested message
-					// Create FlagContainer for field flag: registrationdate
-					fieldFlags := protocli.NewFlagContainer(cmd, "registrationdate")
+					// Create FlagContainer for field flag: registration-date
+					fieldFlags := protocli.NewFlagContainer(cmd, "registration-date")
 					fieldMsg, fieldErr := fieldDeserializer(cmdCtx, fieldFlags)
 					if fieldErr != nil {
 						return fmt.Errorf("failed to deserialize field RegistrationDate: %w", fieldErr)
 					}
-					typedField, fieldOk := fieldMsg.(*timestamppb.Timestamp)
-					if !fieldOk {
-						return fmt.Errorf("custom deserializer for google.protobuf.Timestamp returned wrong type: expected *Timestamp, got %T", fieldMsg)
+					// Handle nil return from deserializer (means skip/use default)
+					if fieldMsg != nil {
+						typedField, fieldOk := fieldMsg.(*timestamppb.Timestamp)
+						if !fieldOk {
+							return fmt.Errorf("custom deserializer for google.protobuf.Timestamp returned wrong type: expected *Timestamp, got %T", fieldMsg)
+						}
+						req.RegistrationDate = typedField
 					}
-					req.RegistrationDate = typedField
 				} else {
 					// No custom deserializer - check if user provided a value
-					if cmd.IsSet("registrationdate") {
-						return fmt.Errorf("flag --registrationdate requires a custom deserializer for google.protobuf.Timestamp (register with protocli.WithFlagDeserializer)")
+					if cmd.IsSet("registration-date") {
+						return fmt.Errorf("flag --registration-date requires a custom deserializer for google.protobuf.Timestamp (register with protocli.WithFlagDeserializer)")
 					}
-					// No value provided - create empty nested message
-					req.RegistrationDate = &timestamppb.Timestamp{}
+					// No value provided - leave field as nil
 				}
+				req.PhoneNumber = cmd.String("phone-number")
 			}
 
 			// Check if using remote gRPC call or direct implementation call
@@ -417,23 +444,180 @@ func UserServiceServiceCommand(ctx context.Context, implOrFactory interface{}, o
 			}
 			return fmt.Errorf("unknown format %q (available: %v)", formatName, availableFormats)
 		},
-		Flags: flags_createuser,
-		Name:  "createuser",
-		Usage: "Call CreateUser RPC",
+		Flags: flags_create,
+		Name:  "create",
+		Usage: "Create a new user",
 	})
 
 	return &protocli.ServiceCLI{
 		Command: &v3.Command{
 			Commands: commands,
-			Name:     "userservice",
+			Name:     "user-service",
 			Usage:    "CLI for UserService",
 		},
 		ConfigMessageType: "UserServiceConfig",
 		ConfigPrototype:   &UserServiceConfig{},
 		FactoryOrImpl:     implOrFactory,
-		RegisterFunc: func(s *grpc.Server, impl interface{}) {
+		RegisterFunc: func(s *grpc.Server, impl any) {
 			RegisterUserServiceServer(s, impl.(UserServiceServer))
 		},
-		ServiceName: "userservice",
+		ServiceName: "user-service",
+	}
+}
+
+// AdminServiceServiceCommand creates a service CLI for AdminService with options
+// The implOrFactory parameter can be either a direct service implementation or a factory function
+func AdminServiceServiceCommand(ctx context.Context, implOrFactory any, opts ...protocli.ServiceOption) *protocli.ServiceCLI {
+	options := protocli.ApplyServiceOptions(opts...)
+
+	// Determine default format (first registered format, or empty if none)
+	var defaultFormat string
+	if len(options.OutputFormats()) > 0 {
+		defaultFormat = options.OutputFormats()[0].Name()
+	}
+
+	var commands []*v3.Command
+
+	// Build flags for health
+	flags_health := []v3.Flag{&v3.StringFlag{
+		Name:  "remote",
+		Usage: "Remote gRPC server address (host:port). If set, uses gRPC client instead of direct call",
+	}, &v3.StringFlag{
+		Name:  "format",
+		Usage: "Output format (use --format to see available formats)",
+		Value: defaultFormat,
+	}, &v3.StringFlag{
+		Name:  "output",
+		Usage: "Output file (- for stdout)",
+		Value: "-",
+	}}
+
+	// Add format-specific flags from registered formats
+	for _, outputFmt := range options.OutputFormats() {
+		// Check if format implements FlagConfiguredOutputFormat
+		if flagConfigured, ok := outputFmt.(protocli.FlagConfiguredOutputFormat); ok {
+			flags_health = append(flags_health, flagConfigured.Flags()...)
+		}
+	}
+
+	commands = append(commands, &v3.Command{
+		Action: func(cmdCtx context.Context, cmd *v3.Command) error {
+			if options.BeforeCommand() != nil {
+				if err := options.BeforeCommand()(cmdCtx, cmd); err != nil {
+					return fmt.Errorf("before hook failed: %w", err)
+				}
+			}
+
+			defer func() {
+				if options.AfterCommand() != nil {
+					if err := options.AfterCommand()(cmdCtx, cmd); err != nil {
+						fmt.Fprintf(os.Stderr, "after hook failed: %v\n", err)
+					}
+				}
+			}()
+
+			// Build request message
+			var req *AdminRequest
+
+			// Check for custom flag deserializer for example.AdminRequest
+			deserializer, hasDeserializer := options.FlagDeserializer("example.AdminRequest")
+			if hasDeserializer {
+				// Use custom deserializer for top-level request
+				// Create FlagContainer (deserializer can access multiple flags via Command())
+				requestFlags := protocli.NewFlagContainer(cmd, "")
+				msg, err := deserializer(cmdCtx, requestFlags)
+				if err != nil {
+					return fmt.Errorf("custom deserializer failed: %w", err)
+				}
+				// Handle nil return from deserializer
+				if msg == nil {
+					return fmt.Errorf("custom deserializer returned nil message")
+				}
+				var ok bool
+				req, ok = msg.(*AdminRequest)
+				if !ok {
+					return fmt.Errorf("custom deserializer returned wrong type: expected *%s, got %T", "AdminRequest", msg)
+				}
+			} else {
+				// Use auto-generated flag parsing
+				req = &AdminRequest{}
+			}
+
+			// Check if using remote gRPC call or direct implementation call
+			remoteAddr := cmd.String("remote")
+			var resp *AdminResponse
+			var err error
+
+			if remoteAddr != "" {
+				// Remote gRPC call
+				conn, connErr := grpc.NewClient(remoteAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+				if connErr != nil {
+					return fmt.Errorf("failed to connect to remote %s: %w", remoteAddr, connErr)
+				}
+				defer conn.Close()
+
+				client := NewAdminServiceClient(conn)
+				resp, err = client.HealthCheck(cmdCtx, req)
+				if err != nil {
+					return fmt.Errorf("remote call failed: %w", err)
+				}
+			} else {
+				// Direct implementation call (no config)
+				svcImpl := implOrFactory.(AdminServiceServer)
+				resp, err = svcImpl.HealthCheck(cmdCtx, req)
+				if err != nil {
+					return fmt.Errorf("method failed: %w", err)
+				}
+			}
+
+			// Open output writer
+			outputWriter, err := getOutputWriter(cmd.String("output"))
+			if err != nil {
+				return fmt.Errorf("failed to open output: %w", err)
+			}
+			if closer, ok := outputWriter.(io.Closer); ok {
+				defer closer.Close()
+			}
+
+			// Find and use the appropriate output format
+			formatName := cmd.String("format")
+
+			// Try registered formats
+			for _, outputFmt := range options.OutputFormats() {
+				if outputFmt.Name() == formatName {
+					if err := outputFmt.Format(cmdCtx, cmd, outputWriter, resp); err != nil {
+						return fmt.Errorf("format failed: %w", err)
+					}
+					return nil
+				}
+			}
+
+			// Format not found - build list of available formats
+			var availableFormats []string
+			for _, f := range options.OutputFormats() {
+				availableFormats = append(availableFormats, f.Name())
+			}
+			if len(availableFormats) == 0 {
+				return fmt.Errorf("no output formats registered (use WithOutputFormats to register formats)")
+			}
+			return fmt.Errorf("unknown format %q (available: %v)", formatName, availableFormats)
+		},
+		Flags: flags_health,
+		Name:  "health",
+		Usage: "Check service health",
+	})
+
+	return &protocli.ServiceCLI{
+		Command: &v3.Command{
+			Commands: commands,
+			Name:     "admin",
+			Usage:    "Administrative operations",
+		},
+		ConfigMessageType: "",
+		FactoryOrImpl:     implOrFactory,
+		RegisterFunc: func(s *grpc.Server, impl any) {
+			RegisterAdminServiceServer(s, impl.(AdminServiceServer))
+		},
+		ServiceName: "admin",
 	}
 }

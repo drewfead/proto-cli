@@ -14,15 +14,16 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// userService implements simple.UserServiceServer
+// userService implements simple.UserServiceServer.
 type userService struct {
 	simple.UnimplementedUserServiceServer
+
 	dbURL    string
 	maxConns int64
 	users    map[int64]*simple.User
 }
 
-// newUserService is a factory function that creates a UserService with config
+// newUserService is a factory function that creates a UserService with config.
 func newUserService(config *simple.UserServiceConfig) simple.UserServiceServer {
 	log.Printf("Creating UserService with config: DB=%s, MaxConns=%d",
 		config.DatabaseUrl, config.MaxConnections)
@@ -41,7 +42,7 @@ func newUserService(config *simple.UserServiceConfig) simple.UserServiceServer {
 	}
 }
 
-func (s *userService) GetUser(ctx context.Context, req *simple.GetUserRequest) (*simple.UserResponse, error) {
+func (s *userService) GetUser(_ context.Context, req *simple.GetUserRequest) (*simple.UserResponse, error) {
 	user, exists := s.users[req.Id]
 	if !exists {
 		return &simple.UserResponse{
@@ -54,7 +55,7 @@ func (s *userService) GetUser(ctx context.Context, req *simple.GetUserRequest) (
 	}, nil
 }
 
-func (s *userService) CreateUser(ctx context.Context, req *simple.CreateUserRequest) (*simple.UserResponse, error) {
+func (s *userService) CreateUser(_ context.Context, req *simple.CreateUserRequest) (*simple.UserResponse, error) {
 	id := int64(len(s.users) + 1)
 	user := &simple.User{
 		Id:        id,
@@ -69,17 +70,29 @@ func (s *userService) CreateUser(ctx context.Context, req *simple.CreateUserRequ
 	}, nil
 }
 
+// adminService implements simple.AdminServiceServer.
+type adminService struct {
+	simple.UnimplementedAdminServiceServer
+}
+
+func (s *adminService) HealthCheck(_ context.Context, _ *simple.AdminRequest) (*simple.AdminResponse, error) {
+	return &simple.AdminResponse{
+		Message: "Service is healthy",
+		Success: true,
+	}, nil
+}
+
 func main() {
 	ctx := context.Background()
 
 	// Build service CLI with factory function, lifecycle hooks, and output formats
 	// Pass the factory function (not the impl) - config will be loaded automatically
 	userServiceCLI := simple.UserServiceServiceCommand(ctx, newUserService,
-		protocli.WithBeforeCommand(func(ctx context.Context, cmd *v3.Command) error {
+		protocli.WithBeforeCommand(func(_ context.Context, cmd *v3.Command) error {
 			log.Printf("[HOOK] Starting command: %s", cmd.Name)
 			return nil
 		}),
-		protocli.WithAfterCommand(func(ctx context.Context, cmd *v3.Command) error {
+		protocli.WithAfterCommand(func(_ context.Context, cmd *v3.Command) error {
 			log.Printf("[HOOK] Completed command: %s", cmd.Name)
 			return nil
 		}),
@@ -90,9 +103,18 @@ func main() {
 		),
 	)
 
+	// Build admin service CLI - demonstrates service name override
+	// Service name is "admin" (not "admin-service") due to cli.service annotation
+	adminServiceCLI := simple.AdminServiceServiceCommand(ctx, &adminService{},
+		protocli.WithOutputFormats(
+			protocli.JSON(),
+		),
+	)
+
 	// Create root CLI with all services using the new API
 	rootCmd := protocli.RootCommand("usercli",
 		protocli.WithService(userServiceCLI),
+		protocli.WithService(adminServiceCLI),
 		protocli.WithConfigFactory("userservice", newUserService),
 		protocli.WithEnvPrefix("USERCLI"),
 		// Config files are loaded from:

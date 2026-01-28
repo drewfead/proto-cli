@@ -13,15 +13,56 @@ linters:
     presets:
       - comments
       - common-false-positives
+    paths:
+      - tools/tools.go
+
+  disable:
+    # Overly strict linters that don't provide enough value
+    - exhaustruct        # Requiring all struct fields is too strict
+    - exhaustive         # TODO: enable this one
+    - depguard           # Import restrictions not needed yet
+    - godot              # This one is just annoying
+    - gocognit           # Cognitive complexity checks too strict
+    - protogetter        # Direct field access is fine for internal code
+    - paralleltest       # Not all tests need parallelization
+    - varnamelen         # Short variable names are fine in context
+    - mnd                # Magic number detection is too noisy
+    - funlen             # Function length limits too strict
+    - cyclop             # Cyclomatic complexity covered by gocyclo
+    - ireturn            # Returning interfaces is sometimes needed
+    - interfacebloat     # Interface size limits too strict
+    - lll                # Line length too strict
+    - wsl                # Deprecated, using wsl_v5 instead
+    - wsl_v5             # Whitespace rules too strict
+    - nlreturn           # Newline requirements too strict
+    - wrapcheck          # Error wrapping covered by err113
+    - inamedparam        # Unnamed parameters are fine for unused params
+    - testifylint        # Testify-specific, not critical
+    - perfsprint         # Performance optimizations can be done later
+    - prealloc           # Preallocation optimizations can be done later
+    - mirror             # Not critical for now
+    - goconst            # Constant extraction can be done later
+    - nestif             # Nesting complexity less important
+    - intrange           # Range optimizations can be done later
+    - modernize          # Modernization suggestions less critical
+    - unparam            # Flags interface implementations, etc
+    - noinlineerr        # Yeah IDK, I like inline errors
+
+linters-settings:
+  wsl_v5:
+    allow-cuddle-declarations: true
+    allow-trailing-comment: true
+    allow-case-trailing-whitespace: true
+    force-err-cuddling: false
+    allow-assign-and-anything: true
+    allow-separated-leading-comment: true
 
 formatters:
   enable:
     - goimports
 
 output:
-  formats:
-    checkstyle:
-      path: stderr
+  sort-results: true
   sort-order:
     - severity
     - file

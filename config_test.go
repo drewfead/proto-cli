@@ -11,15 +11,15 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-// TestUnit_ConfigLoader_FileLoading tests loading config from file readers
+// TestUnit_ConfigLoader_FileLoading tests loading config from file readers.
 func TestUnit_ConfigLoader_FileLoading(t *testing.T) {
 	tests := []struct {
-		name           string
-		yamlContent    string
-		serviceName    string
-		expectedDBURL  string
+		name            string
+		yamlContent     string
+		serviceName     string
+		expectedDBURL   string
 		expectedMaxConn int64
-		expectError    bool
+		expectError     bool
 	}{
 		{
 			name: "basic file loading",
@@ -70,20 +70,20 @@ services:
 			expectError:     false,
 		},
 		{
-			name:           "empty yaml",
-			yamlContent:    "",
-			serviceName:    "userservice",
-			expectedDBURL:  "",
+			name:            "empty yaml",
+			yamlContent:     "",
+			serviceName:     "userservice",
+			expectedDBURL:   "",
 			expectedMaxConn: 0,
-			expectError:    false,
+			expectError:     false,
 		},
 		{
-			name:           "invalid yaml",
-			yamlContent:    "invalid: yaml: content: [",
-			serviceName:    "userservice",
-			expectedDBURL:  "",
+			name:            "invalid yaml",
+			yamlContent:     "invalid: yaml: content: [",
+			serviceName:     "userservice",
+			expectedDBURL:   "",
 			expectedMaxConn: 0,
-			expectError:    true,
+			expectError:     true,
 		},
 	}
 
@@ -114,7 +114,7 @@ services:
 	}
 }
 
-// TestUnit_ConfigLoader_DeepMerge tests deep merging from multiple config sources
+// TestUnit_ConfigLoader_DeepMerge tests deep merging from multiple config sources.
 func TestUnit_ConfigLoader_DeepMerge(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -164,7 +164,7 @@ services:
 			},
 			serviceName:     "userservice",
 			expectedDBURL:   "postgresql://base:5432/db", // Only in first file
-			expectedMaxConn: 30,                           // Last override wins
+			expectedMaxConn: 30,                          // Last override wins
 		},
 		{
 			name: "empty files in sequence",
@@ -213,7 +213,7 @@ services:
 	}
 }
 
-// TestUnit_ConfigLoader_EnvVarOverrides tests environment variable overrides
+// TestUnit_ConfigLoader_EnvVarOverrides tests environment variable overrides.
 func TestUnit_ConfigLoader_EnvVarOverrides(t *testing.T) {
 	// Note: This test sets environment variables, so it might affect other tests
 	// In a real scenario, we'd want better isolation
@@ -266,7 +266,7 @@ services:
 `,
 			serviceName: "userservice",
 			envVars: map[string]string{
-				"TEST_PREFIX_DATABASE_URL":     "postgresql://fullenv:5432/db",
+				"TEST_PREFIX_DATABASE_URL":    "postgresql://fullenv:5432/db",
 				"TEST_PREFIX_MAX_CONNECTIONS": "75",
 			},
 			expectedDBURL:   "postgresql://fullenv:5432/db",
@@ -302,14 +302,14 @@ services:
 	}
 }
 
-// TestUnit_ConfigLoader_FlagOverrides tests CLI flag overrides (highest precedence)
+// TestUnit_ConfigLoader_FlagOverrides tests CLI flag overrides (highest precedence).
 func TestUnit_ConfigLoader_FlagOverrides(t *testing.T) {
 	tests := []struct {
 		name            string
 		yamlContent     string
 		serviceName     string
 		envVars         map[string]string
-		setFlags        map[string]interface{}
+		setFlags        map[string]any
 		expectedDBURL   string
 		expectedMaxConn int64
 	}{
@@ -325,7 +325,7 @@ services:
 			envVars: map[string]string{
 				"TEST_PREFIX_DATABASE_URL": "postgresql://env:5432/db",
 			},
-			setFlags: map[string]interface{}{
+			setFlags: map[string]any{
 				"db-url": "postgresql://flag:5432/db",
 			},
 			expectedDBURL:   "postgresql://flag:5432/db",
@@ -343,7 +343,7 @@ services:
 			envVars: map[string]string{
 				"TEST_PREFIX_MAX_CONNECTIONS": "50",
 			},
-			setFlags: map[string]interface{}{
+			setFlags: map[string]any{
 				"db-url": "postgresql://flagurl:5432/db",
 			},
 			expectedDBURL:   "postgresql://flagurl:5432/db",
@@ -359,10 +359,10 @@ services:
 `,
 			serviceName: "userservice",
 			envVars: map[string]string{
-				"TEST_PREFIX_DATABASE_URL":     "postgresql://env:5432/db",
+				"TEST_PREFIX_DATABASE_URL":    "postgresql://env:5432/db",
 				"TEST_PREFIX_MAX_CONNECTIONS": "60",
 			},
-			setFlags: map[string]interface{}{
+			setFlags: map[string]any{
 				"db-url":    "postgresql://topflag:5432/db",
 				"max-conns": int64(99),
 			},
@@ -413,7 +413,7 @@ services:
 	}
 }
 
-// TestUnit_ConfigLoader_DaemonMode tests that daemon mode ignores flags
+// TestUnit_ConfigLoader_DaemonMode tests that daemon mode ignores flags.
 func TestUnit_ConfigLoader_DaemonMode(t *testing.T) {
 	yamlContent := `
 services:

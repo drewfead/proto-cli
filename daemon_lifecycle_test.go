@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -15,26 +16,33 @@ import (
 	"google.golang.org/grpc"
 )
 
-// TestDaemonLifecycleHooks_StartupReadyShutdown verifies that all lifecycle hooks are called
+// TestDaemonLifecycleHooks_StartupReadyShutdown verifies that all lifecycle hooks are called..
 func TestDaemonLifecycleHooks_StartupReadyShutdown(t *testing.T) {
 	var (
+		mu             sync.Mutex
 		startupCalled  bool
 		readyCalled    bool
 		shutdownCalled bool
 	)
 
-	startup := func(ctx context.Context, server *grpc.Server, mux *runtime.ServeMux) error {
+	startup := func(_ context.Context, server *grpc.Server, _ *runtime.ServeMux) error {
+		mu.Lock()
 		startupCalled = true
+		mu.Unlock()
 		assert.NotNil(t, server, "gRPC server should not be nil")
 		return nil
 	}
 
-	ready := func(ctx context.Context) {
+	ready := func(_ context.Context) {
+		mu.Lock()
 		readyCalled = true
+		mu.Unlock()
 	}
 
 	shutdown := func(ctx context.Context) {
+		mu.Lock()
 		shutdownCalled = true
+		mu.Unlock()
 		// Verify context has deadline (from graceful shutdown timeout)
 		_, hasDeadline := ctx.Deadline()
 		assert.True(t, hasDeadline, "shutdown context should have deadline")
@@ -61,24 +69,31 @@ func TestDaemonLifecycleHooks_StartupReadyShutdown(t *testing.T) {
 	time.Sleep(500 * time.Millisecond)
 
 	// Verify startup and ready hooks were called
-	assert.True(t, startupCalled, "OnDaemonStartup should be called")
-	assert.True(t, readyCalled, "OnDaemonReady should be called")
+	mu.Lock()
+	startupWasCalled := startupCalled
+	readyWasCalled := readyCalled
+	mu.Unlock()
+	assert.True(t, startupWasCalled, "OnDaemonStartup should be called")
+	assert.True(t, readyWasCalled, "OnDaemonReady should be called")
 
 	// Send SIGTERM to trigger shutdown
 	proc, _ := os.FindProcess(os.Getpid())
-	proc.Signal(syscall.SIGTERM)
+	_ = proc.Signal(syscall.SIGTERM)
 
 	// Wait for shutdown
 	time.Sleep(1 * time.Second)
 
 	// Verify shutdown hook was called
-	assert.True(t, shutdownCalled, "OnDaemonShutdown should be called")
+	mu.Lock()
+	shutdownWasCalled := shutdownCalled
+	mu.Unlock()
+	assert.True(t, shutdownWasCalled, "OnDaemonShutdown should be called")
 }
 
-// TestDaemonLifecycleHooks_StartupError verifies that startup error prevents daemon from starting
+// TestDaemonLifecycleHooks_StartupError verifies that startup error prevents daemon from starting..
 func TestDaemonLifecycleHooks_StartupError(t *testing.T) {
-	startupWithError := func(ctx context.Context, server *grpc.Server, mux *runtime.ServeMux) error {
-		return fmt.Errorf("startup validation failed")
+	startupWithError := func(_ context.Context, _ *grpc.Server, _ *runtime.ServeMux) error {
+		return fmt.Errorf("%w: startup validation failed", assert.AnError)
 	}
 
 	ctx := context.Background()
@@ -95,34 +110,49 @@ func TestDaemonLifecycleHooks_StartupError(t *testing.T) {
 	assert.Contains(t, err.Error(), "startup validation failed")
 }
 
-// TestDaemonLifecycleHooks_MultipleHooks verifies multiple hooks run in correct order
+// TestDaemonLifecycleHooks_MultipleHooks verifies multiple hooks run in correct order..
 func TestDaemonLifecycleHooks_MultipleHooks(t *testing.T) {
-	var callOrder []string
+	var (
+		mu        sync.Mutex
+		callOrder []string
+	)
 
-	startup1 := func(ctx context.Context, server *grpc.Server, mux *runtime.ServeMux) error {
+	startup1 := func(_ context.Context, _ *grpc.Server, _ *runtime.ServeMux) error {
+		mu.Lock()
 		callOrder = append(callOrder, "startup1")
+		mu.Unlock()
 		return nil
 	}
 
-	startup2 := func(ctx context.Context, server *grpc.Server, mux *runtime.ServeMux) error {
+	startup2 := func(_ context.Context, _ *grpc.Server, _ *runtime.ServeMux) error {
+		mu.Lock()
 		callOrder = append(callOrder, "startup2")
+		mu.Unlock()
 		return nil
 	}
 
-	ready1 := func(ctx context.Context) {
+	ready1 := func(_ context.Context) {
+		mu.Lock()
 		callOrder = append(callOrder, "ready1")
+		mu.Unlock()
 	}
 
-	ready2 := func(ctx context.Context) {
+	ready2 := func(_ context.Context) {
+		mu.Lock()
 		callOrder = append(callOrder, "ready2")
+		mu.Unlock()
 	}
 
-	shutdown1 := func(ctx context.Context) {
+	shutdown1 := func(_ context.Context) {
+		mu.Lock()
 		callOrder = append(callOrder, "shutdown1")
+		mu.Unlock()
 	}
 
-	shutdown2 := func(ctx context.Context) {
+	shutdown2 := func(_ context.Context) {
+		mu.Lock()
 		callOrder = append(callOrder, "shutdown2")
+		mu.Unlock()
 	}
 
 	ctx := context.Background()
@@ -149,7 +179,7 @@ func TestDaemonLifecycleHooks_MultipleHooks(t *testing.T) {
 
 	// Send SIGTERM
 	proc, _ := os.FindProcess(os.Getpid())
-	proc.Signal(syscall.SIGTERM)
+	_ = proc.Signal(syscall.SIGTERM)
 
 	// Wait for shutdown
 	time.Sleep(1 * time.Second)
@@ -167,15 +197,20 @@ func TestDaemonLifecycleHooks_MultipleHooks(t *testing.T) {
 		"shutdown1",
 	}
 
-	assert.Equal(t, expectedOrder, callOrder, "Hooks should run in correct order")
+	mu.Lock()
+	actualOrder := make([]string, len(callOrder))
+	copy(actualOrder, callOrder)
+	mu.Unlock()
+
+	assert.Equal(t, expectedOrder, actualOrder, "Hooks should run in correct order")
 }
 
-// TestDaemonLifecycleHooks_GracefulShutdownTimeout verifies timeout behavior
+// TestDaemonLifecycleHooks_GracefulShutdownTimeout verifies timeout behavior.
 func TestDaemonLifecycleHooks_GracefulShutdownTimeout(t *testing.T) {
 	shutdownStarted := make(chan time.Time, 1)
 	shutdownCompleted := make(chan time.Time, 1)
 
-	shutdown := func(ctx context.Context) {
+	shutdown := func(_ context.Context) {
 		shutdownStarted <- time.Now()
 		// Simulate slow shutdown
 		time.Sleep(500 * time.Millisecond)
@@ -201,7 +236,7 @@ func TestDaemonLifecycleHooks_GracefulShutdownTimeout(t *testing.T) {
 
 	// Send SIGTERM
 	proc, _ := os.FindProcess(os.Getpid())
-	proc.Signal(syscall.SIGTERM)
+	_ = proc.Signal(syscall.SIGTERM)
 
 	// Wait for shutdown
 	time.Sleep(2 * time.Second)
@@ -215,17 +250,22 @@ func TestDaemonLifecycleHooks_GracefulShutdownTimeout(t *testing.T) {
 	}
 }
 
-// TestDaemonLifecycleHooks_AccessToServerInStartup verifies startup hook can configure server
+// TestDaemonLifecycleHooks_AccessToServerInStartup verifies startup hook can configure server.
 func TestDaemonLifecycleHooks_AccessToServerInStartup(t *testing.T) {
-	var serverConfigured bool
+	var (
+		mu               sync.Mutex
+		serverConfigured bool
+	)
 
-	startup := func(ctx context.Context, server *grpc.Server, mux *runtime.ServeMux) error {
+	startup := func(_ context.Context, server *grpc.Server, _ *runtime.ServeMux) error {
 		// Startup hook has access to gRPC server before it starts
 		// This allows configuring server, adding interceptors, etc.
 		assert.NotNil(t, server)
 
 		// Example: Could register additional interceptors, configure server, etc.
+		mu.Lock()
 		serverConfigured = true
+		mu.Unlock()
 		return nil
 	}
 
@@ -245,19 +285,22 @@ func TestDaemonLifecycleHooks_AccessToServerInStartup(t *testing.T) {
 	// Wait for server to start
 	time.Sleep(500 * time.Millisecond)
 
-	assert.True(t, serverConfigured, "Server should be configured in startup hook")
+	mu.Lock()
+	configured := serverConfigured
+	mu.Unlock()
+	assert.True(t, configured, "Server should be configured in startup hook")
 
 	// Cleanup
 	proc, _ := os.FindProcess(os.Getpid())
-	proc.Signal(syscall.SIGTERM)
+	_ = proc.Signal(syscall.SIGTERM)
 	time.Sleep(500 * time.Millisecond)
 }
 
-// Helper: userService implementation for tests
+// Helper: userService implementation for tests.
 type testUserService struct {
 	simple.UnimplementedUserServiceServer
 }
 
-func newUserService(config *simple.UserServiceConfig) simple.UserServiceServer {
+func newUserService(_ *simple.UserServiceConfig) simple.UserServiceServer {
 	return &testUserService{}
 }
