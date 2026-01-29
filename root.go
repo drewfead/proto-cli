@@ -114,7 +114,7 @@ func NewDaemonizeCommand(_ context.Context, services []*ServiceCLI, _ ServiceCon
 			// Create minimal root options for single-service mode
 			rootOpts := ApplyRootOptions()
 			for _, svc := range services {
-				rootOpts = ApplyRootOptions(WithService(svc))
+				rootOpts = ApplyRootOptions(Service(svc))
 			}
 			return runDaemon(ctx, cmd, services, rootOpts)
 		},
@@ -214,7 +214,7 @@ func RootCommand(appName string, opts ...RootOption) (*cli.Command, error) {
 		&cli.StringFlag{
 			Name:    "verbosity",
 			Aliases: []string{"v"},
-			Value:   "info",
+			Value:   options.DefaultVerbosity(),
 			Usage:   "Log verbosity level (debug/4, info/3, warn/2, error/1, none/0)",
 		},
 	}
@@ -234,6 +234,16 @@ func RootCommand(appName string, opts ...RootOption) (*cli.Command, error) {
 			setupSlog(ctx, cmd.Root(), false, options.SlogConfig())
 		}
 		return ctx, nil
+	}
+
+	// Apply help customization if provided
+	if helpCustom := options.HelpCustomization(); helpCustom != nil {
+		// Set custom help templates if provided
+		if helpCustom.RootCommandHelpTemplate != "" {
+			rootCmd.CustomRootCommandHelpTemplate = helpCustom.RootCommandHelpTemplate
+		}
+		// Note: CommandHelpTemplate and SubcommandHelpTemplate are global in urfave/cli
+		// They would need to be set via cli.CommandHelpTemplate and cli.SubcommandHelpTemplate
 	}
 
 	return rootCmd, nil

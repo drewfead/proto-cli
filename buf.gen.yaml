@@ -1,6 +1,8 @@
 version: v2
 managed:
   enabled: true
+  disable:
+    - module: buf.build/fernet/proto-cli
   override:
     - file_option: go_package_prefix
       value: github.com/drewfead/proto-cli
@@ -9,7 +11,6 @@ plugins:
     out: .
     opt:
       - paths=source_relative
-      - Minternal/clipb/cli.proto=github.com/drewfead/proto-cli/internal/clipb
   - local: ["go", "run", "google.golang.org/grpc/cmd/protoc-gen-go-grpc"]
     out: .
     opt:

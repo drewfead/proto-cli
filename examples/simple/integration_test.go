@@ -85,7 +85,7 @@ services:
 
 	// Create root CLI
 	_, err = protocli.RootCommand("testcli",
-		protocli.WithService(userServiceCLI),
+		protocli.Service(userServiceCLI),
 		protocli.WithConfigFactory("userservice", newUserService),
 		protocli.WithEnvPrefix("TESTCLI"),
 		protocli.WithConfigFile(configFile),

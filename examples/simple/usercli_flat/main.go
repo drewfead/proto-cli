@@ -75,11 +75,11 @@ func main() {
 
 	// Create service CLI with configuration
 	userServiceCLI := simple.UserServiceCommand(ctx, newUserService,
-		protocli.WithBeforeCommand(func(_ context.Context, cmd *v3.Command) error {
+		protocli.BeforeCommand(func(_ context.Context, cmd *v3.Command) error {
 			log.Printf("[HOOK] Starting command: %s", cmd.Name)
 			return nil
 		}),
-		protocli.WithAfterCommand(func(_ context.Context, cmd *v3.Command) error {
+		protocli.AfterCommand(func(_ context.Context, cmd *v3.Command) error {
 			log.Printf("[HOOK] Completed command: %s", cmd.Name)
 			return nil
 		}),
@@ -93,7 +93,7 @@ func main() {
 	// Create root command with hoisted service (flat command structure)
 	// RPC commands appear at root level as siblings of daemonize
 	rootCmd, err := protocli.RootCommand("usercli-flat",
-		protocli.WithService(userServiceCLI, protocli.Hoisted()),
+		protocli.Service(userServiceCLI, protocli.Hoisted()),
 		protocli.WithEnvPrefix("USERCLI"),
 	)
 	if err != nil {

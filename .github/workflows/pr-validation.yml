@@ -1,0 +1,73 @@
+name: PR Validation
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'proto/**'
+      - 'buf.yaml'
+      - 'buf.gen.yaml'
+      - 'buf.lock'
+      - '.github/workflows/pr-validation.yml'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for breaking change detection
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Buf Setup
+        uses: bufbuild/buf-action@v1
+        with:
+          setup_only: true
+
+      - name: Buf Lint
+        run: buf lint
+
+      - name: Buf Breaking Change Detection
+        # Only run on PRs (not on first push)
+        if: github.event_name == 'pull_request'
+        run: |
+          # Compare against the main branch
+          buf breaking --against '.git#branch=origin/main,subdir=proto'
+
+      - name: Buf Build
+        run: buf build
+
+      - name: Generate Proto Files
+        run: make generate
+
+      - name: Verify Generated Files Are Up To Date
+        run: |
+          if ! git diff --exit-code; then
+            echo "Generated files are out of date. Please run 'make generate' and commit the changes."
+            exit 1
+          fi
+
+      - name: Run Tests
+        run: go test ./...
+
+  format-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Buf Format Check
+        uses: bufbuild/buf-action@v1
+        with:
+          format: true

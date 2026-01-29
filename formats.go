@@ -1,10 +1,12 @@
 package protocli
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"text/template"
 
 	"github.com/urfave/cli/v3"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -211,4 +213,146 @@ func YAML() OutputFormat {
 // Go returns a new Go-style output format (uses %+v).
 func Go() OutputFormat {
 	return &goFormat{}
+}
+
+// templateFormat renders proto messages using Go text templates.
+// Templates are keyed by fully qualified message type name.
+type templateFormat struct {
+	name      string
+	templates map[string]*template.Template // Parsed templates keyed by message type name
+	funcMap   template.FuncMap              // Custom template functions
+}
+
+func (f *templateFormat) Name() string {
+	return f.name
+}
+
+func (f *templateFormat) Format(_ context.Context, _ *cli.Command, w io.Writer, msg proto.Message) error {
+	// Get the fully qualified message type name
+	msgType := string(msg.ProtoReflect().Descriptor().FullName())
+
+	// Look up the template for this message type
+	tmpl, ok := f.templates[msgType]
+	if !ok {
+		return fmt.Errorf("no template registered for message type %s (available: %v)", msgType, f.availableTypes())
+	}
+
+	// Convert proto message to map for easier template access
+	data, err := protoToMap(msg)
+	if err != nil {
+		return fmt.Errorf("failed to convert proto message to map: %w", err)
+	}
+
+	// Execute the template
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return fmt.Errorf("failed to execute template for %s: %w", msgType, err)
+	}
+
+	// Write the result
+	_, err = w.Write(buf.Bytes())
+	return err
+}
+
+// availableTypes returns a list of available message types for error messages
+func (f *templateFormat) availableTypes() []string {
+	types := make([]string, 0, len(f.templates))
+	for t := range f.templates {
+		types = append(types, t)
+	}
+	return types
+}
+
+// protoToMap converts a proto message to a map[string]any for template rendering.
+// This makes it easier to access fields in templates using dot notation.
+func protoToMap(msg proto.Message) (map[string]any, error) {
+	// Convert to JSON first
+	marshaler := protojson.MarshalOptions{
+		EmitUnpopulated: true,
+	}
+	jsonBytes, err := marshaler.Marshal(msg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal to JSON: %w", err)
+	}
+
+	// Parse JSON to map
+	var data map[string]any
+	if err := json.Unmarshal(jsonBytes, &data); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal JSON: %w", err)
+	}
+
+	return data, nil
+}
+
+// TemplateFormat creates an output format that renders proto messages using Go text templates.
+//
+// Templates are specified as a map from fully qualified message type name to template string.
+// The message type name format is "package.MessageName" (e.g., "example.UserResponse").
+//
+// Templates have access to all message fields as a map[string]any, making field access
+// straightforward using Go template syntax like {{.FieldName}}.
+//
+// Optional function maps can be provided to add custom template functions.
+//
+// Example:
+//
+//	templates := map[string]string{
+//	    "example.UserResponse": `User: {{.user.name}} ({{.user.email}})
+//	ID: {{.user.id}}
+//	{{if .user.verified}}✓ Verified{{else}}✗ Not verified{{end}}`,
+//	}
+//
+//	format := protocli.TemplateFormat("user-table", templates)
+//
+// With custom functions:
+//
+//	funcMap := template.FuncMap{
+//	    "upper": strings.ToUpper,
+//	    "date": func(ts string) string {
+//	        // Custom date formatting
+//	        return formattedDate
+//	    },
+//	}
+//
+//	format := protocli.TemplateFormat("custom", templates, funcMap)
+func TemplateFormat(name string, templates map[string]string, funcMaps ...template.FuncMap) (OutputFormat, error) {
+	// Merge all function maps
+	funcMap := template.FuncMap{}
+	for _, fm := range funcMaps {
+		for k, v := range fm {
+			funcMap[k] = v
+		}
+	}
+
+	// Parse all templates
+	parsed := make(map[string]*template.Template)
+	for msgType, tmplStr := range templates {
+		tmpl, err := template.New(msgType).Funcs(funcMap).Parse(tmplStr)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse template for %s: %w", msgType, err)
+		}
+		parsed[msgType] = tmpl
+	}
+
+	return &templateFormat{
+		name:      name,
+		templates: parsed,
+		funcMap:   funcMap,
+	}, nil
+}
+
+// MustTemplateFormat is like TemplateFormat but panics on error.
+// Useful for package-level initialization where template errors should be caught at startup.
+//
+// Example:
+//
+//	var userFormat = protocli.MustTemplateFormat("user", map[string]string{
+//	    "example.UserResponse": `{{.user.name}} <{{.user.email}}>`,
+//	})
+func MustTemplateFormat(name string, templates map[string]string, funcMaps ...template.FuncMap) OutputFormat {
+	format, err := TemplateFormat(name, templates, funcMaps...)
+	if err != nil {
+		panic(fmt.Sprintf("failed to create template format: %v", err))
+	}
+	return format
 }

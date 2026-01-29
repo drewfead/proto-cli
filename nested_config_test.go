@@ -373,7 +373,7 @@ services:
 	userServiceCLI := simple.UserServiceCommand(ctx, factory)
 
 	rootCmd, err := protocli.RootCommand("nestedcli",
-		protocli.WithService(userServiceCLI),
+		protocli.Service(userServiceCLI),
 		protocli.WithConfigFactory("userservice", factory),
 		protocli.WithEnvPrefix("NESTEDCLI"),
 		protocli.WithConfigFile(tmpFile.Name()),

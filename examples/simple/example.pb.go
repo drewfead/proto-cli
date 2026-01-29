@@ -971,15 +971,32 @@ const file_examples_simple_example_proto_rawDesc = "" +
 	"\x05DEBUG\x10\x01\x12\b\n" +
 	"\x04INFO\x10\x02\x12\b\n" +
 	"\x04WARN\x10\x03\x12\t\n" +
-	"\x05ERROR\x10\x042\xc2\x02\n" +
-	"\vUserService\x12[\n" +
-	"\aGetUser\x12\x17.example.GetUserRequest\x1a\x15.example.UserResponse\" \x8a\xb5\x18\x1c\n" +
-	"\x03get\x12\x15Retrieve a user by ID\x12`\n" +
+	"\x05ERROR\x10\x042\x94\n" +
+	"\n" +
+	"\vUserService\x12\xb5\x05\n" +
+	"\aGetUser\x12\x17.example.GetUserRequest\x1a\x15.example.UserResponse\"\xf9\x04\x8a\xb5\x18\xf4\x04\n" +
+	"\x03get\x12\x15Retrieve a user by ID\x1a\x95\x04Fetch detailed information about a user from the database.\n" +
+	"\n" +
+	"This command queries the user service to retrieve a user record by their unique ID. You can optionally include additional details like profile information and preferences. Use --fields to specify which fields to return in the response.\n" +
+	"\n" +
+	"Examples:\n" +
+	"  Get basic user info:       usercli user-service get --id 123\n" +
+	"  Get with details:          usercli user-service get --id 123 --include-details\n" +
+	"  Get specific fields:       usercli user-service get --id 123 --fields name,email\">get --id <user-id> [--include-details] [--fields <field-list>]\x12`\n" +
 	"\n" +
 	"CreateUser\x12\x1a.example.CreateUserRequest\x1a\x15.example.UserResponse\"\x1f\x8a\xb5\x18\x1b\n" +
 	"\x06create\x12\x11Create a new user\x12[\n" +
 	"\tListUsers\x12\x17.example.GetUserRequest\x1a\x15.example.UserResponse\"\x1a\x8a\xb5\x18\x16\n" +
-	"\x04list\x12\x0eList all users(\x010\x01\x1a\x17\x9a\xb5\x18\x13\n" +
+	"\x04list\x12\x0eList all users(\x010\x01\x1a\x8d\x03\x82\xb5\x18\xf1\x02\n" +
+	"\fuser-service\x12\x18User management commands\x1a\xc6\x02Comprehensive user management service for CRUD operations.\n" +
+	"\n" +
+	"This service provides complete user lifecycle management including:\n" +
+	"- Creating new user accounts\n" +
+	"- Retrieving user information\n" +
+	"- Updating user profiles\n" +
+	"- Managing user authentication and preferences\n" +
+	"\n" +
+	"All commands require appropriate authentication and authorization.\x9a\xb5\x18\x13\n" +
 	"\x11UserServiceConfig2\x98\x01\n" +
 	"\fAdminService\x12`\n" +
 	"\vHealthCheck\x12\x15.example.AdminRequest\x1a\x16.example.AdminResponse\"\"\x8a\xb5\x18\x1e\n" +

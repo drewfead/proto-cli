@@ -8,7 +8,7 @@
 // The Option type provides a functional options pattern for configuring CLI behavior:
 //
 //	cmd := proto.BuildUserServiceCLI(ctx, impl,
-//	    protocli.WithBeforeCommand(func(ctx context.Context, cmd *cli.Command) error {
+//	    protocli.BeforeCommand(func(ctx context.Context, cmd *cli.Command) error {
 //	        log.Printf("Running command: %s", cmd.Name)
 //	        return nil
 //	    }),
@@ -78,4 +78,23 @@
 //
 // The Flags() method is optional - implement it only if your format needs custom flags.
 // The generated CLI code checks for the FlagConfiguredOutputFormat interface at runtime.
+//
+// # Template-Based Formats
+//
+// For simpler cases, use TemplateFormat to create formats using Go text templates:
+//
+//	templates := map[string]string{
+//	    "example.UserResponse": `User: {{.user.name}} ({{.user.email}})`,
+//	    "example.CreateUserRequest": `Creating: {{.name}}`,
+//	}
+//	format, err := protocli.TemplateFormat("user-compact", templates)
+//
+// Templates support:
+//   - Field access: {{.fieldName}}
+//   - Conditionals: {{if .field}}...{{end}}
+//   - Loops: {{range .list}}...{{end}}
+//   - Custom functions via template.FuncMap
+//   - Nested fields: {{.user.address.city}}
+//
+// Message types are identified by fully qualified name (e.g., "example.UserResponse").
 package protocli

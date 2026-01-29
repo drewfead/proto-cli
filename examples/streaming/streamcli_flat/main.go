@@ -86,7 +86,7 @@ func main() {
 
 	// Create root command with hoisted service (flat command structure)
 	rootCmd, err := protocli.RootCommand("streamcli-flat",
-		protocli.WithService(streamingServiceCLI, protocli.Hoisted()),
+		protocli.Service(streamingServiceCLI, protocli.Hoisted()),
 		protocli.WithEnvPrefix("STREAMCLI"),
 	)
 	if err != nil {

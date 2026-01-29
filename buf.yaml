@@ -1,4 +1,7 @@
 version: v2
+modules:
+  - path: proto
+    name: buf.build/fernet/proto-cli
 lint:
   use:
     - STANDARD

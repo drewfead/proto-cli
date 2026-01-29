@@ -1,0 +1,51 @@
+name: Publish to BSR
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'proto/**'
+      - 'buf.yaml'
+      - 'buf.lock'
+
+  # Allow manual trigger
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Buf Setup
+        uses: bufbuild/buf-action@v1
+        with:
+          setup_only: true
+
+      - name: Buf Format Check
+        run: buf format -d --exit-code
+
+      - name: Buf Lint
+        run: buf lint
+
+      - name: Buf Build
+        run: buf build
+
+      - name: Buf Push
+        uses: bufbuild/buf-action@v1
+        with:
+          token: ${{ secrets.BUF_TOKEN }}
+          push: true
+
+      - name: Comment on Commit
+        if: success()
+        run: |
+          echo "✅ Successfully pushed to buf.build/fernet/proto-cli"
+          echo "View at: https://buf.build/fernet/proto-cli"

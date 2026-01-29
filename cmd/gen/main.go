@@ -7,7 +7,7 @@ import (
 	"unicode"
 
 	"github.com/dave/jennifer/jen"
-	"github.com/drewfead/proto-cli/internal/clipb"
+	annotations "github.com/drewfead/proto-cli/proto/cli/v1"
 	"google.golang.org/protobuf/compiler/protogen"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -41,11 +41,19 @@ func generateFile(gen *protogen.Plugin, file *protogen.File) {
 	f.Line()
 
 	// Generate helper function for output writer (only once per file)
-	f.Comment("getOutputWriter opens the specified output file or returns stdout")
+	f.Comment("getOutputWriter opens the specified output file or returns cmd.Writer (if set) or stdout")
 	f.Func().Id("getOutputWriter").Params(
+		jen.Id("cmd").Op("*").Qual("github.com/urfave/cli/v3", "Command"),
 		jen.Id("path").String(),
 	).Params(jen.Qual("io", "Writer"), jen.Error()).Block(
 		jen.If(jen.Id("path").Op("==").Lit("-").Op("||").Id("path").Op("==").Lit("")).Block(
+			jen.Comment("Use cmd.Writer if set, otherwise try root command's Writer, otherwise stdout"),
+			jen.If(jen.Id("cmd").Dot("Writer").Op("!=").Nil()).Block(
+				jen.Return(jen.Id("cmd").Dot("Writer"), jen.Nil()),
+			),
+			jen.If(jen.Id("cmd").Dot("Root").Call().Dot("Writer").Op("!=").Nil()).Block(
+				jen.Return(jen.Id("cmd").Dot("Root").Call().Dot("Writer"), jen.Nil()),
+			),
 			jen.Return(jen.Qual("os", "Stdout"), jen.Nil()),
 		),
 		jen.Return(jen.Qual("os", "Create").Call(jen.Id("path"))),
@@ -73,22 +81,22 @@ func generateFile(gen *protogen.Plugin, file *protogen.File) {
 }
 
 // getServiceConfigOptions extracts the service_config extension from service options.
-func getServiceConfigOptions(service *protogen.Service) *clipb.ServiceConfigOptions {
+func getServiceConfigOptions(service *protogen.Service) *annotations.ServiceConfigOptions {
 	opts := service.Desc.Options()
 	if opts == nil {
 		return nil
 	}
 
-	if !proto.HasExtension(opts, clipb.E_ServiceConfig) {
+	if !proto.HasExtension(opts, annotations.E_ServiceConfig) {
 		return nil
 	}
 
-	ext := proto.GetExtension(opts, clipb.E_ServiceConfig)
+	ext := proto.GetExtension(opts, annotations.E_ServiceConfig)
 	if ext == nil {
 		return nil
 	}
 
-	configOpts, ok := ext.(*clipb.ServiceConfigOptions)
+	configOpts, ok := ext.(*annotations.ServiceConfigOptions)
 	if !ok {
 		return nil
 	}
@@ -137,18 +145,18 @@ func stripServiceSuffix(s string) string {
 }
 
 // getServiceOptions extracts (cli.service) annotation from a service.
-func getServiceOptions(service *protogen.Service) *clipb.ServiceOptions {
+func getServiceOptions(service *protogen.Service) *annotations.ServiceOptions {
 	opts := service.Desc.Options()
 	if opts == nil {
 		return nil
 	}
 
-	ext := proto.GetExtension(opts, clipb.E_Service)
+	ext := proto.GetExtension(opts, annotations.E_Service)
 	if ext == nil {
 		return nil
 	}
 
-	serviceOpts, ok := ext.(*clipb.ServiceOptions)
+	serviceOpts, ok := ext.(*annotations.ServiceOptions)
 	if !ok {
 		return nil
 	}
@@ -157,18 +165,18 @@ func getServiceOptions(service *protogen.Service) *clipb.ServiceOptions {
 }
 
 // getMethodCommandOptions extracts (cli.command) annotation from a method.
-func getMethodCommandOptions(method *protogen.Method) *clipb.CommandOptions {
+func getMethodCommandOptions(method *protogen.Method) *annotations.CommandOptions {
 	opts := method.Desc.Options()
 	if opts == nil {
 		return nil
 	}
 
-	ext := proto.GetExtension(opts, clipb.E_Command)
+	ext := proto.GetExtension(opts, annotations.E_Command)
 	if ext == nil {
 		return nil
 	}
 
-	cmdOpts, ok := ext.(*clipb.CommandOptions)
+	cmdOpts, ok := ext.(*annotations.CommandOptions)
 	if !ok {
 		return nil
 	}
@@ -259,28 +267,53 @@ func generateServiceCommands(file *protogen.File, service *protogen.Service) []j
 		}
 	}
 
-	// Get service name from annotation or use kebab-case default
+	// Get service name and help fields from annotation or use defaults
 	serviceName := toKebabCase(service.GoName)
-	serviceOpts := getServiceOptions(service)
-	if serviceOpts != nil && serviceOpts.Name != "" {
-		serviceName = serviceOpts.Name
-	}
+	serviceDescription := stripServiceSuffix(service.GoName) + " commands" // Short description
+	var serviceLongDescription, serviceUsageText, serviceArgsUsage string   // Long description, custom usage, args
 
-	// Get service description from annotation or use default
-	serviceDescription := stripServiceSuffix(service.GoName) + " commands"
-	if serviceOpts != nil && serviceOpts.Description != "" {
-		serviceDescription = serviceOpts.Description
+	serviceOpts := getServiceOptions(service)
+	if serviceOpts != nil {
+		if serviceOpts.Name != "" {
+			serviceName = serviceOpts.Name
+		}
+		if serviceOpts.Description != "" {
+			serviceDescription = serviceOpts.Description
+		}
+		if serviceOpts.LongDescription != "" {
+			serviceLongDescription = serviceOpts.LongDescription
+		}
+		if serviceOpts.UsageText != "" {
+			serviceUsageText = serviceOpts.UsageText
+		}
+		if serviceOpts.ArgsUsage != "" {
+			serviceArgsUsage = serviceOpts.ArgsUsage
+		}
 	}
 
 	registerFunc := "Register" + service.GoName + "Server"
 
+	// Build service command dict with help fields
+	serviceCommandDict := jen.Dict{
+		jen.Id("Name"):     jen.Lit(serviceName),
+		jen.Id("Usage"):    jen.Lit(serviceDescription),
+		jen.Id("Commands"): jen.Id("commands"),
+	}
+
+	// Add optional help fields to service command if provided
+	if serviceLongDescription != "" {
+		serviceCommandDict[jen.Id("Description")] = jen.Lit(serviceLongDescription)
+	}
+	if serviceUsageText != "" {
+		serviceCommandDict[jen.Id("UsageText")] = jen.Lit(serviceUsageText)
+	}
+	if serviceArgsUsage != "" {
+		serviceCommandDict[jen.Id("ArgsUsage")] = jen.Lit(serviceArgsUsage)
+	}
+
 	// Build the ServiceCLI dict
 	serviceCLIDict := jen.Dict{
-		jen.Id("Command"): jen.Op("&").Qual("github.com/urfave/cli/v3", "Command").Values(jen.Dict{
-			jen.Id("Name"):     jen.Lit(serviceName),
-			jen.Id("Usage"):    jen.Lit(serviceDescription),
-			jen.Id("Commands"): jen.Id("commands"),
-		}),
+		jen.Id("Command"): jen.Op("&").Qual("github.com/urfave/cli/v3", "Command").Values(serviceCommandDict),
 		jen.Id("ServiceName"):       jen.Lit(serviceName),
 		jen.Id("ConfigMessageType"): jen.Lit(configMessageType),
 		jen.Id("FactoryOrImpl"):     jen.Id("implOrFactory"),
@@ -425,9 +458,10 @@ func generateServiceCommandsFlat(file *protogen.File, service *protogen.Service)
 func generateMethodCommand(service *protogen.Service, method *protogen.Method, configMessageType string, file *protogen.File) []jen.Code {
 	var statements []jen.Code
 
-	// Get command name from annotation or use kebab-case default
+	// Get command name and help fields from annotation or use defaults
 	cmdName := toKebabCase(method.GoName)
-	cmdUsage := method.GoName
+	cmdUsage := method.GoName                          // Short description for Usage field
+	var cmdDescription, cmdUsageText, cmdArgsUsage string // Long description, custom usage line, args
 
 	cmdOpts := getMethodCommandOptions(method)
 	if cmdOpts != nil {
@@ -435,9 +469,21 @@ func generateMethodCommand(service *protogen.Service, method *protogen.Method, c
 		if cmdOpts.Name != "" {
 			cmdName = cmdOpts.Name
 		}
-		// Use description if provided
+		// Use description if provided (short one-liner)
 		if cmdOpts.Description != "" {
 			cmdUsage = cmdOpts.Description
+		}
+		// Use long_description for detailed explanation
+		if cmdOpts.LongDescription != "" {
+			cmdDescription = cmdOpts.LongDescription
+		}
+		// Use custom usage_text to override auto-generated USAGE line
+		if cmdOpts.UsageText != "" {
+			cmdUsageText = cmdOpts.UsageText
+		}
+		// Use args_usage for argument description
+		if cmdOpts.ArgsUsage != "" {
+			cmdArgsUsage = cmdOpts.ArgsUsage
 		}
 	}
 
@@ -502,21 +548,35 @@ func generateMethodCommand(service *protogen.Service, method *protogen.Method, c
 		jen.Line(),
 	)
 
+	// Build command dict with help fields
+	cmdDict := jen.Dict{
+		jen.Id("Name"):  jen.Lit(cmdName),
+		jen.Id("Usage"): jen.Lit(cmdUsage),
+		jen.Id("Flags"): jen.Id("flags_" + cmdVarName),
+		jen.Id("Action"): jen.Func().Params(
+			jen.Id("cmdCtx").Qual("context", "Context"),
+			jen.Id("cmd").Op("*").Qual("github.com/urfave/cli/v3", "Command"),
+		).Error().Block(
+			generateActionBodyWithHooks(file, service, method, configMessageType)...,
+		),
+	}
+
+	// Add optional help fields if provided
+	if cmdDescription != "" {
+		cmdDict[jen.Id("Description")] = jen.Lit(cmdDescription)
+	}
+	if cmdUsageText != "" {
+		cmdDict[jen.Id("UsageText")] = jen.Lit(cmdUsageText)
+	}
+	if cmdArgsUsage != "" {
+		cmdDict[jen.Id("ArgsUsage")] = jen.Lit(cmdArgsUsage)
+	}
+
 	// Generate the command with lifecycle hooks
 	statements = append(statements,
 		jen.Id("commands").Op("=").Append(
 			jen.Id("commands"),
-			jen.Op("&").Qual("github.com/urfave/cli/v3", "Command").Values(jen.Dict{
-				jen.Id("Name"):  jen.Lit(cmdName),
-				jen.Id("Usage"): jen.Lit(cmdUsage),
-				jen.Id("Flags"): jen.Id("flags_" + cmdVarName),
-				jen.Id("Action"): jen.Func().Params(
-					jen.Id("cmdCtx").Qual("context", "Context"),
-					jen.Id("cmd").Op("*").Qual("github.com/urfave/cli/v3", "Command"),
-				).Error().Block(
-					generateActionBodyWithHooks(file, service, method, configMessageType)...,
-				),
-			}),
+			jen.Op("&").Qual("github.com/urfave/cli/v3", "Command").Values(cmdDict),
 		),
 		jen.Line(),
 	)
@@ -709,22 +769,22 @@ func generateConfigFlags(file *protogen.File, configMessageType string, cmdVarNa
 }
 
 // getFieldFlagOptions extracts the (cli.flag) annotation from a field
-func getFieldFlagOptions(field *protogen.Field) *clipb.FlagOptions {
+func getFieldFlagOptions(field *protogen.Field) *annotations.FlagOptions {
 	opts := field.Desc.Options()
 	if opts == nil {
 		return nil
 	}
 
-	if !proto.HasExtension(opts, clipb.E_Flag) {
+	if !proto.HasExtension(opts, annotations.E_Flag) {
 		return nil
 	}
 
-	ext := proto.GetExtension(opts, clipb.E_Flag)
+	ext := proto.GetExtension(opts, annotations.E_Flag)
 	if ext == nil {
 		return nil
 	}
 
-	flagOpts, ok := ext.(*clipb.FlagOptions)
+	flagOpts, ok := ext.(*annotations.FlagOptions)
 	if !ok {
 		return nil
 	}
@@ -951,6 +1011,7 @@ func generateOutputWriterOpening() []jen.Code {
 	return []jen.Code{
 		jen.Comment("Open output writer"),
 		jen.List(jen.Id("outputWriter"), jen.Err()).Op(":=").Id("getOutputWriter").Call(
+			jen.Id("cmd"),
 			jen.Id("cmd").Dot("String").Call(jen.Lit("output")),
 		),
 		jen.If(jen.Err().Op("!=").Nil()).Block(
@@ -966,31 +1027,18 @@ func generateOutputWriterOpening() []jen.Code {
 func generateActionBodyWithHooks(file *protogen.File, service *protogen.Service, method *protogen.Method, configMessageType string) []jen.Code {
 	var statements []jen.Code
 
-	// Call before hook if set
-	statements = append(statements,
-		jen.If(jen.Id("options").Dot("BeforeCommand").Call().Op("!=").Nil()).Block(
-			jen.If(
-				jen.Err().Op(":=").Id("options").Dot("BeforeCommand").Call().Call(
-					jen.Id("cmdCtx"),
-					jen.Id("cmd"),
-				),
-				jen.Err().Op("!=").Nil(),
-			).Block(
-				jen.Return(jen.Qual("fmt", "Errorf").Call(
-					jen.Lit("before hook failed: %w"),
-					jen.Err(),
-				)),
-			),
-		),
-		jen.Line(),
-	)
-
-	// Defer after hook
+	// Defer after hooks in reverse order (LIFO)
+	// IMPORTANT: Register defer FIRST so it runs even if before hooks fail
 	statements = append(statements,
 		jen.Defer().Func().Params().Block(
-			jen.If(jen.Id("options").Dot("AfterCommand").Call().Op("!=").Nil()).Block(
+			jen.Id("hooks").Op(":=").Id("options").Dot("AfterCommandHooks").Call(),
+			jen.For(
+				jen.Id("i").Op(":=").Len(jen.Id("hooks")).Op("-").Lit(1),
+				jen.Id("i").Op(">=").Lit(0),
+				jen.Id("i").Op("--"),
+			).Block(
 				jen.If(
-					jen.Err().Op(":=").Id("options").Dot("AfterCommand").Call().Call(
+					jen.Err().Op(":=").Id("hooks").Index(jen.Id("i")).Call(
 						jen.Id("cmdCtx"),
 						jen.Id("cmd"),
 					),
@@ -1004,6 +1052,27 @@ func generateActionBodyWithHooks(file *protogen.File, service *protogen.Service,
 				),
 			),
 		).Call(),
+		jen.Line(),
+	)
+
+	// Call before hooks in order (FIFO)
+	statements = append(statements,
+		jen.For(
+			jen.List(jen.Id("_"), jen.Id("hook")).Op(":=").Range().Id("options").Dot("BeforeCommandHooks").Call(),
+		).Block(
+			jen.If(
+				jen.Err().Op(":=").Id("hook").Call(
+					jen.Id("cmdCtx"),
+					jen.Id("cmd"),
+				),
+				jen.Err().Op("!=").Nil(),
+			).Block(
+				jen.Return(jen.Qual("fmt", "Errorf").Call(
+					jen.Lit("before hook failed: %w"),
+					jen.Err(),
+				)),
+			),
+		),
 		jen.Line(),
 	)
 
@@ -1241,17 +1310,31 @@ func generateLocalCallLogic(service *protogen.Service, method *protogen.Method, 
 func generateServerStreamingCommand(service *protogen.Service, method *protogen.Method, configMessageType string, file *protogen.File) []jen.Code {
 	var statements []jen.Code
 
-	// Get command name from annotation or use kebab-case default
+	// Get command name and help fields from annotation or use defaults
 	cmdName := toKebabCase(method.GoName)
-	cmdUsage := method.GoName + " (streaming)"
+	cmdUsage := method.GoName + " (streaming)"           // Short description for Usage field
+	var cmdDescription, cmdUsageText, cmdArgsUsage string // Long description, custom usage line, args
 
 	cmdOpts := getMethodCommandOptions(method)
 	if cmdOpts != nil {
 		if cmdOpts.Name != "" {
 			cmdName = cmdOpts.Name
 		}
+		// Use description if provided (short one-liner)
 		if cmdOpts.Description != "" {
 			cmdUsage = cmdOpts.Description
+		}
+		// Use long_description for detailed explanation
+		if cmdOpts.LongDescription != "" {
+			cmdDescription = cmdOpts.LongDescription
+		}
+		// Use custom usage_text to override auto-generated USAGE line
+		if cmdOpts.UsageText != "" {
+			cmdUsageText = cmdOpts.UsageText
+		}
+		// Use args_usage for argument description
+		if cmdOpts.ArgsUsage != "" {
+			cmdArgsUsage = cmdOpts.ArgsUsage
 		}
 	}
 
@@ -1321,21 +1404,35 @@ func generateServerStreamingCommand(service *protogen.Service, method *protogen.
 		jen.Line(),
 	)
 
+	// Build command dict with help fields
+	cmdDict := jen.Dict{
+		jen.Id("Name"):  jen.Lit(cmdName),
+		jen.Id("Usage"): jen.Lit(cmdUsage),
+		jen.Id("Flags"): jen.Id("flags_" + cmdVarName),
+		jen.Id("Action"): jen.Func().Params(
+			jen.Id("cmdCtx").Qual("context", "Context"),
+			jen.Id("cmd").Op("*").Qual("github.com/urfave/cli/v3", "Command"),
+		).Error().Block(
+			generateServerStreamingActionBody(file, service, method, configMessageType)...,
+		),
+	}
+
+	// Add optional help fields if provided
+	if cmdDescription != "" {
+		cmdDict[jen.Id("Description")] = jen.Lit(cmdDescription)
+	}
+	if cmdUsageText != "" {
+		cmdDict[jen.Id("UsageText")] = jen.Lit(cmdUsageText)
+	}
+	if cmdArgsUsage != "" {
+		cmdDict[jen.Id("ArgsUsage")] = jen.Lit(cmdArgsUsage)
+	}
+
 	// Generate the command with streaming action
 	statements = append(statements,
 		jen.Id("commands").Op("=").Append(
 			jen.Id("commands"),
-			jen.Op("&").Qual("github.com/urfave/cli/v3", "Command").Values(jen.Dict{
-				jen.Id("Name"):  jen.Lit(cmdName),
-				jen.Id("Usage"): jen.Lit(cmdUsage),
-				jen.Id("Flags"): jen.Id("flags_" + cmdVarName),
-				jen.Id("Action"): jen.Func().Params(
-					jen.Id("cmdCtx").Qual("context", "Context"),
-					jen.Id("cmd").Op("*").Qual("github.com/urfave/cli/v3", "Command"),
-				).Error().Block(
-					generateServerStreamingActionBody(file, service, method, configMessageType)...,
-				),
-			}),
+			jen.Op("&").Qual("github.com/urfave/cli/v3", "Command").Values(cmdDict),
 		),
 		jen.Line(),
 	)
@@ -1347,11 +1444,13 @@ func generateServerStreamingCommand(service *protogen.Service, method *protogen.
 func generateServerStreamingActionBody(file *protogen.File, service *protogen.Service, method *protogen.Method, configMessageType string) []jen.Code {
 	var statements []jen.Code
 
-	// Call before hook if set
+	// Call before hooks in order (FIFO)
 	statements = append(statements,
-		jen.If(jen.Id("options").Dot("BeforeCommand").Call().Op("!=").Nil()).Block(
+		jen.For(
+			jen.List(jen.Id("_"), jen.Id("hook")).Op(":=").Range().Id("options").Dot("BeforeCommandHooks").Call(),
+		).Block(
 			jen.If(
-				jen.Err().Op(":=").Id("options").Dot("BeforeCommand").Call().Call(
+				jen.Err().Op(":=").Id("hook").Call(
 					jen.Id("cmdCtx"),
 					jen.Id("cmd"),
 				),
@@ -1366,12 +1465,17 @@ func generateServerStreamingActionBody(file *protogen.File, service *protogen.Se
 		jen.Line(),
 	)
 
-	// Defer after hook
+	// Defer after hooks in reverse order (LIFO)
 	statements = append(statements,
 		jen.Defer().Func().Params().Block(
-			jen.If(jen.Id("options").Dot("AfterCommand").Call().Op("!=").Nil()).Block(
+			jen.Id("hooks").Op(":=").Id("options").Dot("AfterCommandHooks").Call(),
+			jen.For(
+				jen.Id("i").Op(":=").Len(jen.Id("hooks")).Op("-").Lit(1),
+				jen.Id("i").Op(">=").Lit(0),
+				jen.Id("i").Op("--"),
+			).Block(
 				jen.If(
-					jen.Err().Op(":=").Id("options").Dot("AfterCommand").Call().Call(
+					jen.Err().Op(":=").Id("hooks").Index(jen.Id("i")).Call(
 						jen.Id("cmdCtx"),
 						jen.Id("cmd"),
 					),

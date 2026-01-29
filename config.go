@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/drewfead/proto-cli/internal/clipb"
+	annotations "github.com/drewfead/proto-cli/proto/cli/v1"
 	"github.com/urfave/cli/v3"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -949,9 +949,9 @@ func (l *ConfigLoader) applyFlagsRecursive(cmd *cli.Command, msg protoreflect.Me
 func (l *ConfigLoader) getFlagName(field protoreflect.FieldDescriptor) string {
 	// Try to read the (cli.flag) annotation
 	opts := field.Options()
-	if opts != nil && proto.HasExtension(opts, clipb.E_Flag) {
-		ext := proto.GetExtension(opts, clipb.E_Flag)
-		if flagOpts, ok := ext.(*clipb.FlagOptions); ok && flagOpts.Name != "" {
+	if opts != nil && proto.HasExtension(opts, annotations.E_Flag) {
+		ext := proto.GetExtension(opts, annotations.E_Flag)
+		if flagOpts, ok := ext.(*annotations.FlagOptions); ok && flagOpts.Name != "" {
 			return flagOpts.Name
 		}
 	}

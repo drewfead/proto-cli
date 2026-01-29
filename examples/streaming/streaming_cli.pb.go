@@ -16,9 +16,16 @@ import (
 	"strings"
 )
 
-// getOutputWriter opens the specified output file or returns stdout
-func getOutputWriter(path string) (io.Writer, error) {
+// getOutputWriter opens the specified output file or returns cmd.Writer (if set) or stdout
+func getOutputWriter(cmd *v3.Command, path string) (io.Writer, error) {
 	if path == "-" || path == "" {
+		// Use cmd.Writer if set, otherwise try root command's Writer, otherwise stdout
+		if cmd.Writer != nil {
+			return cmd.Writer, nil
+		}
+		if cmd.Root().Writer != nil {
+			return cmd.Root().Writer, nil
+		}
 		return os.Stdout, nil
 	}
 	return os.Create(path)
@@ -170,15 +177,16 @@ func StreamingServiceCommand(ctx context.Context, implOrFactory interface{}, opt
 
 	commands = append(commands, &v3.Command{
 		Action: func(cmdCtx context.Context, cmd *v3.Command) error {
-			if options.BeforeCommand() != nil {
-				if err := options.BeforeCommand()(cmdCtx, cmd); err != nil {
+			for _, hook := range options.BeforeCommandHooks() {
+				if err := hook(cmdCtx, cmd); err != nil {
 					return fmt.Errorf("before hook failed: %w", err)
 				}
 			}
 
 			defer func() {
-				if options.AfterCommand() != nil {
-					if err := options.AfterCommand()(cmdCtx, cmd); err != nil {
+				hooks := options.AfterCommandHooks()
+				for i := len(hooks) - 1; i >= 0; i-- {
+					if err := hooks[i](cmdCtx, cmd); err != nil {
 						slog.Warn("after hook failed", "error", err)
 					}
 				}
@@ -224,7 +232,7 @@ func StreamingServiceCommand(ctx context.Context, implOrFactory interface{}, opt
 			}
 
 			// Open output writer
-			outputWriter, err := getOutputWriter(cmd.String("output"))
+			outputWriter, err := getOutputWriter(cmd, cmd.String("output"))
 			if err != nil {
 				return fmt.Errorf("failed to open output: %w", err)
 			}
@@ -395,15 +403,16 @@ func StreamingServiceCommand(ctx context.Context, implOrFactory interface{}, opt
 
 	commands = append(commands, &v3.Command{
 		Action: func(cmdCtx context.Context, cmd *v3.Command) error {
-			if options.BeforeCommand() != nil {
-				if err := options.BeforeCommand()(cmdCtx, cmd); err != nil {
+			for _, hook := range options.BeforeCommandHooks() {
+				if err := hook(cmdCtx, cmd); err != nil {
 					return fmt.Errorf("before hook failed: %w", err)
 				}
 			}
 
 			defer func() {
-				if options.AfterCommand() != nil {
-					if err := options.AfterCommand()(cmdCtx, cmd); err != nil {
+				hooks := options.AfterCommandHooks()
+				for i := len(hooks) - 1; i >= 0; i-- {
+					if err := hooks[i](cmdCtx, cmd); err != nil {
 						slog.Warn("after hook failed", "error", err)
 					}
 				}
@@ -436,7 +445,7 @@ func StreamingServiceCommand(ctx context.Context, implOrFactory interface{}, opt
 			}
 
 			// Open output writer
-			outputWriter, err := getOutputWriter(cmd.String("output"))
+			outputWriter, err := getOutputWriter(cmd, cmd.String("output"))
 			if err != nil {
 				return fmt.Errorf("failed to open output: %w", err)
 			}
@@ -653,15 +662,16 @@ func StreamingServiceCommandsFlat(ctx context.Context, implOrFactory interface{}
 
 	commands = append(commands, &v3.Command{
 		Action: func(cmdCtx context.Context, cmd *v3.Command) error {
-			if options.BeforeCommand() != nil {
-				if err := options.BeforeCommand()(cmdCtx, cmd); err != nil {
+			for _, hook := range options.BeforeCommandHooks() {
+				if err := hook(cmdCtx, cmd); err != nil {
 					return fmt.Errorf("before hook failed: %w", err)
 				}
 			}
 
 			defer func() {
-				if options.AfterCommand() != nil {
-					if err := options.AfterCommand()(cmdCtx, cmd); err != nil {
+				hooks := options.AfterCommandHooks()
+				for i := len(hooks) - 1; i >= 0; i-- {
+					if err := hooks[i](cmdCtx, cmd); err != nil {
 						slog.Warn("after hook failed", "error", err)
 					}
 				}
@@ -707,7 +717,7 @@ func StreamingServiceCommandsFlat(ctx context.Context, implOrFactory interface{}
 			}
 
 			// Open output writer
-			outputWriter, err := getOutputWriter(cmd.String("output"))
+			outputWriter, err := getOutputWriter(cmd, cmd.String("output"))
 			if err != nil {
 				return fmt.Errorf("failed to open output: %w", err)
 			}
@@ -878,15 +888,16 @@ func StreamingServiceCommandsFlat(ctx context.Context, implOrFactory interface{}
 
 	commands = append(commands, &v3.Command{
 		Action: func(cmdCtx context.Context, cmd *v3.Command) error {
-			if options.BeforeCommand() != nil {
-				if err := options.BeforeCommand()(cmdCtx, cmd); err != nil {
+			for _, hook := range options.BeforeCommandHooks() {
+				if err := hook(cmdCtx, cmd); err != nil {
 					return fmt.Errorf("before hook failed: %w", err)
 				}
 			}
 
 			defer func() {
-				if options.AfterCommand() != nil {
-					if err := options.AfterCommand()(cmdCtx, cmd); err != nil {
+				hooks := options.AfterCommandHooks()
+				for i := len(hooks) - 1; i >= 0; i-- {
+					if err := hooks[i](cmdCtx, cmd); err != nil {
 						slog.Warn("after hook failed", "error", err)
 					}
 				}
@@ -919,7 +930,7 @@ func StreamingServiceCommandsFlat(ctx context.Context, implOrFactory interface{}
 			}
 
 			// Open output writer
-			outputWriter, err := getOutputWriter(cmd.String("output"))
+			outputWriter, err := getOutputWriter(cmd, cmd.String("output"))
 			if err != nil {
 				return fmt.Errorf("failed to open output: %w", err)
 			}

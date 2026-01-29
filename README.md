@@ -1,8 +1,17 @@
 # proto-cli
 
+[![PR Validation](https://github.com/drewfead/proto-cli/actions/workflows/pr-validation.yml/badge.svg)](https://github.com/drewfead/proto-cli/actions/workflows/pr-validation.yml)
+[![BSR](https://img.shields.io/badge/BSR-buf.build%2Ffernet%2Fproto--cli-blue)](https://buf.build/fernet/proto-cli)
+
 **Automatically generate production-ready CLI applications from your gRPC service definitions.**
 
 proto-cli is a protoc plugin that transforms Protocol Buffer service definitions into feature-rich command-line interfaces. Define your API once, get a complete CLI with proper flag handling, configuration management, lifecycle hooks, and both local and remote execution.
+
+> **📦 Available on Buf Schema Registry:** Import CLI annotations directly in your proto files:
+> ```yaml
+> deps:
+>   - buf.build/fernet/proto-cli
+> ```
 
 ## Features
 
@@ -22,6 +31,7 @@ proto-cli is a protoc plugin that transforms Protocol Buffer service definitions
 
 ### Output & Display
 - **Multiple Formats** - JSON, YAML, and Go-native formatting built-in
+- **Template Formats** - Create custom formats using Go text templates
 - **Format-Specific Flags** - Custom flags per format (e.g., `--pretty` for JSON)
 - **Streaming Output** - NDJSON for JSON, document-delimited for YAML
 
@@ -100,7 +110,7 @@ userServiceCLI := simple.UserServiceCommand(ctx, &userService{},
 
 // Create root command
 rootCmd, err := protocli.RootCommand("usercli",
-    protocli.WithService(userServiceCLI),
+    protocli.Service(userServiceCLI),
     protocli.WithEnvPrefix("USERCLI"),
 )
 
@@ -164,7 +174,7 @@ Single-service CLIs with commands at the root level using `protocli.Hoisted()`.
 **Usage:**
 ```go
 rootCmd, err := protocli.RootCommand("usercli-flat",
-    protocli.WithService(userServiceCLI, protocli.Hoisted()),
+    protocli.Service(userServiceCLI, protocli.Hoisted()),
 )
 ```
 
@@ -174,7 +184,47 @@ See [usercli_flat/README.md](examples/simple/usercli_flat/README.md) for details
 
 ### Configuration Loading
 
-Load service configuration from files and environment variables:
+Define configuration in your proto file using the `service_config` annotation:
+
+```protobuf
+// Define your configuration message
+message UserServiceConfig {
+  string database_url = 1 [(cli.flag) = {
+    name: "db-url"
+    usage: "PostgreSQL connection URL"
+  }];
+  int64 max_connections = 2 [(cli.flag) = {
+    name: "max-conns"
+    usage: "Maximum database connections"
+  }];
+}
+
+// Attach config to your service
+service UserService {
+  option (cli.service_config) = {
+    config_message: "UserServiceConfig"
+  };
+
+  rpc GetUser(GetUserRequest) returns (UserResponse);
+}
+```
+
+Implement a factory function that receives the config:
+
+```go
+func newUserService(config *simple.UserServiceConfig) simple.UserServiceServer {
+    log.Printf("DB URL: %s, Max Conns: %d", config.DatabaseUrl, config.MaxConnections)
+    return &userService{dbURL: config.DatabaseUrl}
+}
+
+// Register the factory
+rootCmd := protocli.RootCommand("usercli",
+    protocli.Service(userServiceCLI),
+    protocli.WithConfigFactory("userservice", newUserService),
+)
+```
+
+Load configuration from YAML files:
 
 ```yaml
 # usercli.yaml
@@ -184,12 +234,56 @@ services:
     max-connections: 25
 ```
 
+Override with environment variables:
+
 ```bash
-# Override with environment variables
 USERCLI_SERVICES_USERSERVICE_DATABASE_URL=postgresql://prod/db ./usercli daemonize
 ```
 
-See [nested_config_test.go](nested_config_test.go) for nested config support.
+**Debugging Configuration Issues**
+
+Enable debug logging to see which config files are loaded and how values are merged:
+
+```bash
+# Use debug verbosity to see config loading details
+./usercli daemonize --verbosity=debug
+
+# Output shows:
+# - Which config files were found/missing
+# - Environment variables applied
+# - Final merged configuration
+```
+
+Programmatically inspect configuration loading:
+
+```go
+loader := protocli.NewConfigLoader(
+    protocli.DaemonMode,
+    protocli.FileConfig("./config.yaml"),
+    protocli.EnvPrefix("MYAPP"),
+    protocli.DebugMode(true),  // Enable debug tracking
+)
+
+config := &myapp.ServiceConfig{}
+err := loader.LoadServiceConfig(nil, "myservice", config)
+
+// Get detailed debug information
+debug := loader.DebugInfo()
+fmt.Printf("Paths checked: %v\n", debug.PathsChecked)
+fmt.Printf("Files loaded: %v\n", debug.FilesLoaded)
+fmt.Printf("Files failed: %v\n", debug.FilesFailed)
+fmt.Printf("Env vars applied: %v\n", debug.EnvVarsApplied)
+fmt.Printf("Final config: %+v\n", debug.FinalConfig)
+```
+
+**Common Issues:**
+
+1. **Config file not found**: Check `debug.PathsChecked` to see where the CLI looked for config files
+2. **Values not applied**: Check `debug.EnvVarsApplied` to verify environment variable names (they must match the prefix + field path)
+3. **Wrong precedence**: Remember: CLI flags > environment variables > config files
+4. **Field naming**: Proto fields use kebab-case in YAML (e.g., `database_url` → `database-url`)
+
+See [config_debug_test.go](config_debug_test.go) and [nested_config_test.go](nested_config_test.go) for more examples.
 
 ### Custom Flag Deserializers
 
@@ -209,31 +303,161 @@ protocli.WithFlagDeserializer("google.protobuf.Timestamp",
 
 See [timestamp_deserializer_test.go](examples/simple/timestamp_deserializer_test.go).
 
+### Template-Based Output Formats
+
+Create custom output formats using Go text templates without writing format code:
+
+```go
+// Define templates for each message type
+templates := map[string]string{
+    "example.UserResponse": `User: {{.user.name}} (ID: {{.user.id}})
+Email: {{.user.email}}
+{{if .user.address}}Address: {{.user.address.city}}, {{.user.address.state}}{{end}}`,
+
+    "example.CreateUserRequest": `Creating user: {{.name}} <{{.email}}>`,
+}
+
+// Create the format
+userFormat, err := protocli.TemplateFormat("user-detail", templates)
+
+// Use in CLI
+userServiceCLI := simple.UserServiceCommand(ctx, newUserService,
+    protocli.WithOutputFormats(userFormat, protocli.JSON()),
+)
+```
+
+**With Custom Template Functions:**
+
+```go
+funcMap := template.FuncMap{
+    "upper": strings.ToUpper,
+    "date": func(ts string) string {
+        // Custom date formatting
+        return formattedDate
+    },
+}
+
+format, err := protocli.TemplateFormat("custom", templates, funcMap)
+```
+
+**Template Features:**
+- Access all message fields as `{{.fieldName}}`
+- Conditionals: `{{if .field}}...{{end}}`
+- Loops: `{{range .list}}...{{end}}`
+- Custom functions via `template.FuncMap`
+- Nested field access: `{{.user.address.city}}`
+- Format any message type by fully qualified name
+
+**Common Use Cases:**
+- Table formats: Create ASCII tables with `printf` for alignment
+- Compact formats: One-line summaries like `{{.name}} <{{.email}}>`
+- CSV/TSV: `{{.id}},{{.name}},{{.email}}`
+- Custom business formats: Match your organization's output standards
+
+See [template_format_test.go](template_format_test.go) for comprehensive examples.
+
 ### Lifecycle Hooks
 
 Add hooks for logging, authentication, metrics:
 
 ```go
 protocli.RootCommand("usercli",
-    protocli.WithService(userServiceCLI),
-    protocli.WithBeforeCommand(func(ctx context.Context, cmd *cli.Command) error {
+    protocli.Service(userServiceCLI),
+    protocli.BeforeCommand(func(ctx context.Context, cmd *cli.Command) error {
         log.Printf("Executing: %s", cmd.Name)
         return nil
     }),
-    protocli.WithOnDaemonStartup(func(ctx context.Context, server *grpc.Server, mux *runtime.ServeMux) error {
+    protocli.OnDaemonStartup(func(ctx context.Context, server *grpc.Server, mux *runtime.ServeMux) error {
         // Register additional services, configure server
         return nil
     }),
-    protocli.WithOnDaemonReady(func(ctx context.Context) {
+    protocli.OnDaemonReady(func(ctx context.Context) {
         log.Println("Server is ready")
     }),
-    protocli.WithOnDaemonShutdown(func(ctx context.Context) {
+    protocli.OnDaemonShutdown(func(ctx context.Context) {
         log.Println("Shutting down gracefully")
     }),
 )
 ```
 
 See [daemon_lifecycle_test.go](daemon_lifecycle_test.go) for complete examples.
+
+### Help Text Customization
+
+Proto-CLI follows [urfave/cli v3 best practices](https://cli.urfave.org/v3/examples/help/generated-help-text/) for help text. Customize help at multiple levels:
+
+**Proto Annotations:**
+
+Use proto annotations to define help text fields following urfave/cli v3 conventions:
+
+```protobuf
+service UserService {
+  option (cli.service) = {
+    name: "user-service",
+    description: "User management commands",  // Short one-liner
+    long_description: "Detailed explanation of the service...",  // Multi-paragraph
+    usage_text: "user-service [command] [options]",  // Custom USAGE line
+    args_usage: "[filter-expression]"  // Argument description
+  };
+
+  rpc GetUser(GetUserRequest) returns (UserResponse) {
+    option (cli.command) = {
+      name: "get",
+      description: "Retrieve a user by ID",  // Short (shown in lists)
+      long_description: "Fetch detailed user information...\n\nExamples:\n  usercli get --id 123",
+      usage_text: "get --id <user-id> [options]",  // Override auto-generated USAGE
+      args_usage: "<user-id>"  // Describe positional args
+    };
+  }
+}
+```
+
+**Help Field Guidelines** (urfave/cli v3):
+- **description**: Short one-liner for command lists (e.g., "retrieve a user by ID")
+- **long_description**: Detailed explanation with examples and context
+- **usage_text**: Override auto-generated USAGE line format
+- **args_usage**: Describe expected arguments
+
+**Programmatic Customization:**
+
+```go
+// Method 1: Custom root command template
+rootCmd, _ := protocli.RootCommand("myapp",
+    protocli.Service(userServiceCLI),
+    protocli.WithRootCommandHelpTemplate(`
+NAME:
+   {{.Name}} - {{.Usage}}
+
+USAGE:
+   {{.HelpName}} {{if .VisibleFlags}}[options]{{end}} command
+
+VERSION:
+   {{.Version}}
+
+WEBSITE:
+   https://example.com
+`),
+)
+
+// Method 2: Full control with HelpCustomization
+protocli.WithHelpCustomization(&protocli.HelpCustomization{
+    RootCommandHelpTemplate: myTemplate,
+    CommandHelpTemplate: myCommandTemplate,
+    SubcommandHelpTemplate: mySubcommandTemplate,
+})
+
+// Method 3: Modify the returned root command
+rootCmd, _ := protocli.RootCommand("myapp", protocli.Service(userServiceCLI))
+rootCmd.Version = "1.0.0"
+rootCmd.Copyright = "(c) 2026 MyCompany"
+rootCmd.Authors = []any{"John Doe <john@example.com>"}
+```
+
+**Best Practices:**
+- Keep `description` concise (one line) for readability in command lists
+- Use `long_description` for detailed explanations, examples, and context
+- Follow the [urfave/cli v3 help conventions](https://cli.urfave.org/v3/)
+- Include examples in `long_description` to aid discovery
 
 ### Streaming RPCs
 

@@ -26,7 +26,7 @@ func TestServerStreaming_ListItems_Local(t *testing.T) {
 	)
 
 	rootCmd, err := protocli.RootCommand("streamcli",
-		protocli.WithService(serviceCLI),
+		protocli.Service(serviceCLI),
 	)
 	require.NoError(t, err)
 
@@ -109,7 +109,7 @@ func TestServerStreaming_ListItems_Remote(t *testing.T) {
 	)
 
 	rootCmd, err := protocli.RootCommand("streamcli",
-		protocli.WithService(serviceCLI),
+		protocli.Service(serviceCLI),
 	)
 	require.NoError(t, err)
 

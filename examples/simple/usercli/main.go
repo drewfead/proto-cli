@@ -88,11 +88,11 @@ func main() {
 	// Build service CLI with factory function, lifecycle hooks, and output formats
 	// Pass the factory function (not the impl) - config will be loaded automatically
 	userServiceCLI := simple.UserServiceCommand(ctx, newUserService,
-		protocli.WithBeforeCommand(func(_ context.Context, cmd *v3.Command) error {
+		protocli.BeforeCommand(func(_ context.Context, cmd *v3.Command) error {
 			log.Printf("[HOOK] Starting command: %s", cmd.Name)
 			return nil
 		}),
-		protocli.WithAfterCommand(func(_ context.Context, cmd *v3.Command) error {
+		protocli.AfterCommand(func(_ context.Context, cmd *v3.Command) error {
 			log.Printf("[HOOK] Completed command: %s", cmd.Name)
 			return nil
 		}),
@@ -113,8 +113,8 @@ func main() {
 
 	// Create root CLI with all services using the new API
 	rootCmd, err := protocli.RootCommand("usercli",
-		protocli.WithService(userServiceCLI),
-		protocli.WithService(adminServiceCLI),
+		protocli.Service(userServiceCLI),
+		protocli.Service(adminServiceCLI),
 		protocli.WithConfigFactory("userservice", newUserService),
 		protocli.WithEnvPrefix("USERCLI"),
 		// Config files are loaded from:

@@ -15,9 +15,16 @@ import (
 	"os"
 )
 
-// getOutputWriter opens the specified output file or returns stdout
-func getOutputWriter(path string) (io.Writer, error) {
+// getOutputWriter opens the specified output file or returns cmd.Writer (if set) or stdout
+func getOutputWriter(cmd *v3.Command, path string) (io.Writer, error) {
 	if path == "-" || path == "" {
+		// Use cmd.Writer if set, otherwise try root command's Writer, otherwise stdout
+		if cmd.Writer != nil {
+			return cmd.Writer, nil
+		}
+		if cmd.Root().Writer != nil {
+			return cmd.Root().Writer, nil
+		}
 		return os.Stdout, nil
 	}
 	return os.Create(path)
@@ -99,19 +106,20 @@ func UserServiceCommand(ctx context.Context, implOrFactory interface{}, opts ...
 
 	commands = append(commands, &v3.Command{
 		Action: func(cmdCtx context.Context, cmd *v3.Command) error {
-			if options.BeforeCommand() != nil {
-				if err := options.BeforeCommand()(cmdCtx, cmd); err != nil {
-					return fmt.Errorf("before hook failed: %w", err)
-				}
-			}
-
 			defer func() {
-				if options.AfterCommand() != nil {
-					if err := options.AfterCommand()(cmdCtx, cmd); err != nil {
+				hooks := options.AfterCommandHooks()
+				for i := len(hooks) - 1; i >= 0; i-- {
+					if err := hooks[i](cmdCtx, cmd); err != nil {
 						slog.Warn("after hook failed", "error", err)
 					}
 				}
 			}()
+
+			for _, hook := range options.BeforeCommandHooks() {
+				if err := hook(cmdCtx, cmd); err != nil {
+					return fmt.Errorf("before hook failed: %w", err)
+				}
+			}
 
 			// Build request message
 			var req *GetUserRequest
@@ -198,7 +206,7 @@ func UserServiceCommand(ctx context.Context, implOrFactory interface{}, opts ...
 			}
 
 			// Open output writer
-			outputWriter, err := getOutputWriter(cmd.String("output"))
+			outputWriter, err := getOutputWriter(cmd, cmd.String("output"))
 			if err != nil {
 				return fmt.Errorf("failed to open output: %w", err)
 			}
@@ -233,9 +241,11 @@ func UserServiceCommand(ctx context.Context, implOrFactory interface{}, opts ...
 			}
 			return fmt.Errorf("unknown format %q (available: %v)", formatName, availableFormats)
 		},
-		Flags: flags_get,
-		Name:  "get",
-		Usage: "Retrieve a user by ID",
+		Description: "Fetch detailed information about a user from the database.\n\nThis command queries the user service to retrieve a user record by their unique ID. You can optionally include additional details like profile information and preferences. Use --fields to specify which fields to return in the response.\n\nExamples:\n  Get basic user info:       usercli user-service get --id 123\n  Get with details:          usercli user-service get --id 123 --include-details\n  Get specific fields:       usercli user-service get --id 123 --fields name,email",
+		Flags:       flags_get,
+		Name:        "get",
+		Usage:       "Retrieve a user by ID",
+		UsageText:   "get --id <user-id> [--include-details] [--fields <field-list>]",
 	})
 
 	// Build flags for create
@@ -315,19 +325,20 @@ func UserServiceCommand(ctx context.Context, implOrFactory interface{}, opts ...
 
 	commands = append(commands, &v3.Command{
 		Action: func(cmdCtx context.Context, cmd *v3.Command) error {
-			if options.BeforeCommand() != nil {
-				if err := options.BeforeCommand()(cmdCtx, cmd); err != nil {
-					return fmt.Errorf("before hook failed: %w", err)
-				}
-			}
-
 			defer func() {
-				if options.AfterCommand() != nil {
-					if err := options.AfterCommand()(cmdCtx, cmd); err != nil {
+				hooks := options.AfterCommandHooks()
+				for i := len(hooks) - 1; i >= 0; i-- {
+					if err := hooks[i](cmdCtx, cmd); err != nil {
 						slog.Warn("after hook failed", "error", err)
 					}
 				}
 			}()
+
+			for _, hook := range options.BeforeCommandHooks() {
+				if err := hook(cmdCtx, cmd); err != nil {
+					return fmt.Errorf("before hook failed: %w", err)
+				}
+			}
 
 			// Build request message
 			var req *CreateUserRequest
@@ -467,7 +478,7 @@ func UserServiceCommand(ctx context.Context, implOrFactory interface{}, opts ...
 			}
 
 			// Open output writer
-			outputWriter, err := getOutputWriter(cmd.String("output"))
+			outputWriter, err := getOutputWriter(cmd, cmd.String("output"))
 			if err != nil {
 				return fmt.Errorf("failed to open output: %w", err)
 			}
@@ -509,9 +520,10 @@ func UserServiceCommand(ctx context.Context, implOrFactory interface{}, opts ...
 
 	return &protocli.ServiceCLI{
 		Command: &v3.Command{
-			Commands: commands,
-			Name:     "user-service",
-			Usage:    "User commands",
+			Commands:    commands,
+			Description: "Comprehensive user management service for CRUD operations.\n\nThis service provides complete user lifecycle management including:\n- Creating new user accounts\n- Retrieving user information\n- Updating user profiles\n- Managing user authentication and preferences\n\nAll commands require appropriate authentication and authorization.",
+			Name:        "user-service",
+			Usage:       "User management commands",
 		},
 		ConfigMessageType: "UserServiceConfig",
 		ConfigPrototype:   &UserServiceConfig{},
@@ -601,19 +613,20 @@ func UserServiceCommandsFlat(ctx context.Context, implOrFactory interface{}, opt
 
 	commands = append(commands, &v3.Command{
 		Action: func(cmdCtx context.Context, cmd *v3.Command) error {
-			if options.BeforeCommand() != nil {
-				if err := options.BeforeCommand()(cmdCtx, cmd); err != nil {
-					return fmt.Errorf("before hook failed: %w", err)
-				}
-			}
-
 			defer func() {
-				if options.AfterCommand() != nil {
-					if err := options.AfterCommand()(cmdCtx, cmd); err != nil {
+				hooks := options.AfterCommandHooks()
+				for i := len(hooks) - 1; i >= 0; i-- {
+					if err := hooks[i](cmdCtx, cmd); err != nil {
 						slog.Warn("after hook failed", "error", err)
 					}
 				}
 			}()
+
+			for _, hook := range options.BeforeCommandHooks() {
+				if err := hook(cmdCtx, cmd); err != nil {
+					return fmt.Errorf("before hook failed: %w", err)
+				}
+			}
 
 			// Build request message
 			var req *GetUserRequest
@@ -700,7 +713,7 @@ func UserServiceCommandsFlat(ctx context.Context, implOrFactory interface{}, opt
 			}
 
 			// Open output writer
-			outputWriter, err := getOutputWriter(cmd.String("output"))
+			outputWriter, err := getOutputWriter(cmd, cmd.String("output"))
 			if err != nil {
 				return fmt.Errorf("failed to open output: %w", err)
 			}
@@ -735,9 +748,11 @@ func UserServiceCommandsFlat(ctx context.Context, implOrFactory interface{}, opt
 			}
 			return fmt.Errorf("unknown format %q (available: %v)", formatName, availableFormats)
 		},
-		Flags: flags_get,
-		Name:  "get",
-		Usage: "Retrieve a user by ID",
+		Description: "Fetch detailed information about a user from the database.\n\nThis command queries the user service to retrieve a user record by their unique ID. You can optionally include additional details like profile information and preferences. Use --fields to specify which fields to return in the response.\n\nExamples:\n  Get basic user info:       usercli user-service get --id 123\n  Get with details:          usercli user-service get --id 123 --include-details\n  Get specific fields:       usercli user-service get --id 123 --fields name,email",
+		Flags:       flags_get,
+		Name:        "get",
+		Usage:       "Retrieve a user by ID",
+		UsageText:   "get --id <user-id> [--include-details] [--fields <field-list>]",
 	})
 
 	// Build flags for create
@@ -817,19 +832,20 @@ func UserServiceCommandsFlat(ctx context.Context, implOrFactory interface{}, opt
 
 	commands = append(commands, &v3.Command{
 		Action: func(cmdCtx context.Context, cmd *v3.Command) error {
-			if options.BeforeCommand() != nil {
-				if err := options.BeforeCommand()(cmdCtx, cmd); err != nil {
-					return fmt.Errorf("before hook failed: %w", err)
-				}
-			}
-
 			defer func() {
-				if options.AfterCommand() != nil {
-					if err := options.AfterCommand()(cmdCtx, cmd); err != nil {
+				hooks := options.AfterCommandHooks()
+				for i := len(hooks) - 1; i >= 0; i-- {
+					if err := hooks[i](cmdCtx, cmd); err != nil {
 						slog.Warn("after hook failed", "error", err)
 					}
 				}
 			}()
+
+			for _, hook := range options.BeforeCommandHooks() {
+				if err := hook(cmdCtx, cmd); err != nil {
+					return fmt.Errorf("before hook failed: %w", err)
+				}
+			}
 
 			// Build request message
 			var req *CreateUserRequest
@@ -969,7 +985,7 @@ func UserServiceCommandsFlat(ctx context.Context, implOrFactory interface{}, opt
 			}
 
 			// Open output writer
-			outputWriter, err := getOutputWriter(cmd.String("output"))
+			outputWriter, err := getOutputWriter(cmd, cmd.String("output"))
 			if err != nil {
 				return fmt.Errorf("failed to open output: %w", err)
 			}
@@ -1066,19 +1082,20 @@ func AdminServiceCommand(ctx context.Context, implOrFactory interface{}, opts ..
 
 	commands = append(commands, &v3.Command{
 		Action: func(cmdCtx context.Context, cmd *v3.Command) error {
-			if options.BeforeCommand() != nil {
-				if err := options.BeforeCommand()(cmdCtx, cmd); err != nil {
-					return fmt.Errorf("before hook failed: %w", err)
-				}
-			}
-
 			defer func() {
-				if options.AfterCommand() != nil {
-					if err := options.AfterCommand()(cmdCtx, cmd); err != nil {
+				hooks := options.AfterCommandHooks()
+				for i := len(hooks) - 1; i >= 0; i-- {
+					if err := hooks[i](cmdCtx, cmd); err != nil {
 						slog.Warn("after hook failed", "error", err)
 					}
 				}
 			}()
+
+			for _, hook := range options.BeforeCommandHooks() {
+				if err := hook(cmdCtx, cmd); err != nil {
+					return fmt.Errorf("before hook failed: %w", err)
+				}
+			}
 
 			// Build request message
 			var req *AdminRequest
@@ -1135,7 +1152,7 @@ func AdminServiceCommand(ctx context.Context, implOrFactory interface{}, opts ..
 			}
 
 			// Open output writer
-			outputWriter, err := getOutputWriter(cmd.String("output"))
+			outputWriter, err := getOutputWriter(cmd, cmd.String("output"))
 			if err != nil {
 				return fmt.Errorf("failed to open output: %w", err)
 			}
@@ -1229,19 +1246,20 @@ func AdminServiceCommandsFlat(ctx context.Context, implOrFactory interface{}, op
 
 	commands = append(commands, &v3.Command{
 		Action: func(cmdCtx context.Context, cmd *v3.Command) error {
-			if options.BeforeCommand() != nil {
-				if err := options.BeforeCommand()(cmdCtx, cmd); err != nil {
-					return fmt.Errorf("before hook failed: %w", err)
-				}
-			}
-
 			defer func() {
-				if options.AfterCommand() != nil {
-					if err := options.AfterCommand()(cmdCtx, cmd); err != nil {
+				hooks := options.AfterCommandHooks()
+				for i := len(hooks) - 1; i >= 0; i-- {
+					if err := hooks[i](cmdCtx, cmd); err != nil {
 						slog.Warn("after hook failed", "error", err)
 					}
 				}
 			}()
+
+			for _, hook := range options.BeforeCommandHooks() {
+				if err := hook(cmdCtx, cmd); err != nil {
+					return fmt.Errorf("before hook failed: %w", err)
+				}
+			}
 
 			// Build request message
 			var req *AdminRequest
@@ -1298,7 +1316,7 @@ func AdminServiceCommandsFlat(ctx context.Context, implOrFactory interface{}, op
 			}
 
 			// Open output writer
-			outputWriter, err := getOutputWriter(cmd.String("output"))
+			outputWriter, err := getOutputWriter(cmd, cmd.String("output"))
 			if err != nil {
 				return fmt.Errorf("failed to open output: %w", err)
 			}

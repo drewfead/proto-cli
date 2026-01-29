@@ -130,8 +130,8 @@ type FlagConfiguredOutputFormat interface {
 // ServiceConfig is the configuration returned by ApplyServiceOptions.
 // Used by generated service command code.
 type ServiceConfig interface {
-	BeforeCommand() func(context.Context, *cli.Command) error
-	AfterCommand() func(context.Context, *cli.Command) error
+	BeforeCommandHooks() []func(context.Context, *cli.Command) error
+	AfterCommandHooks() []func(context.Context, *cli.Command) error
 	OutputFormats() []OutputFormat
 	FlagDeserializer(messageName string) (FlagDeserializer, bool)
 }
@@ -151,17 +151,32 @@ type RootConfig interface {
 	DaemonReadyHooks() []DaemonReadyHook
 	DaemonShutdownHooks() []DaemonShutdownHook
 	SlogConfig() SlogConfigFunc
+	DefaultVerbosity() string
+	HelpCustomization() *HelpCustomization
+}
+
+// HelpCustomization holds options for customizing help text display.
+// Based on urfave/cli v3 help customization capabilities.
+type HelpCustomization struct {
+	// RootCommandHelpTemplate overrides the default root command help template
+	RootCommandHelpTemplate string
+
+	// CommandHelpTemplate overrides the default command help template
+	CommandHelpTemplate string
+
+	// SubcommandHelpTemplate overrides the default subcommand help template
+	SubcommandHelpTemplate string
 }
 
 // Private interfaces for internal use
 
 // baseOptions defines common options interface for both service and root levels.
 type baseOptions interface {
-	SetBeforeCommand(func(context.Context, *cli.Command) error)
-	SetAfterCommand(func(context.Context, *cli.Command) error)
+	AddBeforeCommand(func(context.Context, *cli.Command) error)
+	AddAfterCommand(func(context.Context, *cli.Command) error)
 	SetOutputFormats([]OutputFormat)
-	BeforeCommand() func(context.Context, *cli.Command) error
-	AfterCommand() func(context.Context, *cli.Command) error
+	BeforeCommandHooks() []func(context.Context, *cli.Command) error
+	AfterCommandHooks() []func(context.Context, *cli.Command) error
 	OutputFormats() []OutputFormat
 }
 
@@ -171,20 +186,22 @@ type baseOptions interface {
 
 // serviceCommandOptions holds configuration for individual service commands.
 type serviceCommandOptions struct {
-	beforeCommand     func(context.Context, *cli.Command) error
-	afterCommand      func(context.Context, *cli.Command) error
-	outputFormats     []OutputFormat
-	flagDeserializers map[string]FlagDeserializer // messageName -> deserializer
+	beforeCommandHooks []func(context.Context, *cli.Command) error
+	afterCommandHooks  []func(context.Context, *cli.Command) error
+	outputFormats      []OutputFormat
+	flagDeserializers  map[string]FlagDeserializer // messageName -> deserializer
 }
 
-// SetBeforeCommand sets the before hook.
-func (o *serviceCommandOptions) SetBeforeCommand(fn func(context.Context, *cli.Command) error) {
-	o.beforeCommand = fn
+// AddBeforeCommand adds a before command hook.
+// Multiple hooks can be registered and will run in registration order.
+func (o *serviceCommandOptions) AddBeforeCommand(fn func(context.Context, *cli.Command) error) {
+	o.beforeCommandHooks = append(o.beforeCommandHooks, fn)
 }
 
-// SetAfterCommand sets the after hook.
-func (o *serviceCommandOptions) SetAfterCommand(fn func(context.Context, *cli.Command) error) {
-	o.afterCommand = fn
+// AddAfterCommand adds an after command hook.
+// Multiple hooks can be registered and will run in REVERSE registration order.
+func (o *serviceCommandOptions) AddAfterCommand(fn func(context.Context, *cli.Command) error) {
+	o.afterCommandHooks = append(o.afterCommandHooks, fn)
 }
 
 // SetOutputFormats sets the output formats.
@@ -192,14 +209,16 @@ func (o *serviceCommandOptions) SetOutputFormats(formats []OutputFormat) {
 	o.outputFormats = formats
 }
 
-// BeforeCommand returns the before hook, or nil if not set.
-func (o *serviceCommandOptions) BeforeCommand() func(context.Context, *cli.Command) error {
-	return o.beforeCommand
+// BeforeCommandHooks returns the before command hooks.
+// These hooks run in registration order (first registered runs first).
+func (o *serviceCommandOptions) BeforeCommandHooks() []func(context.Context, *cli.Command) error {
+	return o.beforeCommandHooks
 }
 
-// AfterCommand returns the after hook, or nil if not set.
-func (o *serviceCommandOptions) AfterCommand() func(context.Context, *cli.Command) error {
-	return o.afterCommand
+// AfterCommandHooks returns the after command hooks.
+// These hooks run in REVERSE registration order (last registered runs first).
+func (o *serviceCommandOptions) AfterCommandHooks() []func(context.Context, *cli.Command) error {
+	return o.afterCommandHooks
 }
 
 // OutputFormats returns the registered output formats.
@@ -251,8 +270,8 @@ type serviceRegistration struct {
 
 type rootCommandOptions struct {
 	serviceRegistrations    []*serviceRegistration
-	beforeCommand           func(context.Context, *cli.Command) error
-	afterCommand            func(context.Context, *cli.Command) error
+	beforeCommandHooks      []func(context.Context, *cli.Command) error
+	afterCommandHooks       []func(context.Context, *cli.Command) error
 	outputFormats           []OutputFormat
 	grpcServerOptions       []grpc.ServerOption
 	enableTranscoding       bool
@@ -265,16 +284,20 @@ type rootCommandOptions struct {
 	daemonReadyHooks        []DaemonReadyHook    // Hooks called after server is ready
 	daemonShutdownHooks     []DaemonShutdownHook // Hooks called during graceful shutdown
 	slogConfig              SlogConfigFunc       // Function to configure slog logger
+	defaultVerbosity        *slog.Level          // Default verbosity level (nil = info)
+	helpCustomization       *HelpCustomization   // Help text customization options
 }
 
-// SetBeforeCommand sets the before hook.
-func (o *rootCommandOptions) SetBeforeCommand(fn func(context.Context, *cli.Command) error) {
-	o.beforeCommand = fn
+// AddBeforeCommand adds a before command hook.
+// Multiple hooks can be registered and will run in registration order.
+func (o *rootCommandOptions) AddBeforeCommand(fn func(context.Context, *cli.Command) error) {
+	o.beforeCommandHooks = append(o.beforeCommandHooks, fn)
 }
 
-// SetAfterCommand sets the after hook.
-func (o *rootCommandOptions) SetAfterCommand(fn func(context.Context, *cli.Command) error) {
-	o.afterCommand = fn
+// AddAfterCommand adds an after command hook.
+// Multiple hooks can be registered and will run in REVERSE registration order.
+func (o *rootCommandOptions) AddAfterCommand(fn func(context.Context, *cli.Command) error) {
+	o.afterCommandHooks = append(o.afterCommandHooks, fn)
 }
 
 // SetOutputFormats sets the output formats.
@@ -304,14 +327,16 @@ func (o *rootCommandOptions) ServiceRegistrations() []*serviceRegistration {
 	return o.serviceRegistrations
 }
 
-// BeforeCommand returns the root before hook, or nil if not set.
-func (o *rootCommandOptions) BeforeCommand() func(context.Context, *cli.Command) error {
-	return o.beforeCommand
+// BeforeCommandHooks returns the before command hooks.
+// These hooks run in registration order (first registered runs first).
+func (o *rootCommandOptions) BeforeCommandHooks() []func(context.Context, *cli.Command) error {
+	return o.beforeCommandHooks
 }
 
-// AfterCommand returns the root after hook, or nil if not set.
-func (o *rootCommandOptions) AfterCommand() func(context.Context, *cli.Command) error {
-	return o.afterCommand
+// AfterCommandHooks returns the after command hooks.
+// These hooks run in REVERSE registration order (last registered runs first).
+func (o *rootCommandOptions) AfterCommandHooks() []func(context.Context, *cli.Command) error {
+	return o.afterCommandHooks
 }
 
 // OutputFormats returns the root-level output formats.
@@ -381,6 +406,55 @@ func (o *rootCommandOptions) SlogConfig() SlogConfigFunc {
 	return o.slogConfig
 }
 
+// DefaultVerbosity returns the default verbosity level as a string.
+// Returns "info" if not explicitly set.
+func (o *rootCommandOptions) DefaultVerbosity() string {
+	if o.defaultVerbosity == nil {
+		return "info"
+	}
+	return slogLevelToString(*o.defaultVerbosity)
+}
+
+// HelpCustomization returns the help customization options.
+func (o *rootCommandOptions) HelpCustomization() *HelpCustomization {
+	return o.helpCustomization
+}
+
+// slogLevelToString converts an slog.Level to the CLI verbosity string format.
+// Note: In slog, higher numeric values = less verbose logging.
+func slogLevelToString(level slog.Level) string {
+	switch level {
+	case slog.LevelDebug:
+		return "debug"
+	case slog.LevelInfo:
+		return "info"
+	case slog.LevelWarn:
+		return "warn"
+	case slog.LevelError:
+		return "error"
+	default:
+		// Very high levels (1000+) effectively disable logging
+		if level >= 1000 {
+			return "none"
+		}
+		// Levels below Debug (-4) map to debug for maximum visibility
+		// Levels between standard levels default to the next higher verbosity
+		if level < slog.LevelDebug {
+			return "debug"
+		}
+		if level < slog.LevelInfo {
+			return "debug"
+		}
+		if level < slog.LevelWarn {
+			return "info"
+		}
+		if level < slog.LevelError {
+			return "warn"
+		}
+		return "error"
+	}
+}
+
 // Option types for type-safe configuration using interface pattern
 
 // ServiceOption interface for service-level configuration.
@@ -430,19 +504,24 @@ func (fn RootOnlyOption) applyToRootConfig(opts *rootCommandOptions) {
 	fn(opts)
 }
 
-// WithBeforeCommand registers a hook that runs before each command execution.
+// BeforeCommand registers a hook that runs before each command execution.
+// Multiple hooks can be registered and will run in registration order.
 // Works with both ServiceCommand and RootCommand.
-func WithBeforeCommand(fn func(context.Context, *cli.Command) error) SharedOption {
+func BeforeCommand(fn func(context.Context, *cli.Command) error) SharedOption {
 	return SharedOption(func(o baseOptions) {
-		o.SetBeforeCommand(fn)
+		o.AddBeforeCommand(fn)
 	})
 }
 
 // WithAfterCommand registers a hook that runs after each command execution.
 // Works with both ServiceCommand and RootCommand.
-func WithAfterCommand(fn func(context.Context, *cli.Command) error) SharedOption {
+// AfterCommand registers a hook that runs after each command execution.
+// Multiple hooks can be registered and will run in REVERSE registration order.
+// This allows cleanup to happen in the opposite order of setup (LIFO pattern).
+// Works with both ServiceCommand and RootCommand.
+func AfterCommand(fn func(context.Context, *cli.Command) error) SharedOption {
 	return SharedOption(func(o baseOptions) {
-		o.SetAfterCommand(fn)
+		o.AddAfterCommand(fn)
 	})
 }
 
@@ -496,10 +575,10 @@ func Hoisted() ServiceRegistrationOption {
 	}
 }
 
-// WithService registers a service CLI (root level only).
+// Service registers a service CLI (root level only).
 // Accepts optional ServiceRegistrationOptions to customize registration (e.g., Hoisted()).
 // Type-safe: only works with RootOptions.
-func WithService(service *ServiceCLI, opts ...ServiceRegistrationOption) RootOnlyOption {
+func Service(service *ServiceCLI, opts ...ServiceRegistrationOption) RootOnlyOption {
 	return RootOnlyOption(func(o *rootCommandOptions) {
 		reg := &serviceRegistration{
 			service: service,
@@ -584,34 +663,34 @@ func WithGracefulShutdownTimeout(timeout time.Duration) RootOnlyOption {
 	})
 }
 
-// WithOnDaemonStartup registers a hook that runs before the gRPC server starts listening.
+// OnDaemonStartup registers a hook that runs before the gRPC server starts listening.
 // Multiple hooks can be registered and will run in registration order.
 // The hook receives the gRPC server instance and gateway mux (may be nil if transcoding disabled).
 // Returning an error prevents the daemon from starting.
 // Type-safe: only works with RootOptions.
-func WithOnDaemonStartup(hook DaemonStartupHook) RootOnlyOption {
+func OnDaemonStartup(hook DaemonStartupHook) RootOnlyOption {
 	return RootOnlyOption(func(o *rootCommandOptions) {
 		o.daemonStartupHooks = append(o.daemonStartupHooks, hook)
 	})
 }
 
-// WithOnDaemonReady registers a hook that runs after the gRPC server is listening and ready.
+// OnDaemonReady registers a hook that runs after the gRPC server is listening and ready.
 // Multiple hooks can be registered and will run in registration order.
 // The hook cannot return errors - errors must be handled within the hook.
 // Type-safe: only works with RootOptions.
-func WithOnDaemonReady(hook DaemonReadyHook) RootOnlyOption {
+func OnDaemonReady(hook DaemonReadyHook) RootOnlyOption {
 	return RootOnlyOption(func(o *rootCommandOptions) {
 		o.daemonReadyHooks = append(o.daemonReadyHooks, hook)
 	})
 }
 
-// WithOnDaemonShutdown registers a hook that runs during graceful shutdown.
+// OnDaemonShutdown registers a hook that runs during graceful shutdown.
 // Multiple hooks can be registered and will run in REVERSE registration order.
 // The hook runs after stop accepting new connections but before forcing shutdown.
 // The context will be cancelled when the graceful shutdown timeout expires.
 // The hook cannot return errors - errors must be handled within the hook.
 // Type-safe: only works with RootOptions.
-func WithOnDaemonShutdown(hook DaemonShutdownHook) RootOnlyOption {
+func OnDaemonShutdown(hook DaemonShutdownHook) RootOnlyOption {
 	return RootOnlyOption(func(o *rootCommandOptions) {
 		o.daemonShutdownHooks = append(o.daemonShutdownHooks, hook)
 	})
@@ -633,6 +712,81 @@ func WithSlogConfig(configFunc SlogConfigFunc) RootOnlyOption {
 	})
 }
 
+// WithDefaultVerbosity sets the default verbosity level for the --verbosity flag.
+// Accepts standard slog.Level values: slog.LevelDebug, slog.LevelInfo, slog.LevelWarn, slog.LevelError.
+// Note: In slog, higher numeric values = less verbose logging:
+//   - slog.LevelDebug (-4) = most verbose
+//   - slog.LevelInfo (0) = normal
+//   - slog.LevelWarn (4) = warnings and errors only
+//   - slog.LevelError (8) = errors only
+//   - slog.Level(1000) or higher = effectively disables logging
+//
+// Default is slog.LevelInfo if not specified.
+// Users can still override via the --verbosity flag or -v shorthand.
+// Type-safe: only works with RootOptions.
+//
+// Example:
+//
+//	protocli.WithDefaultVerbosity(slog.LevelDebug)    // Most verbose (debug and above)
+//	protocli.WithDefaultVerbosity(slog.LevelWarn)     // Less verbose (warn and error only)
+//	protocli.WithDefaultVerbosity(slog.Level(1000))   // Disable logging
+func WithDefaultVerbosity(level slog.Level) RootOnlyOption {
+	return RootOnlyOption(func(o *rootCommandOptions) {
+		o.defaultVerbosity = &level
+	})
+}
+
+// WithHelpCustomization sets custom help templates and printer functions.
+// This allows full customization of help text display following urfave/cli v3 patterns.
+//
+// Example:
+//
+//	protocli.WithHelpCustomization(&protocli.HelpCustomization{
+//	    RootCommandHelpTemplate: myCustomTemplate,
+//	    CustomizeRootCommand: func(cmd *cli.Command) {
+//	        cmd.Usage = "My custom usage text"
+//	    },
+//	})
+func WithHelpCustomization(custom *HelpCustomization) RootOnlyOption {
+	return RootOnlyOption(func(o *rootCommandOptions) {
+		o.helpCustomization = custom
+	})
+}
+
+// WithRootCommandHelpTemplate sets a custom template for root command help.
+// This is a convenience function for the most common help customization.
+//
+// Example:
+//
+//	protocli.WithRootCommandHelpTemplate(`
+//	NAME:
+//	   {{.Name}} - {{.Usage}}
+//
+//	USAGE:
+//	   {{.HelpName}} {{if .VisibleFlags}}[options]{{end}} command [command options]
+//
+//	VERSION:
+//	   {{.Version}}
+//	`)
+func WithRootCommandHelpTemplate(template string) RootOnlyOption {
+	return RootOnlyOption(func(o *rootCommandOptions) {
+		if o.helpCustomization == nil {
+			o.helpCustomization = &HelpCustomization{}
+		}
+		o.helpCustomization.RootCommandHelpTemplate = template
+	})
+}
+
+// WithCustomizeRootCommand allows modifying the root command after creation.
+// This is useful for adding custom fields, metadata, or other modifications.
+//
+// Example:
+//
+//	protocli.WithCustomizeRootCommand(func(cmd *cli.Command) {
+//	    cmd.Version = "1.0.0"
+//	    cmd.Copyright = "(c) 2026 MyCompany"
+//	    cmd.Authors = []any{"John Doe <john@example.com>"}
+//	})
 // Helper functions to apply options
 
 // ApplyServiceOptions applies functional options and returns configured service settings.

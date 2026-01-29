@@ -54,10 +54,10 @@ func TestDaemonLifecycleHooks_StartupReadyShutdown(t *testing.T) {
 	userServiceCLI := simple.UserServiceCommand(ctx, newUserService)
 
 	rootCmd, err := protocli.RootCommand("testcli",
-		protocli.WithService(userServiceCLI),
-		protocli.WithOnDaemonStartup(startup),
-		protocli.WithOnDaemonReady(ready),
-		protocli.WithOnDaemonShutdown(shutdown),
+		protocli.Service(userServiceCLI),
+		protocli.OnDaemonStartup(startup),
+		protocli.OnDaemonReady(ready),
+		protocli.OnDaemonShutdown(shutdown),
 		protocli.WithGracefulShutdownTimeout(2*time.Second),
 	)
 	require.NoError(t, err)
@@ -102,8 +102,8 @@ func TestDaemonLifecycleHooks_StartupError(t *testing.T) {
 	userServiceCLI := simple.UserServiceCommand(ctx, newUserService)
 
 	rootCmd, err := protocli.RootCommand("testcli",
-		protocli.WithService(userServiceCLI),
-		protocli.WithOnDaemonStartup(startupWithError),
+		protocli.Service(userServiceCLI),
+		protocli.OnDaemonStartup(startupWithError),
 	)
 	require.NoError(t, err)
 
@@ -162,13 +162,13 @@ func TestDaemonLifecycleHooks_MultipleHooks(t *testing.T) {
 	userServiceCLI := simple.UserServiceCommand(ctx, newUserService)
 
 	rootCmd, err := protocli.RootCommand("testcli",
-		protocli.WithService(userServiceCLI),
-		protocli.WithOnDaemonStartup(startup1),
-		protocli.WithOnDaemonStartup(startup2),
-		protocli.WithOnDaemonReady(ready1),
-		protocli.WithOnDaemonReady(ready2),
-		protocli.WithOnDaemonShutdown(shutdown1),
-		protocli.WithOnDaemonShutdown(shutdown2),
+		protocli.Service(userServiceCLI),
+		protocli.OnDaemonStartup(startup1),
+		protocli.OnDaemonStartup(startup2),
+		protocli.OnDaemonReady(ready1),
+		protocli.OnDaemonReady(ready2),
+		protocli.OnDaemonShutdown(shutdown1),
+		protocli.OnDaemonShutdown(shutdown2),
 		protocli.WithGracefulShutdownTimeout(2*time.Second),
 	)
 	require.NoError(t, err)
@@ -225,8 +225,8 @@ func TestDaemonLifecycleHooks_GracefulShutdownTimeout(t *testing.T) {
 	userServiceCLI := simple.UserServiceCommand(ctx, newUserService)
 
 	rootCmd, err := protocli.RootCommand("testcli",
-		protocli.WithService(userServiceCLI),
-		protocli.WithOnDaemonShutdown(shutdown),
+		protocli.Service(userServiceCLI),
+		protocli.OnDaemonShutdown(shutdown),
 		protocli.WithGracefulShutdownTimeout(1*time.Second),
 	)
 	require.NoError(t, err)
@@ -278,8 +278,8 @@ func TestDaemonLifecycleHooks_AccessToServerInStartup(t *testing.T) {
 	userServiceCLI := simple.UserServiceCommand(ctx, newUserService)
 
 	rootCmd, err := protocli.RootCommand("testcli",
-		protocli.WithService(userServiceCLI),
-		protocli.WithOnDaemonStartup(startup),
+		protocli.Service(userServiceCLI),
+		protocli.OnDaemonStartup(startup),
 	)
 	require.NoError(t, err)
 

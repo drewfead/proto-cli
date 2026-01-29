@@ -20,7 +20,7 @@ func TestHoistedService_FlatCommandStructure(t *testing.T) {
 
 	// Create root command with hoisted service
 	rootCmd, err := protocli.RootCommand("testcli",
-		protocli.WithService(userServiceCLI, protocli.Hoisted()),
+		protocli.Service(userServiceCLI, protocli.Hoisted()),
 	)
 	require.NoError(t, err)
 
@@ -52,8 +52,8 @@ func TestHoistedService_NamingCollision(t *testing.T) {
 
 	// This should return error because both registrations have the same "health-check" command
 	_, err := protocli.RootCommand("testcli",
-		protocli.WithService(adminServiceCLI, protocli.Hoisted()),
-		protocli.WithService(adminServiceCLI, protocli.Hoisted()), // Same service twice = guaranteed collision
+		protocli.Service(adminServiceCLI, protocli.Hoisted()),
+		protocli.Service(adminServiceCLI, protocli.Hoisted()), // Same service twice = guaranteed collision
 	)
 
 	require.Error(t, err)

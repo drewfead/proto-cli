@@ -31,8 +31,8 @@ userServiceCLI := simple.UserServiceCommand(ctx, newUserService, opts...)
 
 // Add to root with other services
 rootCmd := protocli.RootCommand("usercli",
-    protocli.WithService(userServiceCLI),
-    protocli.WithService(adminServiceCLI),
+    protocli.Service(userServiceCLI),
+    protocli.Service(adminServiceCLI),
 )
 ```
 

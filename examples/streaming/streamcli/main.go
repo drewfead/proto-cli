@@ -24,7 +24,7 @@ func main() {
 
 	// Create root CLI with the streaming service
 	rootCmd, err := protocli.RootCommand("streamcli",
-		protocli.WithService(serviceCLI),
+		protocli.Service(serviceCLI),
 	)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error creating root command: %v\n", err)
