@@ -2,23 +2,23 @@ syntax = "proto3";
 
 package example;
 
-option go_package = "github.com/drewfead/proto-cli/simple";
-
 import "google/protobuf/timestamp.proto";
 import "proto/cli/v1/cli.proto";
+
+option go_package = "github.com/drewfead/proto-cli/simple";
 
 // DatabaseConfig is a nested configuration message
 message DatabaseConfig {
   string url = 1 [(cli.v1.flag) = {
-    name: "url",
+    name: "url"
     usage: "Database connection URL"
   }];
   int32 max_connections = 2 [(cli.v1.flag) = {
-    name: "max-connections",
+    name: "max-connections"
     usage: "Maximum database connections"
   }];
   int32 timeout_seconds = 3 [(cli.v1.flag) = {
-    name: "timeout",
+    name: "timeout"
     usage: "Connection timeout in seconds"
   }];
 }
@@ -50,30 +50,30 @@ message MySQLBackend {
 // UserServiceConfig defines configuration for UserService
 message UserServiceConfig {
   string database_url = 1 [(cli.v1.flag) = {
-    name: "db-url",
-    usage: "PostgreSQL connection URL",
+    name: "db-url"
+    usage: "PostgreSQL connection URL"
     required: true
   }];
   int64 max_connections = 2 [(cli.v1.flag) = {
-    name: "max-conns",
+    name: "max-conns"
     usage: "Maximum database connections"
   }];
 
   // Nested message field
   DatabaseConfig database = 3 [(cli.v1.flag) = {
-    name: "database",
+    name: "database"
     usage: "Database configuration"
   }];
 
   // Enum field
   LogLevel log_level = 4 [(cli.v1.flag) = {
-    name: "log-level",
+    name: "log-level"
     usage: "Logging level"
   }];
 
   // Repeated field
   repeated string allowed_origins = 5 [(cli.v1.flag) = {
-    name: "allowed-origins",
+    name: "allowed-origins"
     usage: "CORS allowed origins"
   }];
 
@@ -101,34 +101,34 @@ message User {
   int64 id = 1;
   string name = 2;
   string email = 3;
-  google.protobuf.Timestamp created_at = 4;  // External type to test import qualification
-  Address address = 5;  // Nested address field
+  google.protobuf.Timestamp created_at = 4; // External type to test import qualification
+  Address address = 5; // Nested address field
 }
 
 // Request to get a user by ID
 message GetUserRequest {
   int64 id = 1 [(cli.v1.flag) = {
-    name: "id",
-    shorthand: "i",
-    usage: "User ID to retrieve",
+    name: "id"
+    shorthand: "i"
+    usage: "User ID to retrieve"
     required: true
   }];
 
   // Field with partial annotation - demonstrates name defaults to kebab-case
   bool include_details = 2 [(cli.v1.flag) = {
-    shorthand: "d",
+    shorthand: "d"
     usage: "Include detailed user information"
   }];
 
   // Optional fields demonstrate explicit presence tracking in proto3
   optional string fields_filter = 3 [(cli.v1.flag) = {
-    name: "fields",
-    shorthand: "f",
+    name: "fields"
+    shorthand: "f"
     usage: "Comma-separated list of fields to return (e.g., 'name,email')"
   }];
   optional int32 timeout_ms = 4 [(cli.v1.flag) = {
-    name: "timeout",
-    shorthand: "t",
+    name: "timeout"
+    shorthand: "t"
     usage: "Request timeout in milliseconds"
   }];
 }
@@ -136,34 +136,34 @@ message GetUserRequest {
 // Request to create a new user
 message CreateUserRequest {
   string name = 1 [(cli.v1.flag) = {
-    name: "name",
-    shorthand: "n",
-    usage: "User's full name",
+    name: "name"
+    shorthand: "n"
+    usage: "User's full name"
     required: true
   }];
   string email = 2 [(cli.v1.flag) = {
-    name: "email",
-    shorthand: "e",
-    usage: "User's email address",
+    name: "email"
+    shorthand: "e"
+    usage: "User's email address"
     required: true
   }];
-  Address address = 3;  // Nested address - demonstrates recursive deserializers
-  google.protobuf.Timestamp registration_date = 4;  // External type to test import qualification
+  Address address = 3; // Nested address - demonstrates recursive deserializers
+  google.protobuf.Timestamp registration_date = 4; // External type to test import qualification
 
   // Field without annotation - demonstrates kebab-case default
   string phone_number = 5;
 
   // Optional fields demonstrate explicit presence tracking
   optional string nickname = 6 [(cli.v1.flag) = {
-    name: "nickname",
+    name: "nickname"
     usage: "Optional nickname for the user"
   }];
   optional int32 age = 7 [(cli.v1.flag) = {
-    name: "age",
+    name: "age"
     usage: "User's age in years"
   }];
   optional bool verified = 8 [(cli.v1.flag) = {
-    name: "verified",
+    name: "verified"
     usage: "Whether the user email is verified"
   }];
 }
@@ -177,35 +177,35 @@ message UserResponse {
 // UserService defines gRPC service methods
 service UserService {
   option (cli.v1.service) = {
-    name: "user-service",
-    description: "User management commands",
-    long_description: "Comprehensive user management service for CRUD operations.\n\n"
-                      "This service provides complete user lifecycle management including:\n"
-                      "- Creating new user accounts\n"
-                      "- Retrieving user information\n"
-                      "- Updating user profiles\n"
-                      "- Managing user authentication and preferences\n\n"
-                      "All commands require appropriate authentication and authorization."
+    name: "user-service"
+    description: "User management commands"
+    long_description:
+      "Comprehensive user management service for CRUD operations.\n\n"
+      "This service provides complete user lifecycle management including:\n"
+      "- Creating new user accounts\n"
+      "- Retrieving user information\n"
+      "- Updating user profiles\n"
+      "- Managing user authentication and preferences\n\n"
+      "All commands require appropriate authentication and authorization."
   };
 
-  option (cli.v1.service_config) = {
-    config_message: "UserServiceConfig"
-  };
+  option (cli.v1.service_config) = {config_message: "UserServiceConfig"};
 
   // GetUser retrieves a user by ID
   rpc GetUser(GetUserRequest) returns (UserResponse) {
     option (cli.v1.command) = {
-      name: "get",
-      description: "Retrieve a user by ID",
-      long_description: "Fetch detailed information about a user from the database.\n\n"
-                        "This command queries the user service to retrieve a user record by their unique ID. "
-                        "You can optionally include additional details like profile information and preferences. "
-                        "Use --fields to specify which fields to return in the response.\n\n"
-                        "Examples:\n"
-                        "  Get basic user info:       usercli user-service get --id 123\n"
-                        "  Get with details:          usercli user-service get --id 123 --include-details\n"
-                        "  Get specific fields:       usercli user-service get --id 123 --fields name,email",
-      usage_text: "get --id <user-id> [--include-details] [--fields <field-list>]",
+      name: "get"
+      description: "Retrieve a user by ID"
+      long_description:
+        "Fetch detailed information about a user from the database.\n\n"
+        "This command queries the user service to retrieve a user record by their unique ID. "
+        "You can optionally include additional details like profile information and preferences. "
+        "Use --fields to specify which fields to return in the response.\n\n"
+        "Examples:\n"
+        "  Get basic user info:       usercli user-service get --id 123\n"
+        "  Get with details:          usercli user-service get --id 123 --include-details\n"
+        "  Get specific fields:       usercli user-service get --id 123 --fields name,email"
+      usage_text: "get --id <user-id> [--include-details] [--fields <field-list>]"
       args_usage: ""
     };
   }
@@ -213,7 +213,7 @@ service UserService {
   // CreateUser creates a new user
   rpc CreateUser(CreateUserRequest) returns (UserResponse) {
     option (cli.v1.command) = {
-      name: "create",
+      name: "create"
       description: "Create a new user"
     };
   }
@@ -221,7 +221,7 @@ service UserService {
   // ListUsers streams all users
   rpc ListUsers(stream GetUserRequest) returns (stream UserResponse) {
     option (cli.v1.command) = {
-      name: "list",
+      name: "list"
       description: "List all users"
     };
   }
@@ -240,14 +240,14 @@ message AdminResponse {
 // Without annotation, this would be "admin-service"
 service AdminService {
   option (cli.v1.service) = {
-    name: "admin",
+    name: "admin"
     description: "Administrative operations"
   };
 
   // Health check endpoint
   rpc HealthCheck(AdminRequest) returns (AdminResponse) {
     option (cli.v1.command) = {
-      name: "health",
+      name: "health"
       description: "Check service health"
     };
   }

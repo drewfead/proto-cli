@@ -61,6 +61,7 @@ func (m *mockUserService) GetUser(_ context.Context, req *simple.GetUserRequest)
 func newMockUserService(_ *simple.UserServiceConfig) simple.UserServiceServer {
 	return &mockUserService{}
 }
+
 // TestHoistedService_FlatCommandStructure tests that hoisted services have commands at root level.
 func TestIntegration_HoistedService_FlatCommandStructure(t *testing.T) {
 	ctx := context.Background()
@@ -123,13 +124,13 @@ func TestIntegration_HoistedService_DaemonizeCollision(t *testing.T) {
 // TestIntegration_CommandHooks_ExecutionOrder tests hook execution order and error handling.
 func TestIntegration_CommandHooks_ExecutionOrder(t *testing.T) {
 	tests := []struct {
-		name            string
-		beforeHooks     []func(*[]string) protocli.ServiceOption
-		afterHooks      []func(*[]string) protocli.ServiceOption
-		expectedOrder   []string
-		expectError     bool
-		errorInHook     string
-		description     string
+		name          string
+		beforeHooks   []func(*[]string) protocli.ServiceOption
+		afterHooks    []func(*[]string) protocli.ServiceOption
+		expectedOrder []string
+		expectError   bool
+		errorInHook   string
+		description   string
 	}{
 		{
 			name: "before hooks execute in FIFO order",

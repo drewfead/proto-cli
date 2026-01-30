@@ -507,6 +507,7 @@ func TestUnit_VerbosityDefaults(t *testing.T) {
 		})
 	}
 }
+
 func TestUnit_ConfigLoader_NestedMessages(t *testing.T) {
 	yamlContent := `
 services:

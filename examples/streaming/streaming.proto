@@ -1,19 +1,20 @@
 syntax = "proto3";
 package streaming;
-option go_package = "github.com/drewfead/proto-cli/examples/streaming";
 
 import "proto/cli/v1/cli.proto";
 
+option go_package = "github.com/drewfead/proto-cli/examples/streaming";
+
 service StreamingService {
   option (cli.v1.service) = {
-    name: "streaming-service",
+    name: "streaming-service"
     description: "Example streaming service"
   };
 
   // Server streaming: list items as they're found
   rpc ListItems(ListItemsRequest) returns (stream ItemResponse) {
     option (cli.v1.command) = {
-      name: "list-items",
+      name: "list-items"
       description: "Stream items from the server"
     };
   }
@@ -21,20 +22,35 @@ service StreamingService {
   // Server streaming: watch for changes
   rpc WatchItems(WatchRequest) returns (stream ItemEvent) {
     option (cli.v1.command) = {
-      name: "watch-items",
+      name: "watch-items"
       description: "Watch for item changes in real-time"
     };
   }
 }
 
 message ListItemsRequest {
-  string category = 1 [(cli.v1.flag) = {name: "category", usage: "Filter by category"}];
-  int32 limit = 2 [(cli.v1.flag) = {name: "limit", usage: "Max items to return"}];
+  string category = 1 [(cli.v1.flag) = {
+    name: "category"
+    usage: "Filter by category"
+  }];
+  int32 limit = 2 [(cli.v1.flag) = {
+    name: "limit"
+    usage: "Max items to return"
+  }];
 
   // Optional fields demonstrate explicit presence tracking
-  optional int32 offset = 3 [(cli.v1.flag) = {name: "offset", usage: "Number of items to skip"}];
-  optional string sort_by = 4 [(cli.v1.flag) = {name: "sort-by", usage: "Sort field (name, id, category)"}];
-  optional bool include_deleted = 5 [(cli.v1.flag) = {name: "include-deleted", usage: "Include deleted items"}];
+  optional int32 offset = 3 [(cli.v1.flag) = {
+    name: "offset"
+    usage: "Number of items to skip"
+  }];
+  optional string sort_by = 4 [(cli.v1.flag) = {
+    name: "sort-by"
+    usage: "Sort field (name, id, category)"
+  }];
+  optional bool include_deleted = 5 [(cli.v1.flag) = {
+    name: "include-deleted"
+    usage: "Include deleted items"
+  }];
 }
 
 message ItemResponse {
@@ -49,11 +65,14 @@ message Item {
 }
 
 message WatchRequest {
-  int64 start_id = 1 [(cli.v1.flag) = {name: "start-id", usage: "Start watching from this ID"}];
+  int64 start_id = 1 [(cli.v1.flag) = {
+    name: "start-id"
+    usage: "Start watching from this ID"
+  }];
 }
 
 message ItemEvent {
-  string event_type = 1;  // "created", "updated", "deleted"
+  string event_type = 1; // "created", "updated", "deleted"
   Item item = 2;
   int64 timestamp = 3;
 }
