@@ -26,6 +26,6 @@
 // To regenerate after modifying streaming.proto, run: go generate
 package streaming
 
-//go:generate go run github.com/bufbuild/buf/cmd/buf generate --template ../../buf.gen.yaml -o ../.. ../..
+//go:generate sh -c "true"
 //go:generate go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint fmt .
 //go:generate go run mvdan.cc/gofumpt -l -w .

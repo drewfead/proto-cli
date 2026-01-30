@@ -15,7 +15,8 @@ import (
 )
 
 // setupTestCLI overrides os.Exit behavior for testing
-func setupTestCLI(t *testing.T) (capturedExitCode *int) {
+func setupTestCLI(t *testing.T) *int {
+	t.Helper()
 	origExiter := cli.OsExiter
 	t.Cleanup(func() { cli.OsExiter = origExiter })
 
@@ -225,8 +226,8 @@ func TestTemplateFormat_MultipleMessageTypes(t *testing.T) {
 	ctx := context.Background()
 
 	templates := map[string]string{
-		"example.UserResponse":       `[USER] {{.user.name}} ({{.user.email}})`,
-		"example.CreateUserRequest":  `[CREATE] {{.name}} - {{.email}}`,
+		"example.UserResponse":        `[USER] {{.user.name}} ({{.user.email}})`,
+		"example.CreateUserRequest":   `[CREATE] {{.name}} - {{.email}}`,
 		"example.HealthCheckResponse": `[HEALTH] Status: {{.status}}`,
 	}
 
@@ -272,14 +273,14 @@ func TestTemplateFormat_MustTemplateFormat(t *testing.T) {
 	})
 }
 
-// Example demonstrating package-level format initialization
-var userCompactFormat = protocli.MustTemplateFormat("user-compact", map[string]string{
-	"example.UserResponse": `{{.user.name}} <{{.user.email}}>`,
-})
-
 func TestTemplateFormat_PackageLevelFormat(t *testing.T) {
 	_ = setupTestCLI(t)
 	ctx := context.Background()
+
+	// Example demonstrating package-level format initialization
+	userCompactFormat := protocli.MustTemplateFormat("user-compact", map[string]string{
+		"example.UserResponse": `{{.user.name}} <{{.user.email}}>`,
+	})
 
 	userServiceCLI := simple.UserServiceCommand(ctx, newUserService,
 		protocli.WithOutputFormats(userCompactFormat),

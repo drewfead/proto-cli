@@ -7,7 +7,7 @@
 package simple
 
 import (
-	_ "github.com/drewfead/proto-cli/internal/clipb"
+	_ "github.com/drewfead/proto-cli/proto/cli/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
@@ -882,7 +882,7 @@ var File_examples_simple_example_proto protoreflect.FileDescriptor
 
 const file_examples_simple_example_proto_rawDesc = "" +
 	"\n" +
-	"\x1dexamples/simple/example.proto\x12\aexample\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x18internal/clipb/cli.proto\"\xfb\x01\n" +
+	"\x1dexamples/simple/example.proto\x12\aexample\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x16proto/cli/v1/cli.proto\"\xfb\x01\n" +
 	"\x0eDatabaseConfig\x124\n" +
 	"\x03url\x18\x01 \x01(\tB\"\x92\xb5\x18\x1e\n" +
 	"\x03url\x1a\x17Database connection URLR\x03url\x12\\\n" +
@@ -1001,8 +1001,7 @@ const file_examples_simple_example_proto_rawDesc = "" +
 	"\fAdminService\x12`\n" +
 	"\vHealthCheck\x12\x15.example.AdminRequest\x1a\x16.example.AdminResponse\"\"\x8a\xb5\x18\x1e\n" +
 	"\x06health\x12\x14Check service health\x1a&\x82\xb5\x18\"\n" +
-	"\x05admin\x12\x19Administrative operationsB\x86\x01\n" +
-	"\vcom.exampleB\fExampleProtoP\x01Z-github.com/drewfead/proto-cli/examples/simple\xa2\x02\x03EXX\xaa\x02\aExample\xca\x02\aExample\xe2\x02\x13Example\\GPBMetadata\xea\x02\aExampleb\x06proto3"
+	"\x05admin\x12\x19Administrative operationsB&Z$github.com/drewfead/proto-cli/simpleb\x06proto3"
 
 var (
 	file_examples_simple_example_proto_rawDescOnce sync.Once

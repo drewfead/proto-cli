@@ -28,6 +28,6 @@
 // To regenerate after modifying example.proto, run: go generate
 package simple
 
-//go:generate go run github.com/bufbuild/buf/cmd/buf generate --template ../../buf.gen.yaml -o ../.. ../..
+//go:generate sh -c "true"
 //go:generate go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint fmt .
 //go:generate go run mvdan.cc/gofumpt -l -w .

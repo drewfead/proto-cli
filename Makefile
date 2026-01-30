@@ -54,7 +54,8 @@ clean: ## Clean build artifacts and generated proto files
 .PHONY: generate
 generate: ## Generate proto files using buf
 	@echo "Generating proto files..."
-	go run github.com/bufbuild/buf/cmd/buf generate
+	go run github.com/bufbuild/buf/cmd/buf generate --template buf.gen.examples.yaml
+	go generate ./...
 	@echo "✓ Proto generation complete"
 
 .PHONY: generate/clean
@@ -64,7 +65,7 @@ generate/clean: ## Clean and regenerate all proto files
 	rm -f examples/simple/*.pb.go
 	rm -f examples/streaming/*.pb.go
 	@echo "Regenerating proto files..."
-	go run github.com/bufbuild/buf/cmd/buf generate
+	go generate ./...
 	@echo "✓ Clean regeneration complete"
 
 ##@ Test
@@ -84,13 +85,37 @@ test/integration: ## Run integration tests only
 ##@ Lint
 
 .PHONY: lint
-lint: ## Run linter on all files
+lint: lint/go lint/proto lint/fmt ## Run all linters and format checks
+
+.PHONY: lint/go
+lint/go: ## Run Go linter
 	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint run ./...
+
+.PHONY: lint/proto
+lint/proto: ## Run proto linter (buf lint)
+	go run github.com/bufbuild/buf/cmd/buf lint
 
 .PHONY: fmt
 fmt: ## Auto-format code
+	@echo "Formatting Go code..."
 	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint fmt ./...
 	go run mvdan.cc/gofumpt -l -w .
+	@echo "Formatting proto files..."
+	go run github.com/bufbuild/buf/cmd/buf format -w
+	@echo "✓ Formatting complete"
+
+.PHONY: lint/fmt
+lint/fmt: ## Check if code is properly formatted
+	@echo "Checking Go formatting..."
+	@if [ -n "$$(go run mvdan.cc/gofumpt -l .)" ]; then \
+		echo "The following files need formatting:"; \
+		go run mvdan.cc/gofumpt -l .; \
+		echo "Run 'make fmt' to fix"; \
+		exit 1; \
+	fi
+	@echo "Checking proto formatting..."
+	@go run github.com/bufbuild/buf/cmd/buf format -d --exit-code
+	@echo "✓ All files are properly formatted"
 
 ##@ Misc.
 

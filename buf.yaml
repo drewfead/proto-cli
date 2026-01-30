@@ -1,6 +1,9 @@
 version: v2
 modules:
-  - path: proto
+  - path: .
+    excludes:
+      - bin
+      - .git
     name: buf.build/fernet/proto-cli
 lint:
   use:

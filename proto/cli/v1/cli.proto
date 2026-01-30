@@ -2,9 +2,9 @@ syntax = "proto3";
 
 package cli.v1;
 
-option go_package = "github.com/drewfead/proto-cli/proto/cli/v1;cli";
-
 import "google/protobuf/descriptor.proto";
+
+option go_package = "github.com/drewfead/proto-cli/proto/cli/v1;cli";
 
 // CLI command annotation for RPC methods
 // Customizes command name and help text following urfave/cli v3 best practices

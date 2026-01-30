@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"text/template"
@@ -12,6 +13,9 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
+
+// ErrNoTemplate is returned when no template is registered for a message type.
+var ErrNoTemplate = errors.New("no template registered for message type")
 
 // jsonFormat formats proto messages as JSON.
 type jsonFormat struct{}
@@ -234,7 +238,7 @@ func (f *templateFormat) Format(_ context.Context, _ *cli.Command, w io.Writer, 
 	// Look up the template for this message type
 	tmpl, ok := f.templates[msgType]
 	if !ok {
-		return fmt.Errorf("no template registered for message type %s (available: %v)", msgType, f.availableTypes())
+		return fmt.Errorf("%w: %s (available: %v)", ErrNoTemplate, msgType, f.availableTypes())
 	}
 
 	// Convert proto message to map for easier template access

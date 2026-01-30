@@ -14,11 +14,24 @@ import (
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/urfave/cli/v3"
 	"google.golang.org/grpc"
 )
 
+// preventExit overrides os.Exit behavior for testing daemon commands
+func preventExit(t *testing.T) {
+	t.Helper()
+	origExiter := cli.OsExiter
+	t.Cleanup(func() { cli.OsExiter = origExiter })
+	cli.OsExiter = func(code int) {
+		// Don't actually exit during tests
+	}
+}
+
 // TestDaemonLifecycleHooks_StartupReadyShutdown verifies that all lifecycle hooks are called..
-func TestDaemonLifecycleHooks_StartupReadyShutdown(t *testing.T) {
+func TestIntegration_DaemonLifecycle_StartupReadyShutdown(t *testing.T) {
+	preventExit(t)
+
 	var (
 		mu             sync.Mutex
 		startupCalled  bool
@@ -82,8 +95,8 @@ func TestDaemonLifecycleHooks_StartupReadyShutdown(t *testing.T) {
 	proc, _ := os.FindProcess(os.Getpid())
 	_ = proc.Signal(syscall.SIGTERM)
 
-	// Wait for shutdown
-	time.Sleep(1 * time.Second)
+	// Wait for shutdown (longer than graceful shutdown timeout)
+	time.Sleep(3 * time.Second)
 
 	// Verify shutdown hook was called
 	mu.Lock()
@@ -93,7 +106,7 @@ func TestDaemonLifecycleHooks_StartupReadyShutdown(t *testing.T) {
 }
 
 // TestDaemonLifecycleHooks_StartupError verifies that startup error prevents daemon from starting..
-func TestDaemonLifecycleHooks_StartupError(t *testing.T) {
+func TestIntegration_DaemonLifecycle_StartupError(t *testing.T) {
 	startupWithError := func(_ context.Context, _ *grpc.Server, _ *runtime.ServeMux) error {
 		return fmt.Errorf("%w: startup validation failed", assert.AnError)
 	}
@@ -114,7 +127,9 @@ func TestDaemonLifecycleHooks_StartupError(t *testing.T) {
 }
 
 // TestDaemonLifecycleHooks_MultipleHooks verifies multiple hooks run in correct order..
-func TestDaemonLifecycleHooks_MultipleHooks(t *testing.T) {
+func TestIntegration_DaemonLifecycle_MultipleHooks(t *testing.T) {
+	preventExit(t)
+
 	var (
 		mu        sync.Mutex
 		callOrder []string
@@ -185,8 +200,8 @@ func TestDaemonLifecycleHooks_MultipleHooks(t *testing.T) {
 	proc, _ := os.FindProcess(os.Getpid())
 	_ = proc.Signal(syscall.SIGTERM)
 
-	// Wait for shutdown
-	time.Sleep(1 * time.Second)
+	// Wait for shutdown (longer than graceful shutdown timeout)
+	time.Sleep(3 * time.Second)
 
 	// Verify order:
 	// - Startup hooks: registration order
@@ -210,7 +225,9 @@ func TestDaemonLifecycleHooks_MultipleHooks(t *testing.T) {
 }
 
 // TestDaemonLifecycleHooks_GracefulShutdownTimeout verifies timeout behavior.
-func TestDaemonLifecycleHooks_GracefulShutdownTimeout(t *testing.T) {
+func TestIntegration_DaemonLifecycle_GracefulShutdownTimeout(t *testing.T) {
+	preventExit(t)
+
 	shutdownStarted := make(chan time.Time, 1)
 	shutdownCompleted := make(chan time.Time, 1)
 
@@ -243,8 +260,8 @@ func TestDaemonLifecycleHooks_GracefulShutdownTimeout(t *testing.T) {
 	proc, _ := os.FindProcess(os.Getpid())
 	_ = proc.Signal(syscall.SIGTERM)
 
-	// Wait for shutdown
-	time.Sleep(2 * time.Second)
+	// Wait for shutdown (longer than graceful shutdown timeout)
+	time.Sleep(3 * time.Second)
 
 	// Verify shutdown hook was called
 	select {
@@ -256,7 +273,9 @@ func TestDaemonLifecycleHooks_GracefulShutdownTimeout(t *testing.T) {
 }
 
 // TestDaemonLifecycleHooks_AccessToServerInStartup verifies startup hook can configure server.
-func TestDaemonLifecycleHooks_AccessToServerInStartup(t *testing.T) {
+func TestIntegration_DaemonLifecycle_AccessToServerInStartup(t *testing.T) {
+	preventExit(t)
+
 	var (
 		mu               sync.Mutex
 		serverConfigured bool
@@ -299,7 +318,7 @@ func TestDaemonLifecycleHooks_AccessToServerInStartup(t *testing.T) {
 	// Cleanup
 	proc, _ := os.FindProcess(os.Getpid())
 	_ = proc.Signal(syscall.SIGTERM)
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(3 * time.Second)
 }
 
 // Helper: userService implementation for tests.

@@ -7,7 +7,7 @@
 package streaming
 
 import (
-	_ "github.com/drewfead/proto-cli/internal/clipb"
+	_ "github.com/drewfead/proto-cli/proto/cli/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -319,7 +319,7 @@ var File_examples_streaming_streaming_proto protoreflect.FileDescriptor
 
 const file_examples_streaming_streaming_proto_rawDesc = "" +
 	"\n" +
-	"\"examples/streaming/streaming.proto\x12\tstreaming\x1a\x18internal/clipb/cli.proto\"\xa3\x03\n" +
+	"\"examples/streaming/streaming.proto\x12\tstreaming\x1a\x16proto/cli/v1/cli.proto\"\xa3\x03\n" +
 	"\x10ListItemsRequest\x12>\n" +
 	"\bcategory\x18\x01 \x01(\tB\"\x92\xb5\x18\x1e\n" +
 	"\bcategory\x1a\x12Filter by categoryR\bcategory\x126\n" +
@@ -357,8 +357,7 @@ const file_examples_streaming_streaming_proto_rawDesc = "" +
 	"\n" +
 	"WatchItems\x12\x17.streaming.WatchRequest\x1a\x14.streaming.ItemEvent\"6\x8a\xb5\x182\n" +
 	"\vwatch-items\x12#Watch for item changes in real-time0\x01\x1a2\x82\xb5\x18.\n" +
-	"\x11streaming-service\x12\x19Example streaming serviceB\x95\x01\n" +
-	"\rcom.streamingB\x0eStreamingProtoP\x01Z0github.com/drewfead/proto-cli/examples/streaming\xa2\x02\x03SXX\xaa\x02\tStreaming\xca\x02\tStreaming\xe2\x02\x15Streaming\\GPBMetadata\xea\x02\tStreamingb\x06proto3"
+	"\x11streaming-service\x12\x19Example streaming serviceB2Z0github.com/drewfead/proto-cli/examples/streamingb\x06proto3"
 
 var (
 	file_examples_streaming_streaming_proto_rawDescOnce sync.Once

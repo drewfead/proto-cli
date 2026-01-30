@@ -13,7 +13,7 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-func TestTemplateFormat_BasicRendering(t *testing.T) {
+func TestUnit_TemplateFormat_BasicRendering(t *testing.T) {
 	templates := map[string]string{
 		"example.UserResponse": `Name: {{.user.name}}
 Email: {{.user.email}}
@@ -44,7 +44,7 @@ ID: 123`
 	require.Equal(t, expected, buf.String())
 }
 
-func TestTemplateFormat_ConditionalLogic(t *testing.T) {
+func TestUnit_TemplateFormat_ConditionalLogic(t *testing.T) {
 	templates := map[string]string{
 		"example.UserResponse": `{{.user.name}}{{if .user.address}} (has address){{else}} (no address){{end}}`,
 	}
@@ -83,7 +83,7 @@ func TestTemplateFormat_ConditionalLogic(t *testing.T) {
 	require.Equal(t, "Charlie (no address)", buf.String())
 }
 
-func TestTemplateFormat_Conditionals(t *testing.T) {
+func TestUnit_TemplateFormat_Conditionals(t *testing.T) {
 	templates := map[string]string{
 		"example.CreateUserRequest": `Name: {{.name}}
 Email: {{.email}}{{if .phoneNumber}}
@@ -112,7 +112,7 @@ Nickname: {{.nickname}}{{end}}`,
 	require.Contains(t, output, "Nickname: Johnny")
 }
 
-func TestTemplateFormat_CustomFunctions(t *testing.T) {
+func TestUnit_TemplateFormat_CustomFunctions(t *testing.T) {
 	templates := map[string]string{
 		"example.UserResponse": `{{upper .user.name}} - {{lower .user.email}}`,
 	}
@@ -139,7 +139,7 @@ func TestTemplateFormat_CustomFunctions(t *testing.T) {
 	require.Equal(t, "ALICE SMITH - alice@example.com", buf.String())
 }
 
-func TestTemplateFormat_MissingMessageType(t *testing.T) {
+func TestUnit_TemplateFormat_MissingMessageType(t *testing.T) {
 	templates := map[string]string{
 		"example.OtherMessage": `{{.field}}`,
 	}
@@ -154,11 +154,12 @@ func TestTemplateFormat_MissingMessageType(t *testing.T) {
 	var buf bytes.Buffer
 	err = format.Format(context.Background(), &cli.Command{}, &buf, msg)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "no template registered for message type example.UserResponse")
+	require.Contains(t, err.Error(), "no template registered for message type")
+	require.Contains(t, err.Error(), "example.UserResponse")
 	require.Contains(t, err.Error(), "example.OtherMessage")
 }
 
-func TestTemplateFormat_InvalidTemplate(t *testing.T) {
+func TestUnit_TemplateFormat_InvalidTemplate(t *testing.T) {
 	templates := map[string]string{
 		"example.UserResponse": `{{.user.name`,
 	}
@@ -168,7 +169,7 @@ func TestTemplateFormat_InvalidTemplate(t *testing.T) {
 	require.Contains(t, err.Error(), "failed to parse template")
 }
 
-func TestTemplateFormat_TableFormat(t *testing.T) {
+func TestUnit_TemplateFormat_TableFormat(t *testing.T) {
 	templates := map[string]string{
 		"example.UserResponse": `┌────────────────────────────────────────┐
 │ User Information                       │
@@ -200,7 +201,7 @@ func TestTemplateFormat_TableFormat(t *testing.T) {
 	require.Contains(t, output, "│ ID:")
 }
 
-func TestTemplateFormat_OptionalFields(t *testing.T) {
+func TestUnit_TemplateFormat_OptionalFields(t *testing.T) {
 	templates := map[string]string{
 		"example.CreateUserRequest": `Name: {{.name}}{{if .nickname}}
 Nickname: {{.nickname}}{{end}}{{if .age}}
@@ -237,7 +238,7 @@ Age: {{.age}}{{end}}`,
 	require.NotContains(t, buf.String(), "Age:")
 }
 
-func TestMustTemplateFormat_Success(t *testing.T) {
+func TestUnit_MustTemplateFormat_Success(t *testing.T) {
 	templates := map[string]string{
 		"example.UserResponse": `{{.user.name}}`,
 	}
@@ -248,7 +249,7 @@ func TestMustTemplateFormat_Success(t *testing.T) {
 	require.Equal(t, "test", format.Name())
 }
 
-func TestMustTemplateFormat_Panics(t *testing.T) {
+func TestUnit_MustTemplateFormat_Panics(t *testing.T) {
 	templates := map[string]string{
 		"example.UserResponse": `{{.user.name`,
 	}
@@ -258,7 +259,7 @@ func TestMustTemplateFormat_Panics(t *testing.T) {
 	})
 }
 
-func TestTemplateFormat_MultipleFuncMaps(t *testing.T) {
+func TestUnit_TemplateFormat_MultipleFuncMaps(t *testing.T) {
 	templates := map[string]string{
 		"example.UserResponse": `{{upper .user.name}} - {{reverse .user.email}}`,
 	}
@@ -294,7 +295,7 @@ func TestTemplateFormat_MultipleFuncMaps(t *testing.T) {
 	require.Equal(t, "ALICE - moc.elpmaxe@tset", buf.String())
 }
 
-func TestTemplateFormat_CompactFormat(t *testing.T) {
+func TestUnit_TemplateFormat_CompactFormat(t *testing.T) {
 	templates := map[string]string{
 		"example.UserResponse": `{{.user.name}} <{{.user.email}}>`,
 	}
@@ -316,7 +317,7 @@ func TestTemplateFormat_CompactFormat(t *testing.T) {
 	require.Equal(t, "Jane Doe <jane@example.com>", buf.String())
 }
 
-func TestTemplateFormat_CSVLikeOutput(t *testing.T) {
+func TestUnit_TemplateFormat_CSVLikeOutput(t *testing.T) {
 	templates := map[string]string{
 		"example.UserResponse": `{{.user.id}},{{.user.name}},{{.user.email}}`,
 	}
@@ -338,7 +339,7 @@ func TestTemplateFormat_CSVLikeOutput(t *testing.T) {
 	require.Equal(t, "100,Test User,test@example.com", buf.String())
 }
 
-func TestTemplateFormat_NestedFields(t *testing.T) {
+func TestUnit_TemplateFormat_NestedFields(t *testing.T) {
 	templates := map[string]string{
 		"example.UserResponse": `User: {{.user.name}}{{if .user.address}}
 Address:
@@ -400,4 +401,6 @@ Status: {{if .user.verified}}Verified{{else}}Unverified{{end}}`,
 
 	// Use in CLI
 	_ = format // protocli.WithOutputFormats(format)
+
+	// Output:
 }

@@ -513,9 +513,8 @@ func BeforeCommand(fn func(context.Context, *cli.Command) error) SharedOption {
 	})
 }
 
-// WithAfterCommand registers a hook that runs after each command execution.
-// Works with both ServiceCommand and RootCommand.
 // AfterCommand registers a hook that runs after each command execution.
+// Works with both ServiceCommand and RootCommand.
 // Multiple hooks can be registered and will run in REVERSE registration order.
 // This allows cleanup to happen in the opposite order of setup (LIFO pattern).
 // Works with both ServiceCommand and RootCommand.

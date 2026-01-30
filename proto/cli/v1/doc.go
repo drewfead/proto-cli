@@ -1,4 +1,4 @@
-// Package clipb provides Protocol Buffer definitions for CLI annotations.
+// Package cli provides Protocol Buffer definitions for CLI annotations.
 //
 // This package contains the proto definitions used to annotate gRPC service
 // and method definitions with CLI-specific metadata. These annotations control
@@ -11,8 +11,8 @@
 //
 // Generated code in this package should not be edited manually.
 // To regenerate after modifying cli.proto, run: go generate
-package clipb
+package cli
 
-//go:generate go run github.com/bufbuild/buf/cmd/buf generate --template ../../buf.gen.yaml -o ../.. ../..
+//go:generate sh -c "true"
 //go:generate go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint fmt .
 //go:generate go run mvdan.cc/gofumpt -l -w .

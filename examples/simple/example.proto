@@ -188,7 +188,7 @@ service UserService {
                       "All commands require appropriate authentication and authorization."
   };
 
-  option (cli.service_config) = {
+  option (cli.v1.service_config) = {
     config_message: "UserServiceConfig"
   };
 

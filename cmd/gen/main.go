@@ -270,7 +270,7 @@ func generateServiceCommands(file *protogen.File, service *protogen.Service) []j
 	// Get service name and help fields from annotation or use defaults
 	serviceName := toKebabCase(service.GoName)
 	serviceDescription := stripServiceSuffix(service.GoName) + " commands" // Short description
-	var serviceLongDescription, serviceUsageText, serviceArgsUsage string   // Long description, custom usage, args
+	var serviceLongDescription, serviceUsageText, serviceArgsUsage string  // Long description, custom usage, args
 
 	serviceOpts := getServiceOptions(service)
 	if serviceOpts != nil {
@@ -313,7 +313,7 @@ func generateServiceCommands(file *protogen.File, service *protogen.Service) []j
 
 	// Build the ServiceCLI dict
 	serviceCLIDict := jen.Dict{
-		jen.Id("Command"): jen.Op("&").Qual("github.com/urfave/cli/v3", "Command").Values(serviceCommandDict),
+		jen.Id("Command"):           jen.Op("&").Qual("github.com/urfave/cli/v3", "Command").Values(serviceCommandDict),
 		jen.Id("ServiceName"):       jen.Lit(serviceName),
 		jen.Id("ConfigMessageType"): jen.Lit(configMessageType),
 		jen.Id("FactoryOrImpl"):     jen.Id("implOrFactory"),
@@ -455,12 +455,39 @@ func generateServiceCommandsFlat(file *protogen.File, service *protogen.Service)
 	return statements
 }
 
+// generateAfterHooksDefer generates code for executing after hooks in reverse order (LIFO) using defer.
+// This is extracted to avoid code duplication between unary and streaming command generation.
+func generateAfterHooksDefer() jen.Code {
+	return jen.Defer().Func().Params().Block(
+		jen.Id("hooks").Op(":=").Id("options").Dot("AfterCommandHooks").Call(),
+		jen.For(
+			jen.Id("i").Op(":=").Len(jen.Id("hooks")).Op("-").Lit(1),
+			jen.Id("i").Op(">=").Lit(0),
+			jen.Id("i").Op("--"),
+		).Block(
+			jen.If(
+				jen.Err().Op(":=").Id("hooks").Index(jen.Id("i")).Call(
+					jen.Id("cmdCtx"),
+					jen.Id("cmd"),
+				),
+				jen.Err().Op("!=").Nil(),
+			).Block(
+				jen.Qual("log/slog", "Warn").Call(
+					jen.Lit("after hook failed"),
+					jen.Lit("error"),
+					jen.Err(),
+				),
+			),
+		),
+	).Call()
+}
+
 func generateMethodCommand(service *protogen.Service, method *protogen.Method, configMessageType string, file *protogen.File) []jen.Code {
 	var statements []jen.Code
 
 	// Get command name and help fields from annotation or use defaults
 	cmdName := toKebabCase(method.GoName)
-	cmdUsage := method.GoName                          // Short description for Usage field
+	cmdUsage := method.GoName                             // Short description for Usage field
 	var cmdDescription, cmdUsageText, cmdArgsUsage string // Long description, custom usage line, args
 
 	cmdOpts := getMethodCommandOptions(method)
@@ -1030,28 +1057,7 @@ func generateActionBodyWithHooks(file *protogen.File, service *protogen.Service,
 	// Defer after hooks in reverse order (LIFO)
 	// IMPORTANT: Register defer FIRST so it runs even if before hooks fail
 	statements = append(statements,
-		jen.Defer().Func().Params().Block(
-			jen.Id("hooks").Op(":=").Id("options").Dot("AfterCommandHooks").Call(),
-			jen.For(
-				jen.Id("i").Op(":=").Len(jen.Id("hooks")).Op("-").Lit(1),
-				jen.Id("i").Op(">=").Lit(0),
-				jen.Id("i").Op("--"),
-			).Block(
-				jen.If(
-					jen.Err().Op(":=").Id("hooks").Index(jen.Id("i")).Call(
-						jen.Id("cmdCtx"),
-						jen.Id("cmd"),
-					),
-					jen.Err().Op("!=").Nil(),
-				).Block(
-					jen.Qual("log/slog", "Warn").Call(
-						jen.Lit("after hook failed"),
-						jen.Lit("error"),
-						jen.Err(),
-					),
-				),
-			),
-		).Call(),
+		generateAfterHooksDefer(),
 		jen.Line(),
 	)
 
@@ -1312,7 +1318,7 @@ func generateServerStreamingCommand(service *protogen.Service, method *protogen.
 
 	// Get command name and help fields from annotation or use defaults
 	cmdName := toKebabCase(method.GoName)
-	cmdUsage := method.GoName + " (streaming)"           // Short description for Usage field
+	cmdUsage := method.GoName + " (streaming)"            // Short description for Usage field
 	var cmdDescription, cmdUsageText, cmdArgsUsage string // Long description, custom usage line, args
 
 	cmdOpts := getMethodCommandOptions(method)
@@ -1467,28 +1473,7 @@ func generateServerStreamingActionBody(file *protogen.File, service *protogen.Se
 
 	// Defer after hooks in reverse order (LIFO)
 	statements = append(statements,
-		jen.Defer().Func().Params().Block(
-			jen.Id("hooks").Op(":=").Id("options").Dot("AfterCommandHooks").Call(),
-			jen.For(
-				jen.Id("i").Op(":=").Len(jen.Id("hooks")).Op("-").Lit(1),
-				jen.Id("i").Op(">=").Lit(0),
-				jen.Id("i").Op("--"),
-			).Block(
-				jen.If(
-					jen.Err().Op(":=").Id("hooks").Index(jen.Id("i")).Call(
-						jen.Id("cmdCtx"),
-						jen.Id("cmd"),
-					),
-					jen.Err().Op("!=").Nil(),
-				).Block(
-					jen.Qual("log/slog", "Warn").Call(
-						jen.Lit("after hook failed"),
-						jen.Lit("error"),
-						jen.Err(),
-					),
-				),
-			),
-		).Call(),
+		generateAfterHooksDefer(),
 		jen.Line(),
 	)
 
