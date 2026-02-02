@@ -12,6 +12,7 @@ import (
 	"github.com/urfave/cli/v3"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 // ErrNoTemplate is returned when no template is registered for a message type.
@@ -241,20 +242,16 @@ func (f *templateFormat) Format(_ context.Context, _ *cli.Command, w io.Writer, 
 		return fmt.Errorf("%w: %s (available: %v)", ErrNoTemplate, msgType, f.availableTypes())
 	}
 
-	// Convert proto message to map for easier template access
-	data, err := protoToMap(msg)
-	if err != nil {
-		return fmt.Errorf("failed to convert proto message to map: %w", err)
-	}
-
-	// Execute the template
+	// Pass the proto message directly to templates
+	// Custom template functions receive actual proto types
+	// Templates can use the 'field' helper for field access or 'json' for JSON conversion
 	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, data); err != nil {
+	if err := tmpl.Execute(&buf, msg); err != nil {
 		return fmt.Errorf("failed to execute template for %s: %w", msgType, err)
 	}
 
 	// Write the result
-	_, err = w.Write(buf.Bytes())
+	_, err := w.Write(buf.Bytes())
 	return err
 }
 
@@ -267,25 +264,141 @@ func (f *templateFormat) availableTypes() []string {
 	return types
 }
 
-// protoToMap converts a proto message to a map[string]any for template rendering.
-// This makes it easier to access fields in templates using dot notation.
-func protoToMap(msg proto.Message) (map[string]any, error) {
-	// Convert to JSON first
-	marshaler := protojson.MarshalOptions{
-		EmitUnpopulated: true,
+// DefaultTemplateFunctions returns the default set of template functions.
+// These functions are available in all templates unless overridden.
+func DefaultTemplateFunctions() template.FuncMap {
+	return template.FuncMap{
+		// protoField accesses a field from a proto message by JSON name using reflection
+		// Returns the actual proto type for that field
+		// Usage: {{protoField . "fieldName"}}
+		"protoField": func(msg any, fieldName string) any {
+			if m, ok := msg.(proto.Message); ok {
+				return getProtoField(m, fieldName)
+			}
+			return nil
+		},
+
+		// protoJSON converts a proto message to JSON string using protojson
+		// Usage: {{protoJSON .}}
+		"protoJSON": func(msg any) string {
+			if m, ok := msg.(proto.Message); ok {
+				marshaler := protojson.MarshalOptions{
+					EmitUnpopulated: false,
+				}
+				jsonBytes, err := marshaler.Marshal(m)
+				if err != nil {
+					return fmt.Sprintf("error: %v", err)
+				}
+				return string(jsonBytes)
+			}
+			return fmt.Sprintf("%v", msg)
+		},
+
+		// protoJSONIndent converts a proto message to indented JSON string
+		// Usage: {{protoJSONIndent .}}
+		"protoJSONIndent": func(msg any) string {
+			if m, ok := msg.(proto.Message); ok {
+				marshaler := protojson.MarshalOptions{
+					EmitUnpopulated: false,
+					Indent:          "  ",
+				}
+				jsonBytes, err := marshaler.Marshal(m)
+				if err != nil {
+					return fmt.Sprintf("error: %v", err)
+				}
+				return string(jsonBytes)
+			}
+			return fmt.Sprintf("%v", msg)
+		},
+
+		// protoFields converts a proto message to a map for dot-chain field access
+		// The proto message is converted via JSON, so proto types become JSON types
+		// (e.g., timestamps become strings). Use this for easy template access patterns.
+		// Usage: {{$fields := protoFields .}}{{$fields.user.name}}
+		"protoFields": func(msg any) map[string]any {
+			if m, ok := msg.(proto.Message); ok {
+				marshaler := protojson.MarshalOptions{
+					EmitUnpopulated: false,
+				}
+				jsonBytes, err := marshaler.Marshal(m)
+				if err != nil {
+					return nil
+				}
+
+				var result map[string]any
+				if err := json.Unmarshal(jsonBytes, &result); err != nil {
+					return nil
+				}
+				return result
+			}
+			return nil
+		},
 	}
-	jsonBytes, err := marshaler.Marshal(msg)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal to JSON: %w", err)
+}
+
+// getProtoField extracts a field value from a proto message by JSON name.
+// Returns the actual proto type (proto messages are returned as-is, not converted).
+func getProtoField(msg proto.Message, fieldName string) any {
+	m := msg.ProtoReflect()
+	fields := m.Descriptor().Fields()
+
+	// Find field by JSON name
+	var fd protoreflect.FieldDescriptor
+	for i := 0; i < fields.Len(); i++ {
+		f := fields.Get(i)
+		if f.JSONName() == fieldName {
+			fd = f
+			break
+		}
 	}
 
-	// Parse JSON to map
-	var data map[string]any
-	if err := json.Unmarshal(jsonBytes, &data); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal JSON: %w", err)
+	if fd == nil {
+		return nil
 	}
 
-	return data, nil
+	if !m.Has(fd) {
+		return nil
+	}
+
+	v := m.Get(fd)
+
+	// For message fields, return the actual proto message
+	if fd.Kind() == protoreflect.MessageKind {
+		return v.Message().Interface()
+	}
+
+	// For lists, return as slice (preserving proto messages)
+	if fd.IsList() {
+		list := v.List()
+		slice := make([]any, list.Len())
+		for i := 0; i < list.Len(); i++ {
+			item := list.Get(i)
+			if fd.Kind() == protoreflect.MessageKind {
+				slice[i] = item.Message().Interface()
+			} else {
+				slice[i] = item.Interface()
+			}
+		}
+		return slice
+	}
+
+	// For maps, return as map (preserving proto messages in values)
+	if fd.IsMap() {
+		result := make(map[string]any)
+		v.Map().Range(func(k protoreflect.MapKey, v protoreflect.Value) bool {
+			keyStr := fmt.Sprint(k.Interface())
+			if fd.MapValue().Kind() == protoreflect.MessageKind {
+				result[keyStr] = v.Message().Interface()
+			} else {
+				result[keyStr] = v.Interface()
+			}
+			return true
+		})
+		return result
+	}
+
+	// For scalars, return the Go value
+	return v.Interface()
 }
 
 // TemplateFormat creates an output format that renders proto messages using Go text templates.
@@ -293,35 +406,64 @@ func protoToMap(msg proto.Message) (map[string]any, error) {
 // Templates are specified as a map from fully qualified message type name to template string.
 // The message type name format is "package.MessageName" (e.g., "example.UserResponse").
 //
-// Templates have access to all message fields as a map[string]any, making field access
-// straightforward using Go template syntax like {{.FieldName}}.
+// Templates receive the actual proto message directly. Custom template functions receive
+// actual proto types (e.g., *timestamppb.Timestamp), not JSON strings or maps.
+//
+// Default template functions available:
+//   - protoField: access message fields by JSON name, preserving proto types
+//   - protoJSON: convert proto message to JSON string
+//   - protoJSONIndent: convert proto message to indented JSON string
+//   - protoFields: convert proto message to map for dot-chain field access
+//
+// Field access patterns:
+//  1. Use protoFields for easy dot-chain access (proto types become JSON types):
+//     {{$fields := protoFields .}}{{$fields.user.name}}
+//  2. Use protoField helper to preserve proto types: {{protoField . "fieldName"}}
+//  3. Register custom accessor functions for your message types (recommended for complex templates)
 //
 // Optional function maps can be provided to add custom template functions.
+// Functions are merged in order: defaults, global registry, then provided funcMaps.
 //
-// Example:
+// Example with protoFields (simplest):
 //
 //	templates := map[string]string{
-//	    "example.UserResponse": `User: {{.user.name}} ({{.user.email}})
-//	ID: {{.user.id}}
-//	{{if .user.verified}}✓ Verified{{else}}✗ Not verified{{end}}`,
+//	    "example.UserResponse": `{{$f := protoFields .}}User: {{$f.user.name}}
+//	Email: {{$f.user.email}}
+//	ID: {{$f.user.id}}`,
 //	}
 //
 //	format := protocli.TemplateFormat("user-table", templates)
 //
-// With custom functions:
+// Example with custom accessor (best for proto types):
 //
-//	funcMap := template.FuncMap{
-//	    "upper": strings.ToUpper,
-//	    "date": func(ts string) string {
-//	        // Custom date formatting
-//	        return formattedDate
-//	    },
+//	// Register type-specific accessor functions globally
+//	protocli.TemplateFunctions().Register("user", func(resp *simple.UserResponse) *simple.User {
+//	    return resp.GetUser()
+//	})
+//
+//	protocli.TemplateFunctions().Register("formatTime", func(ts *timestamppb.Timestamp) string {
+//	    if ts == nil || !ts.IsValid() {
+//	        return "N/A"
+//	    }
+//	    return ts.AsTime().Format("2006-01-02")
+//	})
+//
+//	templates := map[string]string{
+//	    "example.UserResponse": `User: {{(user .).GetName}}
+//	Created: {{formatTime (user .).GetCreatedAt}}`,
 //	}
 //
-//	format := protocli.TemplateFormat("custom", templates, funcMap)
+//	format := protocli.TemplateFormat("user-table", templates)
 func TemplateFormat(name string, templates map[string]string, funcMaps ...template.FuncMap) (OutputFormat, error) {
-	// Merge all function maps
-	funcMap := template.FuncMap{}
+	// Start with default functions
+	funcMap := DefaultTemplateFunctions()
+
+	// Merge global registry
+	for k, v := range globalTemplateFunctionRegistry.Functions() {
+		funcMap[k] = v
+	}
+
+	// Merge provided function maps (later maps override earlier ones)
 	for _, fm := range funcMaps {
 		for k, v := range fm {
 			funcMap[k] = v

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/drewfead/proto-cli/clilog"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/urfave/cli/v3"
 	"google.golang.org/grpc"
@@ -52,7 +53,7 @@ func parseVerbosity(value string) slog.Level {
 }
 
 // setupSlog configures the global slog logger based on mode and verbosity.
-func setupSlog(ctx context.Context, cmd *cli.Command, isDaemon bool, slogConfig SlogConfigFunc) {
+func setupSlog(ctx context.Context, cmd *cli.Command, isDaemon bool, loggingConfig LoggingConfigCallback) {
 	verbosity := cmd.String("verbosity")
 	level := parseVerbosity(verbosity)
 
@@ -64,9 +65,9 @@ func setupSlog(ctx context.Context, cmd *cli.Command, isDaemon bool, slogConfig 
 
 	var logger *slog.Logger
 
-	if slogConfig != nil {
+	if loggingConfig != nil {
 		// Use custom slog configuration
-		logger = slogConfig(ctx, configCtx)
+		logger = loggingConfig(ctx, configCtx)
 	} else {
 		// Use default configuration
 		var output io.Writer
@@ -79,9 +80,9 @@ func setupSlog(ctx context.Context, cmd *cli.Command, isDaemon bool, slogConfig 
 				Level: level,
 			})
 		} else {
-			// Single command mode: Text to stderr
+			// Single command mode: Human-friendly output to stderr
 			output = os.Stderr
-			handler = slog.NewTextHandler(output, &slog.HandlerOptions{
+			handler = clilog.HumanFriendlySlogHandler(output, &slog.HandlerOptions{
 				Level: level,
 			})
 		}
@@ -231,7 +232,7 @@ func RootCommand(appName string, opts ...RootOption) (*cli.Command, error) {
 		// Setup slog for single command mode (non-daemon)
 		// For daemon mode, setupSlog is called in runDaemon
 		if cmd.Name != "daemonize" {
-			setupSlog(ctx, cmd.Root(), false, options.SlogConfig())
+			setupSlog(ctx, cmd.Root(), false, options.LoggingConfig())
 		}
 		return ctx, nil
 	}
@@ -324,7 +325,7 @@ func runDaemon(ctx context.Context, cmd *cli.Command, services []*ServiceCLI, op
 	rootCmd := cmd.Root()
 
 	// Setup slog for daemon mode (JSON to stdout)
-	setupSlog(ctx, rootCmd, true, options.SlogConfig())
+	setupSlog(ctx, rootCmd, true, options.LoggingConfig())
 
 	host := cmd.String("host")
 	port := cmd.Int("port")

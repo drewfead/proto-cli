@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"text/template"
 	"time"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
@@ -150,7 +151,7 @@ type RootConfig interface {
 	DaemonStartupHooks() []DaemonStartupHook
 	DaemonReadyHooks() []DaemonReadyHook
 	DaemonShutdownHooks() []DaemonShutdownHook
-	SlogConfig() SlogConfigFunc
+	LoggingConfig() LoggingConfigCallback
 	DefaultVerbosity() string
 	HelpCustomization() *HelpCustomization
 }
@@ -243,9 +244,9 @@ type SlogConfigurationContext interface {
 	Level() slog.Level
 }
 
-// SlogConfigFunc is a function that configures the slog logger.
+// LoggingConfigCallback is a function that configures the slog logger.
 // It receives a context with configuration details and returns a configured logger.
-type SlogConfigFunc func(ctx context.Context, config SlogConfigurationContext) *slog.Logger
+type LoggingConfigCallback func(ctx context.Context, config SlogConfigurationContext) *slog.Logger
 
 // slogConfigContext implements SlogConfigurationContext.
 type slogConfigContext struct {
@@ -276,16 +277,16 @@ type rootCommandOptions struct {
 	grpcServerOptions       []grpc.ServerOption
 	enableTranscoding       bool
 	transcodingPort         int
-	configPaths             []string             // Config file paths for loading
-	envPrefix               string               // Environment variable prefix
-	serviceFactories        map[string]any       // Service name -> factory function
-	gracefulShutdownTimeout time.Duration        // Timeout for graceful shutdown
-	daemonStartupHooks      []DaemonStartupHook  // Hooks called before server starts
-	daemonReadyHooks        []DaemonReadyHook    // Hooks called after server is ready
-	daemonShutdownHooks     []DaemonShutdownHook // Hooks called during graceful shutdown
-	slogConfig              SlogConfigFunc       // Function to configure slog logger
-	defaultVerbosity        *slog.Level          // Default verbosity level (nil = info)
-	helpCustomization       *HelpCustomization   // Help text customization options
+	configPaths             []string              // Config file paths for loading
+	envPrefix               string                // Environment variable prefix
+	serviceFactories        map[string]any        // Service name -> factory function
+	gracefulShutdownTimeout time.Duration         // Timeout for graceful shutdown
+	daemonStartupHooks      []DaemonStartupHook   // Hooks called before server starts
+	daemonReadyHooks        []DaemonReadyHook     // Hooks called after server is ready
+	daemonShutdownHooks     []DaemonShutdownHook  // Hooks called during graceful shutdown
+	loggingConfig           LoggingConfigCallback // Function to configure slog logger
+	defaultVerbosity        *slog.Level           // Default verbosity level (nil = info)
+	helpCustomization       *HelpCustomization    // Help text customization options
 }
 
 // AddBeforeCommand adds a before command hook.
@@ -401,9 +402,9 @@ func (o *rootCommandOptions) DaemonShutdownHooks() []DaemonShutdownHook {
 	return o.daemonShutdownHooks
 }
 
-// SlogConfig returns the slog configuration function.
-func (o *rootCommandOptions) SlogConfig() SlogConfigFunc {
-	return o.slogConfig
+// LoggingConfig returns the logging configuration function.
+func (o *rootCommandOptions) LoggingConfig() LoggingConfigCallback {
+	return o.loggingConfig
 }
 
 // DefaultVerbosity returns the default verbosity level as a string.
@@ -695,19 +696,45 @@ func OnDaemonShutdown(hook DaemonShutdownHook) RootOnlyOption {
 	})
 }
 
-// WithSlogConfig provides a custom slog logger configuration function.
+// ConfigureLogging provides a custom slog logger configuration function.
 // If not specified, the framework uses sensible defaults:
-//   - Single commands: text-formatted logs to stderr
+//   - Single commands: human-friendly colored logs to stderr (via clilog.HumanFriendlySlogHandler)
 //   - Daemon mode: JSON-formatted logs to stdout
 //
 // The function receives a context and a SlogConfigurationContext providing:
 //   - IsDaemon(): true for daemon mode, false for single commands
 //   - Level(): the configured log level from the --verbosity flag
 //
+// IMPORTANT: Your custom logger factory MUST respect config.Level() to honor the --verbosity flag.
+//
 // Type-safe: only works with RootOptions.
-func WithSlogConfig(configFunc SlogConfigFunc) RootOnlyOption {
+//
+// Example - Custom handler that respects verbosity:
+//
+//	protocli.ConfigureLogging(func(ctx context.Context, config protocli.SlogConfigurationContext) *slog.Logger {
+//	    handler := clilog.HumanFriendlySlogHandler(os.Stderr, &slog.HandlerOptions{
+//	        Level: config.Level(),  // IMPORTANT: Use config.Level() to respect --verbosity flag
+//	    })
+//	    return slog.New(handler)
+//	})
+//
+// Example - Different loggers for daemon vs single-command mode:
+//
+//	protocli.ConfigureLogging(func(ctx context.Context, config protocli.SlogConfigurationContext) *slog.Logger {
+//	    if config.IsDaemon() {
+//	        handler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: config.Level()})
+//	        return slog.New(handler)
+//	    }
+//	    handler := clilog.HumanFriendlySlogHandler(os.Stderr, &slog.HandlerOptions{Level: config.Level()})
+//	    return slog.New(handler)
+//	})
+//
+// Example - Use the convenience function for always human-friendly logging:
+//
+//	protocli.ConfigureLogging(clilog.AlwaysHumanFriendly())
+func ConfigureLogging(configFunc LoggingConfigCallback) RootOnlyOption {
 	return RootOnlyOption(func(o *rootCommandOptions) {
-		o.slogConfig = configFunc
+		o.loggingConfig = configFunc
 	})
 }
 
@@ -810,4 +837,64 @@ func ApplyRootOptions(opts ...RootOption) RootConfig {
 		opt.applyToRootConfig(options)
 	}
 	return options
+}
+
+// TemplateFunctionRegistry manages custom template functions for use in template-based output formats.
+// It provides a way to register custom functions that templates can use to format proto messages.
+type TemplateFunctionRegistry struct {
+	functions template.FuncMap
+}
+
+// NewTemplateFunctionRegistry creates a new registry with default template functions.
+// Default functions include:
+//   - protoField: access message fields by JSON name, preserving proto types
+//   - protoJSON: converts a proto message to JSON string using protojson
+//   - protoJSONIndent: converts a proto message to indented JSON string
+//   - protoFields: converts a proto message to map for dot-chain field access
+func NewTemplateFunctionRegistry() *TemplateFunctionRegistry {
+	return &TemplateFunctionRegistry{
+		functions: DefaultTemplateFunctions(),
+	}
+}
+
+// Register adds or replaces a template function.
+// If a function with the same name already exists, it will be replaced.
+func (r *TemplateFunctionRegistry) Register(name string, fn any) {
+	r.functions[name] = fn
+}
+
+// RegisterMap adds multiple template functions at once.
+// Existing functions with the same names will be replaced.
+func (r *TemplateFunctionRegistry) RegisterMap(funcMap template.FuncMap) {
+	for name, fn := range funcMap {
+		r.functions[name] = fn
+	}
+}
+
+// Functions returns the complete set of registered template functions.
+// This includes both default functions and any user-registered functions.
+func (r *TemplateFunctionRegistry) Functions() template.FuncMap {
+	// Return a copy to prevent external modification
+	result := make(template.FuncMap, len(r.functions))
+	for k, v := range r.functions {
+		result[k] = v
+	}
+	return result
+}
+
+// Global template function registry that can be accessed by generated code
+//
+//nolint:gochecknoglobals // intentional global registry for template functions
+var globalTemplateFunctionRegistry = NewTemplateFunctionRegistry()
+
+// TemplateFunctions returns the global template function registry.
+// This can be used to register custom template functions globally.
+//
+// Example:
+//
+//	protocli.TemplateFunctions().Register("formatDate", func(ts *timestamppb.Timestamp) string {
+//	    return ts.AsTime().Format("2006-01-02")
+//	})
+func TemplateFunctions() *TemplateFunctionRegistry {
+	return globalTemplateFunctionRegistry
 }
