@@ -311,6 +311,54 @@ func (x *ServiceConfigOptions) GetConfigMessage() string {
 	return ""
 }
 
+// Enum value annotation
+// Allows customizing the CLI name for enum values
+type EnumValueOptions struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Custom CLI name for this enum value (defaults to enum value name)
+	// Example: For LogLevel.DEBUG, you might use "debug" or "verbose"
+	Name          string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EnumValueOptions) Reset() {
+	*x = EnumValueOptions{}
+	mi := &file_proto_cli_v1_cli_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EnumValueOptions) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EnumValueOptions) ProtoMessage() {}
+
+func (x *EnumValueOptions) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_cli_v1_cli_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EnumValueOptions.ProtoReflect.Descriptor instead.
+func (*EnumValueOptions) Descriptor() ([]byte, []int) {
+	return file_proto_cli_v1_cli_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *EnumValueOptions) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
 var file_proto_cli_v1_cli_proto_extTypes = []protoimpl.ExtensionInfo{
 	{
 		ExtendedType:  (*descriptorpb.MethodOptions)(nil),
@@ -344,6 +392,14 @@ var file_proto_cli_v1_cli_proto_extTypes = []protoimpl.ExtensionInfo{
 		Tag:           "bytes,50003,opt,name=service_config",
 		Filename:      "proto/cli/v1/cli.proto",
 	},
+	{
+		ExtendedType:  (*descriptorpb.EnumValueOptions)(nil),
+		ExtensionType: (*EnumValueOptions)(nil),
+		Field:         50004,
+		Name:          "cli.v1.enum_value",
+		Tag:           "bytes,50004,opt,name=enum_value",
+		Filename:      "proto/cli/v1/cli.proto",
+	},
 }
 
 // Extension fields to descriptorpb.MethodOptions.
@@ -364,6 +420,12 @@ var (
 	E_Service = &file_proto_cli_v1_cli_proto_extTypes[2]
 	// optional cli.v1.ServiceConfigOptions service_config = 50003;
 	E_ServiceConfig = &file_proto_cli_v1_cli_proto_extTypes[3]
+)
+
+// Extension fields to descriptorpb.EnumValueOptions.
+var (
+	// optional cli.v1.EnumValueOptions enum_value = 50004;
+	E_EnumValue = &file_proto_cli_v1_cli_proto_extTypes[4]
 )
 
 var File_proto_cli_v1_cli_proto protoreflect.FileDescriptor
@@ -393,11 +455,15 @@ const file_proto_cli_v1_cli_proto_rawDesc = "" +
 	"\n" +
 	"args_usage\x18\x05 \x01(\tR\targsUsage\"=\n" +
 	"\x14ServiceConfigOptions\x12%\n" +
-	"\x0econfig_message\x18\x01 \x01(\tR\rconfigMessage:R\n" +
+	"\x0econfig_message\x18\x01 \x01(\tR\rconfigMessage\"&\n" +
+	"\x10EnumValueOptions\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name:R\n" +
 	"\acommand\x12\x1e.google.protobuf.MethodOptions\x18ц\x03 \x01(\v2\x16.cli.v1.CommandOptionsR\acommand:H\n" +
 	"\x04flag\x12\x1d.google.protobuf.FieldOptions\x18҆\x03 \x01(\v2\x13.cli.v1.FlagOptionsR\x04flag:S\n" +
 	"\aservice\x12\x1f.google.protobuf.ServiceOptions\x18І\x03 \x01(\v2\x16.cli.v1.ServiceOptionsR\aservice:f\n" +
-	"\x0eservice_config\x12\x1f.google.protobuf.ServiceOptions\x18ӆ\x03 \x01(\v2\x1c.cli.v1.ServiceConfigOptionsR\rserviceConfigB0Z.github.com/drewfead/proto-cli/proto/cli/v1;clib\x06proto3"
+	"\x0eservice_config\x12\x1f.google.protobuf.ServiceOptions\x18ӆ\x03 \x01(\v2\x1c.cli.v1.ServiceConfigOptionsR\rserviceConfig:\\\n" +
+	"\n" +
+	"enum_value\x12!.google.protobuf.EnumValueOptions\x18Ԇ\x03 \x01(\v2\x18.cli.v1.EnumValueOptionsR\tenumValueB0Z.github.com/drewfead/proto-cli/proto/cli/v1;clib\x06proto3"
 
 var (
 	file_proto_cli_v1_cli_proto_rawDescOnce sync.Once
@@ -411,30 +477,34 @@ func file_proto_cli_v1_cli_proto_rawDescGZIP() []byte {
 	return file_proto_cli_v1_cli_proto_rawDescData
 }
 
-var file_proto_cli_v1_cli_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_proto_cli_v1_cli_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_proto_cli_v1_cli_proto_goTypes = []any{
-	(*CommandOptions)(nil),              // 0: cli.v1.CommandOptions
-	(*FlagOptions)(nil),                 // 1: cli.v1.FlagOptions
-	(*ServiceOptions)(nil),              // 2: cli.v1.ServiceOptions
-	(*ServiceConfigOptions)(nil),        // 3: cli.v1.ServiceConfigOptions
-	(*descriptorpb.MethodOptions)(nil),  // 4: google.protobuf.MethodOptions
-	(*descriptorpb.FieldOptions)(nil),   // 5: google.protobuf.FieldOptions
-	(*descriptorpb.ServiceOptions)(nil), // 6: google.protobuf.ServiceOptions
+	(*CommandOptions)(nil),                // 0: cli.v1.CommandOptions
+	(*FlagOptions)(nil),                   // 1: cli.v1.FlagOptions
+	(*ServiceOptions)(nil),                // 2: cli.v1.ServiceOptions
+	(*ServiceConfigOptions)(nil),          // 3: cli.v1.ServiceConfigOptions
+	(*EnumValueOptions)(nil),              // 4: cli.v1.EnumValueOptions
+	(*descriptorpb.MethodOptions)(nil),    // 5: google.protobuf.MethodOptions
+	(*descriptorpb.FieldOptions)(nil),     // 6: google.protobuf.FieldOptions
+	(*descriptorpb.ServiceOptions)(nil),   // 7: google.protobuf.ServiceOptions
+	(*descriptorpb.EnumValueOptions)(nil), // 8: google.protobuf.EnumValueOptions
 }
 var file_proto_cli_v1_cli_proto_depIdxs = []int32{
-	4, // 0: cli.v1.command:extendee -> google.protobuf.MethodOptions
-	5, // 1: cli.v1.flag:extendee -> google.protobuf.FieldOptions
-	6, // 2: cli.v1.service:extendee -> google.protobuf.ServiceOptions
-	6, // 3: cli.v1.service_config:extendee -> google.protobuf.ServiceOptions
-	0, // 4: cli.v1.command:type_name -> cli.v1.CommandOptions
-	1, // 5: cli.v1.flag:type_name -> cli.v1.FlagOptions
-	2, // 6: cli.v1.service:type_name -> cli.v1.ServiceOptions
-	3, // 7: cli.v1.service_config:type_name -> cli.v1.ServiceConfigOptions
-	8, // [8:8] is the sub-list for method output_type
-	8, // [8:8] is the sub-list for method input_type
-	4, // [4:8] is the sub-list for extension type_name
-	0, // [0:4] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	5,  // 0: cli.v1.command:extendee -> google.protobuf.MethodOptions
+	6,  // 1: cli.v1.flag:extendee -> google.protobuf.FieldOptions
+	7,  // 2: cli.v1.service:extendee -> google.protobuf.ServiceOptions
+	7,  // 3: cli.v1.service_config:extendee -> google.protobuf.ServiceOptions
+	8,  // 4: cli.v1.enum_value:extendee -> google.protobuf.EnumValueOptions
+	0,  // 5: cli.v1.command:type_name -> cli.v1.CommandOptions
+	1,  // 6: cli.v1.flag:type_name -> cli.v1.FlagOptions
+	2,  // 7: cli.v1.service:type_name -> cli.v1.ServiceOptions
+	3,  // 8: cli.v1.service_config:type_name -> cli.v1.ServiceConfigOptions
+	4,  // 9: cli.v1.enum_value:type_name -> cli.v1.EnumValueOptions
+	10, // [10:10] is the sub-list for method output_type
+	10, // [10:10] is the sub-list for method input_type
+	5,  // [5:10] is the sub-list for extension type_name
+	0,  // [0:5] is the sub-list for extension extendee
+	0,  // [0:0] is the sub-list for field type_name
 }
 
 func init() { file_proto_cli_v1_cli_proto_init() }
@@ -448,8 +518,8 @@ func file_proto_cli_v1_cli_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_cli_v1_cli_proto_rawDesc), len(file_proto_cli_v1_cli_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
-			NumExtensions: 4,
+			NumMessages:   5,
+			NumExtensions: 5,
 			NumServices:   0,
 		},
 		GoTypes:           file_proto_cli_v1_cli_proto_goTypes,

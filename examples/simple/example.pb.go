@@ -977,13 +977,19 @@ const file_examples_simple_example_proto_rawDesc = "" +
 	"\fAdminRequest\"C\n" +
 	"\rAdminResponse\x12\x18\n" +
 	"\amessage\x18\x01 \x01(\tR\amessage\x12\x18\n" +
-	"\asuccess\x18\x02 \x01(\bR\asuccess*O\n" +
+	"\asuccess\x18\x02 \x01(\bR\asuccess*\x81\x01\n" +
 	"\bLogLevel\x12\x19\n" +
-	"\x15LOG_LEVEL_UNSPECIFIED\x10\x00\x12\t\n" +
-	"\x05DEBUG\x10\x01\x12\b\n" +
-	"\x04INFO\x10\x02\x12\b\n" +
-	"\x04WARN\x10\x03\x12\t\n" +
-	"\x05ERROR\x10\x042\x94\n" +
+	"\x15LOG_LEVEL_UNSPECIFIED\x10\x00\x12\x16\n" +
+	"\x05DEBUG\x10\x01\x1a\v\xa2\xb5\x18\a\n" +
+	"\x05debug\x12\x14\n" +
+	"\x04INFO\x10\x02\x1a\n" +
+	"\xa2\xb5\x18\x06\n" +
+	"\x04info\x12\x14\n" +
+	"\x04WARN\x10\x03\x1a\n" +
+	"\xa2\xb5\x18\x06\n" +
+	"\x04warn\x12\x16\n" +
+	"\x05ERROR\x10\x04\x1a\v\xa2\xb5\x18\a\n" +
+	"\x05error2\x94\n" +
 	"\n" +
 	"\vUserService\x12\xb5\x05\n" +
 	"\aGetUser\x12\x17.example.GetUserRequest\x1a\x15.example.UserResponse\"\xf9\x04\x8a\xb5\x18\xf4\x04\n" +

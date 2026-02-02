@@ -1023,8 +1023,15 @@ func (l *ConfigLoader) setFieldFromString(msg protoreflect.Message, field protor
 	case protoreflect.EnumKind:
 		// Parse enum from string (name or number)
 		enumDesc := field.Enum()
-		// Try as enum name first
-		enumVal := enumDesc.Values().ByName(protoreflect.Name(value))
+		// Try as enum name first (case-insensitive)
+		var enumVal protoreflect.EnumValueDescriptor
+		for i := 0; i < enumDesc.Values().Len(); i++ {
+			v := enumDesc.Values().Get(i)
+			if strings.EqualFold(string(v.Name()), value) {
+				enumVal = v
+				break
+			}
+		}
 		if enumVal != nil {
 			msg.Set(field, protoreflect.ValueOfEnum(enumVal.Number()))
 		} else {
@@ -1099,8 +1106,15 @@ func (l *ConfigLoader) setFieldFromFlag(cmd *cli.Command, msg protoreflect.Messa
 		// Parse enum from string flag (name or number)
 		value := cmd.String(flagName)
 		enumDesc := field.Enum()
-		// Try as enum name first
-		enumVal := enumDesc.Values().ByName(protoreflect.Name(value))
+		// Try as enum name first (case-insensitive)
+		var enumVal protoreflect.EnumValueDescriptor
+		for i := 0; i < enumDesc.Values().Len(); i++ {
+			v := enumDesc.Values().Get(i)
+			if strings.EqualFold(string(v.Name()), value) {
+				enumVal = v
+				break
+			}
+		}
 		if enumVal != nil {
 			msg.Set(field, protoreflect.ValueOfEnum(enumVal.Number()))
 		} else {

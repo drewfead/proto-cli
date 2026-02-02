@@ -66,6 +66,14 @@ message ServiceConfigOptions {
   string config_message = 1;
 }
 
+// Enum value annotation
+// Allows customizing the CLI name for enum values
+message EnumValueOptions {
+  // Custom CLI name for this enum value (defaults to enum value name)
+  // Example: For LogLevel.DEBUG, you might use "debug" or "verbose"
+  string name = 1;
+}
+
 extend google.protobuf.MethodOptions {
   CommandOptions command = 50001;
 }
@@ -77,4 +85,8 @@ extend google.protobuf.FieldOptions {
 extend google.protobuf.ServiceOptions {
   ServiceOptions service = 50000;
   ServiceConfigOptions service_config = 50003;
+}
+
+extend google.protobuf.EnumValueOptions {
+  EnumValueOptions enum_value = 50004;
 }

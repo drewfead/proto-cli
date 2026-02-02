@@ -13,6 +13,8 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"strconv"
+	"strings"
 )
 
 // getOutputWriter opens the specified output file or returns cmd.Writer (if set) or stdout
@@ -28,6 +30,34 @@ func getOutputWriter(cmd *v3.Command, path string) (io.Writer, error) {
 		return os.Stdout, nil
 	}
 	return os.Create(path)
+}
+
+// parseLogLevel parses a string value to LogLevel enum
+// Accepts enum value names (case-insensitive) or custom CLI names if specified
+func parseLogLevel(value string) (LogLevel, error) {
+	// Convert to lowercase for case-insensitive comparison
+	lower := strings.ToLower(value)
+
+	// Try parsing as enum value name or custom CLI name
+	switch lower {
+	case "debug":
+		return LogLevel_DEBUG, nil
+	case "info":
+		return LogLevel_INFO, nil
+	case "warn":
+		return LogLevel_WARN, nil
+	case "error":
+		return LogLevel_ERROR, nil
+	}
+
+	// Try parsing as number
+	num, err := strconv.ParseInt(value, 10, 32)
+	if err == nil {
+		return LogLevel(num), nil
+	}
+
+	// Invalid value
+	return 0, fmt.Errorf("invalid %s value: %q (valid values: %s)", "LogLevel", value, "debug, info, warn, error")
 }
 
 // UserServiceCommand creates a CLI for UserService with options
@@ -87,7 +117,7 @@ func UserServiceCommand(ctx context.Context, implOrFactory interface{}, opts ...
 		Name:  "max-conns",
 		Usage: "Maximum database connections",
 	})
-	flags_get = append(flags_get, &v3.Int32Flag{
+	flags_get = append(flags_get, &v3.StringFlag{
 		Name:  "log-level",
 		Usage: "Logging level",
 	})
@@ -296,7 +326,7 @@ func UserServiceCommand(ctx context.Context, implOrFactory interface{}, opts ...
 		Name:  "verified",
 		Usage: "Whether the user email is verified",
 	})
-	flags_create = append(flags_create, &v3.Int32Flag{
+	flags_create = append(flags_create, &v3.StringFlag{
 		Name:  "log-level",
 		Usage: "Optional logging level preference for the user",
 	})
@@ -310,7 +340,7 @@ func UserServiceCommand(ctx context.Context, implOrFactory interface{}, opts ...
 		Name:  "max-conns",
 		Usage: "Maximum database connections",
 	})
-	flags_create = append(flags_create, &v3.Int32Flag{
+	flags_create = append(flags_create, &v3.StringFlag{
 		Name:  "log-level",
 		Usage: "Logging level",
 	})
@@ -433,7 +463,10 @@ func UserServiceCommand(ctx context.Context, implOrFactory interface{}, opts ...
 					req.Verified = &val
 				}
 				if cmd.IsSet("log-level") {
-					val := LogLevel(cmd.Int32("log-level"))
+					val, err := parseLogLevel(cmd.String("log-level"))
+					if err != nil {
+						return fmt.Errorf("invalid value for --log-level: %w", err)
+					}
 					req.LogLevel = &val
 				}
 			}
@@ -602,7 +635,7 @@ func UserServiceCommandsFlat(ctx context.Context, implOrFactory interface{}, opt
 		Name:  "max-conns",
 		Usage: "Maximum database connections",
 	})
-	flags_get = append(flags_get, &v3.Int32Flag{
+	flags_get = append(flags_get, &v3.StringFlag{
 		Name:  "log-level",
 		Usage: "Logging level",
 	})
@@ -811,7 +844,7 @@ func UserServiceCommandsFlat(ctx context.Context, implOrFactory interface{}, opt
 		Name:  "verified",
 		Usage: "Whether the user email is verified",
 	})
-	flags_create = append(flags_create, &v3.Int32Flag{
+	flags_create = append(flags_create, &v3.StringFlag{
 		Name:  "log-level",
 		Usage: "Optional logging level preference for the user",
 	})
@@ -825,7 +858,7 @@ func UserServiceCommandsFlat(ctx context.Context, implOrFactory interface{}, opt
 		Name:  "max-conns",
 		Usage: "Maximum database connections",
 	})
-	flags_create = append(flags_create, &v3.Int32Flag{
+	flags_create = append(flags_create, &v3.StringFlag{
 		Name:  "log-level",
 		Usage: "Logging level",
 	})
@@ -948,7 +981,10 @@ func UserServiceCommandsFlat(ctx context.Context, implOrFactory interface{}, opt
 					req.Verified = &val
 				}
 				if cmd.IsSet("log-level") {
-					val := LogLevel(cmd.Int32("log-level"))
+					val, err := parseLogLevel(cmd.String("log-level"))
+					if err != nil {
+						return fmt.Errorf("invalid value for --log-level: %w", err)
+					}
 					req.LogLevel = &val
 				}
 			}

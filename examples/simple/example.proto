@@ -26,10 +26,10 @@ message DatabaseConfig {
 // LogLevel enum for configuration
 enum LogLevel {
   LOG_LEVEL_UNSPECIFIED = 0;
-  DEBUG = 1;
-  INFO = 2;
-  WARN = 3;
-  ERROR = 4;
+  DEBUG = 1 [(cli.v1.enum_value) = {name: "debug"}];
+  INFO = 2 [(cli.v1.enum_value) = {name: "info"}];
+  WARN = 3 [(cli.v1.enum_value) = {name: "warn"}];
+  ERROR = 4 [(cli.v1.enum_value) = {name: "error"}];
 }
 
 // PostgresBackend configuration

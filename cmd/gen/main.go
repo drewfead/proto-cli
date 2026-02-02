@@ -60,6 +60,40 @@ func generateFile(gen *protogen.Plugin, file *protogen.File) {
 	)
 	f.Line()
 
+	// Collect enums used in commands for parser generation
+	enumsUsed := make(map[string]*protogen.Enum)
+	for _, service := range file.Services {
+		for _, method := range service.Methods {
+			// Check request fields for enum types
+			for _, field := range method.Input.Fields {
+				if field.Desc.Kind() == protoreflect.EnumKind {
+					enumFullName := string(field.Enum.Desc.FullName())
+					enumsUsed[enumFullName] = field.Enum
+				}
+			}
+		}
+		// Check config message for enum types if service has config
+		configOpts := getServiceConfigOptions(service)
+		if configOpts != nil && configOpts.ConfigMessage != "" {
+			for _, msg := range file.Messages {
+				if msg.GoIdent.GoName == configOpts.ConfigMessage {
+					for _, field := range msg.Fields {
+						if field.Desc.Kind() == protoreflect.EnumKind {
+							enumFullName := string(field.Enum.Desc.FullName())
+							enumsUsed[enumFullName] = field.Enum
+						}
+					}
+					break
+				}
+			}
+		}
+	}
+
+	// Generate enum parsers
+	for _, enum := range enumsUsed {
+		generateEnumParser(f, enum)
+	}
+
 	// Generate local stream wrapper types for streaming methods (once per file)
 	for _, service := range file.Services {
 		for _, method := range service.Methods {
@@ -663,8 +697,8 @@ func generateFlag(field *protogen.Field) jen.Code {
 		// Represent bytes as string flag, user will need to decode
 		return jen.Op("&").Qual("github.com/urfave/cli/v3", "StringFlag").Values(buildFlagDict())
 	case protoreflect.EnumKind:
-		// Enums are represented as int32 in Go
-		return jen.Op("&").Qual("github.com/urfave/cli/v3", "Int32Flag").Values(buildFlagDict())
+		// Enums are represented as string flags for better UX
+		return jen.Op("&").Qual("github.com/urfave/cli/v3", "StringFlag").Values(buildFlagDict())
 	case protoreflect.MessageKind:
 		// For message fields (e.g., google.protobuf.Timestamp, nested messages),
 		// generate a StringFlag that custom deserializers can parse
@@ -775,7 +809,7 @@ func generateConfigFlags(file *protogen.File, configMessageType string, cmdVarNa
 		case protoreflect.BytesKind:
 			flagCode = jen.Op("&").Qual("github.com/urfave/cli/v3", "StringFlag").Values(buildFlagDict())
 		case protoreflect.EnumKind:
-			flagCode = jen.Op("&").Qual("github.com/urfave/cli/v3", "Int32Flag").Values(buildFlagDict())
+			flagCode = jen.Op("&").Qual("github.com/urfave/cli/v3", "StringFlag").Values(buildFlagDict())
 		case protoreflect.MessageKind:
 			// MessageKind requires custom deserializers, skip auto-generation
 			continue
@@ -1015,24 +1049,43 @@ func generateRequestFieldAssignments(file *protogen.File, method *protogen.Metho
 				),
 			)
 		case protoreflect.EnumKind:
-			// Check if enum field is optional (proto3 supports optional enums)
+			// Parse enum from string using generated parser
+			enumTypeName := field.Enum.GoIdent.GoName
+			parserFuncName := "parse" + enumTypeName
 			oneof := field.Desc.ContainingOneof()
 			isOptional := field.Desc.HasPresence() && (oneof == nil || (oneof != nil && oneof.IsSynthetic()))
+
 			if isOptional {
 				// Optional enum field - only set if flag was provided
-				// Need to cast to the enum type (which is int32)
-				enumTypeName := field.Enum.GoIdent.GoName
 				statements = append(statements,
 					jen.If(jen.Id("cmd").Dot("IsSet").Call(jen.Lit(flagName))).Block(
-						jen.Id("val").Op(":=").Id(enumTypeName).Call(jen.Id("cmd").Dot("Int32").Call(jen.Lit(flagName))),
+						jen.List(jen.Id("val"), jen.Err()).Op(":=").Id(parserFuncName).Call(
+							jen.Id("cmd").Dot("String").Call(jen.Lit(flagName)),
+						),
+						jen.If(jen.Err().Op("!=").Nil()).Block(
+							jen.Return(jen.Qual("fmt", "Errorf").Call(
+								jen.Lit(fmt.Sprintf("invalid value for --%s: %%w", flagName)),
+								jen.Err(),
+							)),
+						),
 						jen.Id("req").Dot(field.GoName).Op("=").Op("&").Id("val"),
 					),
 				)
 			} else {
-				// Regular enum field - always set, need to cast to enum type
-				enumTypeName := field.Enum.GoIdent.GoName
+				// Regular enum field - always parse if provided, otherwise use zero value
 				statements = append(statements,
-					jen.Id("req").Dot(field.GoName).Op("=").Id(enumTypeName).Call(jen.Id("cmd").Dot("Int32").Call(jen.Lit(flagName))),
+					jen.If(jen.Id("cmd").Dot("IsSet").Call(jen.Lit(flagName))).Block(
+						jen.List(jen.Id("val"), jen.Err()).Op(":=").Id(parserFuncName).Call(
+							jen.Id("cmd").Dot("String").Call(jen.Lit(flagName)),
+						),
+						jen.If(jen.Err().Op("!=").Nil()).Block(
+							jen.Return(jen.Qual("fmt", "Errorf").Call(
+								jen.Lit(fmt.Sprintf("invalid value for --%s: %%w", flagName)),
+								jen.Err(),
+							)),
+						),
+						jen.Id("req").Dot(field.GoName).Op("=").Id("val"),
+					),
 				)
 			}
 		case protoreflect.GroupKind:
@@ -1843,6 +1896,129 @@ func generateLocalStreamingCall(service *protogen.Service, method *protogen.Meth
 	)
 
 	return statements
+}
+
+// generateEnumParser generates a helper function to parse enum values from strings
+func generateEnumParser(f *jen.File, enum *protogen.Enum) {
+	enumTypeName := enum.GoIdent.GoName
+	parserFuncName := "parse" + enumTypeName
+
+	f.Commentf("%s parses a string value to %s enum", parserFuncName, enumTypeName)
+	f.Commentf("Accepts enum value names (case-insensitive) or custom CLI names if specified")
+	f.Func().Id(parserFuncName).Params(
+		jen.Id("value").String(),
+	).Params(jen.Id(enumTypeName), jen.Error()).Block(
+		jen.Comment("Convert to lowercase for case-insensitive comparison"),
+		jen.Id("lower").Op(":=").Qual("strings", "ToLower").Call(jen.Id("value")),
+		jen.Line(),
+		jen.Comment("Try parsing as enum value name or custom CLI name"),
+		jen.Switch(jen.Id("lower")).Block(
+			generateEnumParserCases(enum)...,
+		),
+		jen.Line(),
+		jen.Comment("Try parsing as number"),
+		jen.List(jen.Id("num"), jen.Err()).Op(":=").Qual("strconv", "ParseInt").Call(
+			jen.Id("value"),
+			jen.Lit(10),
+			jen.Lit(32),
+		),
+		jen.If(jen.Err().Op("==").Nil()).Block(
+			jen.Return(
+				jen.Id(enumTypeName).Call(jen.Id("num")),
+				jen.Nil(),
+			),
+		),
+		jen.Line(),
+		jen.Comment("Invalid value"),
+		jen.Return(
+			jen.Lit(0),
+			jen.Qual("fmt", "Errorf").Call(
+				jen.Lit("invalid %s value: %q (valid values: %s)"),
+				jen.Lit(enumTypeName),
+				jen.Id("value"),
+				jen.Lit(getEnumValidValues(enum)),
+			),
+		),
+	)
+	f.Line()
+}
+
+// generateEnumParserCases generates switch cases for enum parser
+func generateEnumParserCases(enum *protogen.Enum) []jen.Code {
+	var cases []jen.Code
+
+	for _, value := range enum.Values {
+		// Skip the unspecified/zero value
+		if value.Desc.Number() == 0 {
+			continue
+		}
+
+		// Get custom CLI name from annotation if present
+		customName := getEnumValueCLIName(value)
+
+		// Add case for enum value name (lowercase)
+		valueName := string(value.Desc.Name())
+		caseValues := []jen.Code{jen.Lit(strings.ToLower(valueName))}
+
+		// Add case for custom CLI name if different from value name
+		if customName != "" && !strings.EqualFold(customName, valueName) {
+			caseValues = append(caseValues, jen.Lit(strings.ToLower(customName)))
+		}
+
+		cases = append(cases,
+			jen.Case(caseValues...).Block(
+				jen.Return(
+					jen.Id(value.GoIdent.GoName),
+					jen.Nil(),
+				),
+			),
+		)
+	}
+
+	return cases
+}
+
+// getEnumValueCLIName extracts the custom CLI name from enum value annotation
+func getEnumValueCLIName(value *protogen.EnumValue) string {
+	opts := value.Desc.Options()
+	if opts == nil {
+		return ""
+	}
+
+	if !proto.HasExtension(opts, annotations.E_EnumValue) {
+		return ""
+	}
+
+	ext := proto.GetExtension(opts, annotations.E_EnumValue)
+	if ext == nil {
+		return ""
+	}
+
+	enumValueOpts, ok := ext.(*annotations.EnumValueOptions)
+	if !ok || enumValueOpts == nil {
+		return ""
+	}
+
+	return enumValueOpts.Name
+}
+
+// getEnumValidValues returns a comma-separated list of valid enum values for error messages
+func getEnumValidValues(enum *protogen.Enum) string {
+	var values []string
+	for _, value := range enum.Values {
+		if value.Desc.Number() == 0 {
+			continue
+		}
+
+		// Use custom CLI name if available, otherwise use enum value name
+		customName := getEnumValueCLIName(value)
+		if customName != "" {
+			values = append(values, customName)
+		} else {
+			values = append(values, strings.ToLower(string(value.Desc.Name())))
+		}
+	}
+	return strings.Join(values, ", ")
 }
 
 // generateLocalStreamWrapper generates a helper type for local streaming calls
