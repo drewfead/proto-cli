@@ -238,6 +238,40 @@ Age: {{.age}}{{end}}`,
 	require.NotContains(t, buf.String(), "Age:")
 }
 
+func TestUnit_TemplateFormat_OptionalEnumField(t *testing.T) {
+	templates := map[string]string{
+		"example.CreateUserRequest": `Name: {{.name}}{{if .logLevel}}
+LogLevel: {{.logLevel}}{{end}}`,
+	}
+
+	format, err := protocli.TemplateFormat("user-enum", templates)
+	require.NoError(t, err)
+
+	// Test with optional enum field set
+	logLevel := simple.LogLevel_DEBUG
+	withEnum := &simple.CreateUserRequest{
+		Name:     "Alice",
+		Email:    "alice@example.com",
+		LogLevel: &logLevel,
+	}
+
+	var buf bytes.Buffer
+	err = format.Format(context.Background(), &cli.Command{}, &buf, withEnum)
+	require.NoError(t, err)
+	require.Contains(t, buf.String(), "LogLevel: DEBUG") // Enum is printed as name
+
+	// Test without optional enum field
+	withoutEnum := &simple.CreateUserRequest{
+		Name:  "Bob",
+		Email: "bob@example.com",
+	}
+
+	buf.Reset()
+	err = format.Format(context.Background(), &cli.Command{}, &buf, withoutEnum)
+	require.NoError(t, err)
+	require.NotContains(t, buf.String(), "LogLevel:")
+}
+
 func TestUnit_MustTemplateFormat_Success(t *testing.T) {
 	templates := map[string]string{
 		"example.UserResponse": `{{.user.name}}`,

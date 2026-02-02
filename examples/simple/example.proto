@@ -166,6 +166,10 @@ message CreateUserRequest {
     name: "verified"
     usage: "Whether the user email is verified"
   }];
+  optional LogLevel log_level = 9 [(cli.v1.flag) = {
+    name: "log-level"
+    usage: "Optional logging level preference for the user"
+  }];
 }
 
 // Response containing a user

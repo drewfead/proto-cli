@@ -1015,10 +1015,26 @@ func generateRequestFieldAssignments(file *protogen.File, method *protogen.Metho
 				),
 			)
 		case protoreflect.EnumKind:
-			// Enums don't have explicit presence tracking, always set
-			statements = append(statements,
-				jen.Id("req").Dot(field.GoName).Op("=").Id("cmd").Dot("Int32").Call(jen.Lit(flagName)),
-			)
+			// Check if enum field is optional (proto3 supports optional enums)
+			oneof := field.Desc.ContainingOneof()
+			isOptional := field.Desc.HasPresence() && (oneof == nil || (oneof != nil && oneof.IsSynthetic()))
+			if isOptional {
+				// Optional enum field - only set if flag was provided
+				// Need to cast to the enum type (which is int32)
+				enumTypeName := field.Enum.GoIdent.GoName
+				statements = append(statements,
+					jen.If(jen.Id("cmd").Dot("IsSet").Call(jen.Lit(flagName))).Block(
+						jen.Id("val").Op(":=").Id(enumTypeName).Call(jen.Id("cmd").Dot("Int32").Call(jen.Lit(flagName))),
+						jen.Id("req").Dot(field.GoName).Op("=").Op("&").Id("val"),
+					),
+				)
+			} else {
+				// Regular enum field - always set, need to cast to enum type
+				enumTypeName := field.Enum.GoIdent.GoName
+				statements = append(statements,
+					jen.Id("req").Dot(field.GoName).Op("=").Id(enumTypeName).Call(jen.Id("cmd").Dot("Int32").Call(jen.Lit(flagName))),
+				)
+			}
 		case protoreflect.GroupKind:
 			// GroupKind is deprecated and not supported - generate runtime error
 			fmt.Fprintf(os.Stderr, "WARNING: Field %s uses deprecated GroupKind - generating code that will return a runtime error\n", field.Desc.FullName())

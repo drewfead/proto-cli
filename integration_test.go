@@ -22,7 +22,7 @@ func setupTestCLI(t *testing.T) {
 	t.Helper()
 	origExiter := cli.OsExiter
 	t.Cleanup(func() { cli.OsExiter = origExiter })
-	cli.OsExiter = func(code int) {
+	cli.OsExiter = func(_ int) {
 		// Don't actually exit during tests
 	}
 }
@@ -60,6 +60,46 @@ func (m *mockUserService) GetUser(_ context.Context, req *simple.GetUserRequest)
 // newMockUserService is a factory function that takes config and returns a service implementation
 func newMockUserService(_ *simple.UserServiceConfig) simple.UserServiceServer {
 	return &mockUserService{}
+}
+
+// Hook helper functions to reduce duplication in tests
+
+// makeBeforeHook creates a function that returns a BeforeCommand hook
+func makeBeforeHook(message string, err error) func(*[]string) protocli.ServiceOption {
+	return func(order *[]string) protocli.ServiceOption {
+		return protocli.BeforeCommand(func(_ context.Context, _ *cli.Command) error {
+			*order = append(*order, message)
+			return err
+		})
+	}
+}
+
+// makeAfterHook creates a function that returns an AfterCommand hook
+func makeAfterHook(message string, err error) func(*[]string) protocli.ServiceOption {
+	return func(order *[]string) protocli.ServiceOption {
+		return protocli.AfterCommand(func(_ context.Context, _ *cli.Command) error {
+			*order = append(*order, message)
+			return err
+		})
+	}
+}
+
+// makeBeforeHooks creates multiple BeforeCommand hook functions from a list of messages
+func makeBeforeHooks(messages []string) []func(*[]string) protocli.ServiceOption {
+	hooks := make([]func(*[]string) protocli.ServiceOption, len(messages))
+	for i, msg := range messages {
+		hooks[i] = makeBeforeHook(msg, nil)
+	}
+	return hooks
+}
+
+// makeAfterHooks creates multiple AfterCommand hook functions from a list of messages
+func makeAfterHooks(messages []string) []func(*[]string) protocli.ServiceOption {
+	hooks := make([]func(*[]string) protocli.ServiceOption, len(messages))
+	for i, msg := range messages {
+		hooks[i] = makeAfterHook(msg, nil)
+	}
+	return hooks
 }
 
 // TestHoistedService_FlatCommandStructure tests that hoisted services have commands at root level.
@@ -133,85 +173,25 @@ func TestIntegration_CommandHooks_ExecutionOrder(t *testing.T) {
 		description   string
 	}{
 		{
-			name: "before hooks execute in FIFO order",
-			beforeHooks: []func(*[]string) protocli.ServiceOption{
-				func(order *[]string) protocli.ServiceOption {
-					return protocli.BeforeCommand(func(_ context.Context, _ *cli.Command) error {
-						*order = append(*order, "before-1")
-						return nil
-					})
-				},
-				func(order *[]string) protocli.ServiceOption {
-					return protocli.BeforeCommand(func(_ context.Context, _ *cli.Command) error {
-						*order = append(*order, "before-2")
-						return nil
-					})
-				},
-				func(order *[]string) protocli.ServiceOption {
-					return protocli.BeforeCommand(func(_ context.Context, _ *cli.Command) error {
-						*order = append(*order, "before-3")
-						return nil
-					})
-				},
-			},
+			name:          "before hooks execute in FIFO order",
+			beforeHooks:   makeBeforeHooks([]string{"before-1", "before-2", "before-3"}),
 			expectedOrder: []string{"before-1", "before-2", "before-3"},
 			description:   "BeforeCommand hooks should execute in FIFO order (registration order)",
 		},
 		{
-			name: "after hooks execute in LIFO order",
-			afterHooks: []func(*[]string) protocli.ServiceOption{
-				func(order *[]string) protocli.ServiceOption {
-					return protocli.AfterCommand(func(_ context.Context, _ *cli.Command) error {
-						*order = append(*order, "after-1")
-						return nil
-					})
-				},
-				func(order *[]string) protocli.ServiceOption {
-					return protocli.AfterCommand(func(_ context.Context, _ *cli.Command) error {
-						*order = append(*order, "after-2")
-						return nil
-					})
-				},
-				func(order *[]string) protocli.ServiceOption {
-					return protocli.AfterCommand(func(_ context.Context, _ *cli.Command) error {
-						*order = append(*order, "after-3")
-						return nil
-					})
-				},
-			},
+			name:          "after hooks execute in LIFO order",
+			afterHooks:    makeAfterHooks([]string{"after-1", "after-2", "after-3"}),
 			expectedOrder: []string{"after-3", "after-2", "after-1"},
 			description:   "AfterCommand hooks should execute in LIFO order (reverse registration order)",
 		},
 		{
 			name: "before error stops execution but after hooks still run",
 			beforeHooks: []func(*[]string) protocli.ServiceOption{
-				func(order *[]string) protocli.ServiceOption {
-					return protocli.BeforeCommand(func(_ context.Context, _ *cli.Command) error {
-						*order = append(*order, "before-1")
-						return nil
-					})
-				},
-				func(order *[]string) protocli.ServiceOption {
-					return protocli.BeforeCommand(func(_ context.Context, _ *cli.Command) error {
-						*order = append(*order, "before-2-error")
-						return errHookFailed
-					})
-				},
-				func(order *[]string) protocli.ServiceOption {
-					return protocli.BeforeCommand(func(_ context.Context, _ *cli.Command) error {
-						*order = append(*order, "before-3-should-not-run")
-						return nil
-					})
-				},
+				makeBeforeHook("before-1", nil),
+				makeBeforeHook("before-2-error", errHookFailed),
+				makeBeforeHook("before-3-should-not-run", nil),
 			},
-			afterHooks: []func(*[]string) protocli.ServiceOption{
-				func(order *[]string) protocli.ServiceOption {
-					return protocli.AfterCommand(func(_ context.Context, _ *cli.Command) error {
-						*order = append(*order, "after-still-runs")
-						return nil
-					})
-				},
-			},
+			afterHooks:    makeAfterHooks([]string{"after-still-runs"}),
 			expectedOrder: []string{"before-1", "before-2-error", "after-still-runs"},
 			expectError:   true,
 			description:   "BeforeCommand error should stop further before hooks but still run after hooks",
@@ -219,72 +199,18 @@ func TestIntegration_CommandHooks_ExecutionOrder(t *testing.T) {
 		{
 			name: "after hook error does not fail command",
 			afterHooks: []func(*[]string) protocli.ServiceOption{
-				func(order *[]string) protocli.ServiceOption {
-					return protocli.AfterCommand(func(_ context.Context, _ *cli.Command) error {
-						*order = append(*order, "after-1")
-						return nil
-					})
-				},
-				func(order *[]string) protocli.ServiceOption {
-					return protocli.AfterCommand(func(_ context.Context, _ *cli.Command) error {
-						*order = append(*order, "after-2-error")
-						return errCleanupFailed
-					})
-				},
-				func(order *[]string) protocli.ServiceOption {
-					return protocli.AfterCommand(func(_ context.Context, _ *cli.Command) error {
-						*order = append(*order, "after-3")
-						return nil
-					})
-				},
+				makeAfterHook("after-1", nil),
+				makeAfterHook("after-2-error", errCleanupFailed),
+				makeAfterHook("after-3", nil),
 			},
 			expectedOrder: []string{"after-3", "after-2-error", "after-1"},
 			expectError:   false,
 			description:   "All AfterCommand hooks should run even if one returns error",
 		},
 		{
-			name: "RAII pattern - acquire in order release in reverse",
-			beforeHooks: []func(*[]string) protocli.ServiceOption{
-				func(order *[]string) protocli.ServiceOption {
-					return protocli.BeforeCommand(func(_ context.Context, _ *cli.Command) error {
-						*order = append(*order, "acquire-database")
-						return nil
-					})
-				},
-				func(order *[]string) protocli.ServiceOption {
-					return protocli.BeforeCommand(func(_ context.Context, _ *cli.Command) error {
-						*order = append(*order, "start-transaction")
-						return nil
-					})
-				},
-				func(order *[]string) protocli.ServiceOption {
-					return protocli.BeforeCommand(func(_ context.Context, _ *cli.Command) error {
-						*order = append(*order, "acquire-lock")
-						return nil
-					})
-				},
-			},
-			// Register after hooks in reverse order for RAII (LIFO will reverse them back)
-			afterHooks: []func(*[]string) protocli.ServiceOption{
-				func(order *[]string) protocli.ServiceOption {
-					return protocli.AfterCommand(func(_ context.Context, _ *cli.Command) error {
-						*order = append(*order, "close-database")
-						return nil
-					})
-				},
-				func(order *[]string) protocli.ServiceOption {
-					return protocli.AfterCommand(func(_ context.Context, _ *cli.Command) error {
-						*order = append(*order, "commit-transaction")
-						return nil
-					})
-				},
-				func(order *[]string) protocli.ServiceOption {
-					return protocli.AfterCommand(func(_ context.Context, _ *cli.Command) error {
-						*order = append(*order, "release-lock")
-						return nil
-					})
-				},
-			},
+			name:        "RAII pattern - acquire in order release in reverse",
+			beforeHooks: makeBeforeHooks([]string{"acquire-database", "start-transaction", "acquire-lock"}),
+			afterHooks:  makeAfterHooks([]string{"close-database", "commit-transaction", "release-lock"}),
 			expectedOrder: []string{
 				"acquire-database", "start-transaction", "acquire-lock",
 				"release-lock", "commit-transaction", "close-database",

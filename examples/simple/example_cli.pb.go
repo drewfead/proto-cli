@@ -296,6 +296,10 @@ func UserServiceCommand(ctx context.Context, implOrFactory interface{}, opts ...
 		Name:  "verified",
 		Usage: "Whether the user email is verified",
 	})
+	flags_create = append(flags_create, &v3.Int32Flag{
+		Name:  "log-level",
+		Usage: "Optional logging level preference for the user",
+	})
 
 	// Add config field flags for single-command mode
 	flags_create = append(flags_create, &v3.StringFlag{
@@ -427,6 +431,10 @@ func UserServiceCommand(ctx context.Context, implOrFactory interface{}, opts ...
 				if cmd.IsSet("verified") {
 					val := cmd.Bool("verified")
 					req.Verified = &val
+				}
+				if cmd.IsSet("log-level") {
+					val := LogLevel(cmd.Int32("log-level"))
+					req.LogLevel = &val
 				}
 			}
 
@@ -803,6 +811,10 @@ func UserServiceCommandsFlat(ctx context.Context, implOrFactory interface{}, opt
 		Name:  "verified",
 		Usage: "Whether the user email is verified",
 	})
+	flags_create = append(flags_create, &v3.Int32Flag{
+		Name:  "log-level",
+		Usage: "Optional logging level preference for the user",
+	})
 
 	// Add config field flags for single-command mode
 	flags_create = append(flags_create, &v3.StringFlag{
@@ -934,6 +946,10 @@ func UserServiceCommandsFlat(ctx context.Context, implOrFactory interface{}, opt
 				if cmd.IsSet("verified") {
 					val := cmd.Bool("verified")
 					req.Verified = &val
+				}
+				if cmd.IsSet("log-level") {
+					val := LogLevel(cmd.Int32("log-level"))
+					req.LogLevel = &val
 				}
 			}
 

@@ -23,7 +23,7 @@ func preventExit(t *testing.T) {
 	t.Helper()
 	origExiter := cli.OsExiter
 	t.Cleanup(func() { cli.OsExiter = origExiter })
-	cli.OsExiter = func(code int) {
+	cli.OsExiter = func(_ int) {
 		// Don't actually exit during tests
 	}
 }

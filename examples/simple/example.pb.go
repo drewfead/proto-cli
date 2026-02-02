@@ -642,9 +642,10 @@ type CreateUserRequest struct {
 	// Field without annotation - demonstrates kebab-case default
 	PhoneNumber string `protobuf:"bytes,5,opt,name=phone_number,json=phoneNumber,proto3" json:"phone_number,omitempty"`
 	// Optional fields demonstrate explicit presence tracking
-	Nickname      *string `protobuf:"bytes,6,opt,name=nickname,proto3,oneof" json:"nickname,omitempty"`
-	Age           *int32  `protobuf:"varint,7,opt,name=age,proto3,oneof" json:"age,omitempty"`
-	Verified      *bool   `protobuf:"varint,8,opt,name=verified,proto3,oneof" json:"verified,omitempty"`
+	Nickname      *string   `protobuf:"bytes,6,opt,name=nickname,proto3,oneof" json:"nickname,omitempty"`
+	Age           *int32    `protobuf:"varint,7,opt,name=age,proto3,oneof" json:"age,omitempty"`
+	Verified      *bool     `protobuf:"varint,8,opt,name=verified,proto3,oneof" json:"verified,omitempty"`
+	LogLevel      *LogLevel `protobuf:"varint,9,opt,name=log_level,json=logLevel,proto3,enum=example.LogLevel,oneof" json:"log_level,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -733,6 +734,13 @@ func (x *CreateUserRequest) GetVerified() bool {
 		return *x.Verified
 	}
 	return false
+}
+
+func (x *CreateUserRequest) GetLogLevel() LogLevel {
+	if x != nil && x.LogLevel != nil {
+		return *x.LogLevel
+	}
+	return LogLevel_LOG_LEVEL_UNSPECIFIED
 }
 
 // Response containing a user
@@ -941,7 +949,7 @@ const file_examples_simple_example_proto_rawDesc = "" +
 	"timeout_ms\x18\x04 \x01(\x05B1\x92\xb5\x18-\n" +
 	"\atimeout\x12\x01t\x1a\x1fRequest timeout in millisecondsH\x01R\ttimeoutMs\x88\x01\x01B\x10\n" +
 	"\x0e_fields_filterB\r\n" +
-	"\v_timeout_ms\"\x9f\x04\n" +
+	"\v_timeout_ms\"\xa3\x05\n" +
 	"\x11CreateUserRequest\x125\n" +
 	"\x04name\x18\x01 \x01(\tB!\x92\xb5\x18\x1d\n" +
 	"\x04name\x12\x01n\x1a\x10User's full name \x01R\x04name\x12<\n" +
@@ -955,10 +963,14 @@ const file_examples_simple_example_proto_rawDesc = "" +
 	"\x03age\x18\a \x01(\x05B\x1e\x92\xb5\x18\x1a\n" +
 	"\x03age\x1a\x13User's age in yearsH\x01R\x03age\x88\x01\x01\x12S\n" +
 	"\bverified\x18\b \x01(\bB2\x92\xb5\x18.\n" +
-	"\bverified\x1a\"Whether the user email is verifiedH\x02R\bverified\x88\x01\x01B\v\n" +
+	"\bverified\x1a\"Whether the user email is verifiedH\x02R\bverified\x88\x01\x01\x12t\n" +
+	"\tlog_level\x18\t \x01(\x0e2\x11.example.LogLevelB?\x92\xb5\x18;\n" +
+	"\tlog-level\x1a.Optional logging level preference for the userH\x03R\blogLevel\x88\x01\x01B\v\n" +
 	"\t_nicknameB\x06\n" +
 	"\x04_ageB\v\n" +
-	"\t_verified\"K\n" +
+	"\t_verifiedB\f\n" +
+	"\n" +
+	"_log_level\"K\n" +
 	"\fUserResponse\x12!\n" +
 	"\x04user\x18\x01 \x01(\v2\r.example.UserR\x04user\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\"\x0e\n" +
@@ -1043,20 +1055,21 @@ var file_examples_simple_example_proto_depIdxs = []int32{
 	5,  // 6: example.User.address:type_name -> example.Address
 	5,  // 7: example.CreateUserRequest.address:type_name -> example.Address
 	13, // 8: example.CreateUserRequest.registration_date:type_name -> google.protobuf.Timestamp
-	6,  // 9: example.UserResponse.user:type_name -> example.User
-	7,  // 10: example.UserService.GetUser:input_type -> example.GetUserRequest
-	8,  // 11: example.UserService.CreateUser:input_type -> example.CreateUserRequest
-	7,  // 12: example.UserService.ListUsers:input_type -> example.GetUserRequest
-	10, // 13: example.AdminService.HealthCheck:input_type -> example.AdminRequest
-	9,  // 14: example.UserService.GetUser:output_type -> example.UserResponse
-	9,  // 15: example.UserService.CreateUser:output_type -> example.UserResponse
-	9,  // 16: example.UserService.ListUsers:output_type -> example.UserResponse
-	11, // 17: example.AdminService.HealthCheck:output_type -> example.AdminResponse
-	14, // [14:18] is the sub-list for method output_type
-	10, // [10:14] is the sub-list for method input_type
-	10, // [10:10] is the sub-list for extension type_name
-	10, // [10:10] is the sub-list for extension extendee
-	0,  // [0:10] is the sub-list for field type_name
+	0,  // 9: example.CreateUserRequest.log_level:type_name -> example.LogLevel
+	6,  // 10: example.UserResponse.user:type_name -> example.User
+	7,  // 11: example.UserService.GetUser:input_type -> example.GetUserRequest
+	8,  // 12: example.UserService.CreateUser:input_type -> example.CreateUserRequest
+	7,  // 13: example.UserService.ListUsers:input_type -> example.GetUserRequest
+	10, // 14: example.AdminService.HealthCheck:input_type -> example.AdminRequest
+	9,  // 15: example.UserService.GetUser:output_type -> example.UserResponse
+	9,  // 16: example.UserService.CreateUser:output_type -> example.UserResponse
+	9,  // 17: example.UserService.ListUsers:output_type -> example.UserResponse
+	11, // 18: example.AdminService.HealthCheck:output_type -> example.AdminResponse
+	15, // [15:19] is the sub-list for method output_type
+	11, // [11:15] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_examples_simple_example_proto_init() }
