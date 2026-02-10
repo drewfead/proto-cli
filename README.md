@@ -7,7 +7,7 @@
 
 proto-cli is a protoc plugin that transforms Protocol Buffer service definitions into feature-rich command-line interfaces. Define your API once, get a complete CLI with proper flag handling, configuration management, lifecycle hooks, and both local and remote execution.
 
-> **📦 Available on Buf Schema Registry:** Import CLI annotations directly in your proto files:
+> **Available on Buf Schema Registry:** Import CLI annotations directly in your proto files:
 > ```yaml
 > deps:
 >   - buf.build/fernet/proto-cli
@@ -23,7 +23,8 @@ proto-cli is a protoc plugin that transforms Protocol Buffer service definitions
 - **Multi-Service CLIs** - Organize multiple services under one CLI with nested commands
 
 ### Configuration & Customization
-- **Configuration Loading** - YAML/JSON config files with environment variable overrides
+- **Configuration Loading** - YAML config files with environment variable overrides and CLI flag precedence
+- **Configuration Management** - Built-in `config init/set/get/list` subcommands with proto schema validation
 - **Optional Fields** - Full proto3 optional field support with explicit presence tracking
 - **Custom Deserializers** - Transform CLI flags into complex proto messages
 - **Lifecycle Hooks** - Before/after command execution, daemon startup/ready/shutdown
@@ -39,9 +40,12 @@ proto-cli is a protoc plugin that transforms Protocol Buffer service definitions
 - **Flat Command Structure** - Hoist service commands to root level for single-service CLIs
 - **Selective Service Enable** - Start daemon with specific services: `--service userservice`
 - **Collision Detection** - Clear errors when command names conflict in hoisted services
+- **Graceful Shutdown** - Daemon supports OS signals (SIGINT/SIGTERM) and context cancellation
 
 ### Developer Experience
-- **CLI Annotations** - Customize command names, flags, descriptions via proto options
+- **CLI Annotations** - Customize command names, flags, descriptions, enum values via proto options
+- **Structured Logging** - Colorized human-friendly output for commands, JSON for daemon mode
+- **Configurable Verbosity** - `--verbosity` flag with debug/info/warn/error/none levels
 - **Type-Safe Options API** - Functional options pattern for configuration
 - **Built on [urfave/cli v3](https://github.com/urfave/cli)** - Modern, well-tested CLI framework
 
@@ -70,16 +74,16 @@ plugins:
 **1. Define your service** ([example.proto](examples/simple/example.proto)):
 
 ```protobuf
-import "internal/clipb/cli.proto";
+import "proto/cli/v1/cli.proto";
 
 service UserService {
-  option (cli.service) = {
+  option (cli.v1.service) = {
     name: "user-service"
     description: "Manage users"
   };
 
   rpc GetUser(GetUserRequest) returns (UserResponse) {
-    option (cli.command) = {
+    option (cli.v1.command) = {
       name: "get"
       description: "Retrieve a user by ID"
     };
@@ -87,8 +91,8 @@ service UserService {
 }
 
 message GetUserRequest {
-  int64 id = 1 [(cli.flag) = {name: "id", usage: "User ID"}];
-  optional string fields = 2 [(cli.flag) = {name: "fields", usage: "Fields to return"}];
+  int64 id = 1 [(cli.v1.flag) = {name: "id", usage: "User ID"}];
+  optional string fields = 2 [(cli.v1.flag) = {name: "fields", usage: "Fields to return"}];
 }
 ```
 
@@ -141,11 +145,13 @@ Basic CRUD operations with configuration loading, custom deserializers, and mult
 - Custom timestamp deserializers
 - Nested configuration messages
 - Multi-service CLI (UserService + AdminService)
+- Config management commands (`config set`, `config get`, `config list`)
 
 **Try it:**
 ```bash
 make build/example
 ./bin/usercli user-service get --id 1 --format json
+./bin/usercli config set databaseUrl=postgres://localhost/mydb
 ./bin/usercli daemonize --port 50051
 ```
 
@@ -189,11 +195,11 @@ Define configuration in your proto file using the `service_config` annotation:
 ```protobuf
 // Define your configuration message
 message UserServiceConfig {
-  string database_url = 1 [(cli.flag) = {
+  string database_url = 1 [(cli.v1.flag) = {
     name: "db-url"
     usage: "PostgreSQL connection URL"
   }];
-  int64 max_connections = 2 [(cli.flag) = {
+  int64 max_connections = 2 [(cli.v1.flag) = {
     name: "max-conns"
     usage: "Maximum database connections"
   }];
@@ -201,7 +207,7 @@ message UserServiceConfig {
 
 // Attach config to your service
 service UserService {
-  option (cli.service_config) = {
+  option (cli.v1.service_config) = {
     config_message: "UserServiceConfig"
   };
 
@@ -237,8 +243,10 @@ services:
 Override with environment variables:
 
 ```bash
-USERCLI_SERVICES_USERSERVICE_DATABASE_URL=postgresql://prod/db ./usercli daemonize
+USERCLI_DATABASE_URL=postgresql://prod/db ./usercli daemonize
 ```
+
+**Configuration Precedence:** CLI flags > environment variables > config files
 
 **Debugging Configuration Issues**
 
@@ -247,11 +255,6 @@ Enable debug logging to see which config files are loaded and how values are mer
 ```bash
 # Use debug verbosity to see config loading details
 ./usercli daemonize --verbosity=debug
-
-# Output shows:
-# - Which config files were found/missing
-# - Environment variables applied
-# - Final merged configuration
 ```
 
 Programmatically inspect configuration loading:
@@ -281,9 +284,52 @@ fmt.Printf("Final config: %+v\n", debug.FinalConfig)
 1. **Config file not found**: Check `debug.PathsChecked` to see where the CLI looked for config files
 2. **Values not applied**: Check `debug.EnvVarsApplied` to verify environment variable names (they must match the prefix + field path)
 3. **Wrong precedence**: Remember: CLI flags > environment variables > config files
-4. **Field naming**: Proto fields use kebab-case in YAML (e.g., `database_url` → `database-url`)
+4. **Field naming**: Proto fields use kebab-case in YAML (e.g., `database_url` becomes `database-url`)
 
-See [config_debug_test.go](config_debug_test.go) and [nested_config_test.go](nested_config_test.go) for more examples.
+See [config_test.go](config_test.go) for more examples.
+
+### Configuration Management Commands
+
+Enable built-in `config` subcommands for managing configuration files from the CLI:
+
+```go
+rootCmd, err := protocli.RootCommand("usercli",
+    protocli.Service(userServiceCLI),
+    protocli.WithConfigManagementCommands(&simple.UserServiceConfig{}, "usercli", "userservice"),
+)
+```
+
+This adds `config init`, `config set`, `config get`, and `config list` subcommands:
+
+```bash
+# Set config values (writes to local config file)
+./usercli config set databaseUrl=postgres://localhost/mydb maxConnections=25
+
+# Set global config values
+./usercli config set --global databaseUrl=postgres://prod/mydb
+
+# Get a specific value (shows source file)
+./usercli config get databaseUrl
+# postgres://localhost/mydb  # ./.usercli/config.yaml
+
+# List all config values with sources
+./usercli config list
+
+# Initialize or edit config file in your editor
+./usercli config init
+./usercli config init --global
+```
+
+Config values are validated against the proto schema. Local config takes precedence over global config.
+
+Customize config file locations:
+
+```go
+protocli.WithGlobalConfigPath("/etc/myapp/config.yaml"),
+protocli.WithLocalConfigPath("./config.yaml"),
+```
+
+See [cliconfig_integration_test.go](cliconfig_integration_test.go) for complete examples.
 
 ### Custom Flag Deserializers
 
@@ -354,7 +400,7 @@ format, err := protocli.TemplateFormat("custom", templates, funcMap)
 - CSV/TSV: `{{.id}},{{.name}},{{.email}}`
 - Custom business formats: Match your organization's output standards
 
-See [template_format_test.go](template_format_test.go) for comprehensive examples.
+See [template_format_core_test.go](template_format_core_test.go) and [template_format_protofields_test.go](template_format_protofields_test.go) for comprehensive examples.
 
 ### Lifecycle Hooks
 
@@ -365,6 +411,10 @@ protocli.RootCommand("usercli",
     protocli.Service(userServiceCLI),
     protocli.BeforeCommand(func(ctx context.Context, cmd *cli.Command) error {
         log.Printf("Executing: %s", cmd.Name)
+        return nil
+    }),
+    protocli.AfterCommand(func(ctx context.Context, cmd *cli.Command) error {
+        log.Printf("Completed: %s", cmd.Name)
         return nil
     }),
     protocli.OnDaemonStartup(func(ctx context.Context, server *grpc.Server, mux *runtime.ServeMux) error {
@@ -380,7 +430,35 @@ protocli.RootCommand("usercli",
 )
 ```
 
-See [daemon_lifecycle_test.go](daemon_lifecycle_test.go) for complete examples.
+**Hook Execution Order:**
+- `BeforeCommand` hooks run in registration order (FIFO)
+- `AfterCommand` hooks run in reverse registration order (LIFO), following the RAII pattern
+- After hooks always run, even if a before hook fails
+- Daemon shutdown hooks run in reverse registration order (LIFO)
+
+See [daemon_lifecycle_test.go](daemon_lifecycle_test.go) and [integration_test.go](integration_test.go) for complete examples.
+
+### Logging
+
+proto-cli integrates with Go's `slog` package for structured logging:
+
+- **Single commands**: Human-friendly colorized output to stderr
+- **Daemon mode**: JSON-formatted logs to stdout
+- **Verbosity control**: `--verbosity` flag (debug/info/warn/error/none)
+
+Customize logging behavior:
+
+```go
+import "github.com/drewfead/proto-cli/clilog"
+
+rootCmd, _ := protocli.RootCommand("myapp",
+    protocli.Service(serviceCLI),
+    // Always use human-friendly logs (even in daemon mode)
+    protocli.ConfigureLogging(clilog.AlwaysHumanFriendly()),
+    // Or set a default verbosity level
+    protocli.WithDefaultVerbosity(slog.LevelWarn),
+)
+```
 
 ### Help Text Customization
 
@@ -392,7 +470,7 @@ Use proto annotations to define help text fields following urfave/cli v3 convent
 
 ```protobuf
 service UserService {
-  option (cli.service) = {
+  option (cli.v1.service) = {
     name: "user-service",
     description: "User management commands",  // Short one-liner
     long_description: "Detailed explanation of the service...",  // Multi-paragraph
@@ -401,7 +479,7 @@ service UserService {
   };
 
   rpc GetUser(GetUserRequest) returns (UserResponse) {
-    option (cli.command) = {
+    option (cli.v1.command) = {
       name: "get",
       description: "Retrieve a user by ID",  // Short (shown in lists)
       long_description: "Fetch detailed user information...\n\nExamples:\n  usercli get --id 123",
@@ -493,6 +571,22 @@ Only sets the field if the flag is provided:
 ./usercli user-service create --name "Alice" --nickname "ace"  # nickname set
 ```
 
+### Enum Value Customization
+
+Customize how enum values appear on the CLI:
+
+```protobuf
+enum LogLevel {
+  LOG_LEVEL_UNSPECIFIED = 0;
+  DEBUG = 1 [(cli.v1.enum_value) = {name: "debug"}];
+  INFO = 2 [(cli.v1.enum_value) = {name: "info"}];
+  WARN = 3 [(cli.v1.enum_value) = {name: "warn"}];
+  ERROR = 4 [(cli.v1.enum_value) = {name: "error"}];
+}
+```
+
+Enum values are parsed case-insensitively and accept both the custom name and the proto name.
+
 ### gRPC Interceptors
 
 Add interceptors for cross-cutting concerns:
@@ -521,17 +615,19 @@ Start daemon with only specific services:
 
 ## CLI Annotations
 
-Customize generated CLIs using proto options from [`internal/clipb/cli.proto`](internal/clipb/cli.proto):
+Customize generated CLIs using proto options from [`proto/cli/v1/cli.proto`](proto/cli/v1/cli.proto):
 
 ```protobuf
+import "proto/cli/v1/cli.proto";
+
 service UserService {
-  option (cli.service) = {
-    name: "users"  // Command name (default: snake_case service name)
+  option (cli.v1.service) = {
+    name: "users"  // Command name (default: kebab-case service name)
     description: "User management commands"
   };
 
   rpc GetUser(GetUserRequest) returns (UserResponse) {
-    option (cli.command) = {
+    option (cli.v1.command) = {
       name: "get"  // Subcommand name
       description: "Retrieve user by ID"
     };
@@ -539,7 +635,7 @@ service UserService {
 }
 
 message GetUserRequest {
-  int64 id = 1 [(cli.flag) = {
+  int64 id = 1 [(cli.v1.flag) = {
     name: "id"
     shorthand: "i"
     usage: "User ID to retrieve"
@@ -550,7 +646,7 @@ message GetUserRequest {
 ## Development
 
 ### Prerequisites
-- Go 1.23+
+- Go 1.25+
 - [Buf](https://buf.build)
 
 ### Building
@@ -574,16 +670,18 @@ make build/example
 ```
 proto-cli/
 ├── cmd/gen/          # Code generator (protoc plugin)
+├── cliconfig/        # Config management commands (init, set, get, list)
+├── clilog/           # Structured logging (human-friendly and JSON handlers)
 ├── examples/
 │   ├── simple/       # Basic CRUD example
 │   │   ├── usercli/      # Multi-service CLI
 │   │   └── usercli_flat/ # Flat command structure
 │   └── streaming/    # Server streaming example
-├── internal/clipb/   # CLI annotation proto definitions
-├── root.go           # Root command implementation
-├── options.go        # Configuration options
-├── config.go         # Configuration loading
-└── formats.go        # Output formatters
+├── proto/cli/v1/     # CLI annotation proto definitions
+├── root.go           # Root command and daemon lifecycle
+├── options.go        # Configuration options (functional options API)
+├── config.go         # Configuration loading (files, env, flags)
+└── formats.go        # Output formatters (JSON, YAML, Go, templates)
 ```
 
 ## Contributing

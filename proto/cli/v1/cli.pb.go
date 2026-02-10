@@ -112,11 +112,17 @@ func (x *CommandOptions) GetArgsUsage() string {
 // CLI flag annotation for message fields
 // Maps message fields to CLI flags
 type FlagOptions struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Shorthand     string                 `protobuf:"bytes,2,opt,name=shorthand,proto3" json:"shorthand,omitempty"`
-	Usage         string                 `protobuf:"bytes,3,opt,name=usage,proto3" json:"usage,omitempty"`
-	Required      bool                   `protobuf:"varint,4,opt,name=required,proto3" json:"required,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Name      string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Shorthand string                 `protobuf:"bytes,2,opt,name=shorthand,proto3" json:"shorthand,omitempty"`
+	Usage     string                 `protobuf:"bytes,3,opt,name=usage,proto3" json:"usage,omitempty"`
+	Required  bool                   `protobuf:"varint,4,opt,name=required,proto3" json:"required,omitempty"`
+	// Placeholder for flag value shown in usage text (e.g., "<host>", "<port>")
+	// Integrates with urfave/cli's placeholder syntax
+	Placeholder string `protobuf:"bytes,5,opt,name=placeholder,proto3" json:"placeholder,omitempty"`
+	// Long-form description for detailed documentation
+	// Used in config file comments, extended help text, and generated docs
+	Description   string `protobuf:"bytes,6,opt,name=description,proto3" json:"description,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -177,6 +183,20 @@ func (x *FlagOptions) GetRequired() bool {
 		return x.Required
 	}
 	return false
+}
+
+func (x *FlagOptions) GetPlaceholder() string {
+	if x != nil {
+		return x.Placeholder
+	}
+	return ""
+}
+
+func (x *FlagOptions) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
 }
 
 // Service options annotation
@@ -440,12 +460,14 @@ const file_proto_cli_v1_cli_proto_rawDesc = "" +
 	"\n" +
 	"usage_text\x18\x04 \x01(\tR\tusageText\x12\x1d\n" +
 	"\n" +
-	"args_usage\x18\x05 \x01(\tR\targsUsage\"q\n" +
+	"args_usage\x18\x05 \x01(\tR\targsUsage\"\xb5\x01\n" +
 	"\vFlagOptions\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1c\n" +
 	"\tshorthand\x18\x02 \x01(\tR\tshorthand\x12\x14\n" +
 	"\x05usage\x18\x03 \x01(\tR\x05usage\x12\x1a\n" +
-	"\brequired\x18\x04 \x01(\bR\brequired\"\xaf\x01\n" +
+	"\brequired\x18\x04 \x01(\bR\brequired\x12 \n" +
+	"\vplaceholder\x18\x05 \x01(\tR\vplaceholder\x12 \n" +
+	"\vdescription\x18\x06 \x01(\tR\vdescription\"\xaf\x01\n" +
 	"\x0eServiceOptions\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12)\n" +

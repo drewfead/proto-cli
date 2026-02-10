@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sort"
 	"text/template"
 
 	"github.com/urfave/cli/v3"
@@ -96,11 +97,12 @@ func (f *yamlFormat) Format(_ context.Context, _ *cli.Command, w io.Writer, msg 
 
 // writeMapFields writes a map's key-value pairs with proper YAML formatting
 func writeMapFields(w io.Writer, data map[string]any, prefix string, indent int) error {
-	// Get keys in a slice so we can track the last one
+	// Get keys in a sorted slice for deterministic output
 	keys := make([]string, 0, len(data))
 	for k := range data {
 		keys = append(keys, k)
 	}
+	sort.Strings(keys)
 
 	for i, key := range keys {
 		val := data[key]

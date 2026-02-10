@@ -5,16 +5,18 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"sync"
 )
 
 // HumanFriendlyHandler is a slog.Handler that formats logs in a human-friendly way
 // with colorized log levels and no timestamps, ideal for CLI commands.
+//
+// Thread safety: Handle assembles the complete log line in a local buffer and
+// writes it in a single w.Write call, so no mutex is needed. All fields are
+// immutable after construction.
 type HumanFriendlyHandler struct {
 	w     io.Writer
 	level slog.Leveler
 	attrs []slog.Attr
-	mu    sync.Mutex
 }
 
 // HumanFriendlySlogHandler creates a new HumanFriendlyHandler that writes to w.
@@ -38,9 +40,6 @@ func (h *HumanFriendlyHandler) Enabled(_ context.Context, level slog.Level) bool
 
 // Handle formats and writes a log record.
 func (h *HumanFriendlyHandler) Handle(_ context.Context, r slog.Record) error {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
 	// Format: [LEVEL] message key1=value1 key2=value2
 	var buf []byte
 
@@ -72,10 +71,13 @@ func (h *HumanFriendlyHandler) Handle(_ context.Context, r slog.Record) error {
 
 // WithAttrs returns a new handler with the given attributes added.
 func (h *HumanFriendlyHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	newAttrs := make([]slog.Attr, len(h.attrs)+len(attrs))
+	copy(newAttrs, h.attrs)
+	copy(newAttrs[len(h.attrs):], attrs)
 	return &HumanFriendlyHandler{
 		w:     h.w,
 		level: h.level,
-		attrs: append(h.attrs, attrs...),
+		attrs: newAttrs,
 	}
 }
 

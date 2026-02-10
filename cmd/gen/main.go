@@ -160,7 +160,8 @@ func qualifyType(file *protogen.File, message *protogen.Message, pointer bool) *
 }
 
 // toKebabCase converts Go field names to kebab-case for CLI flags.
-// Examples: StartTime -> start-time, CalendarID -> calendar-id.
+// Inserts a hyphen before each uppercase letter (except the first).
+// Examples: StartTime -> start-time, CalendarId -> calendar-id.
 func toKebabCase(s string) string {
 	var result strings.Builder
 	for i, r := range s {
@@ -1519,6 +1520,13 @@ func generateServerStreamingCommand(service *protogen.Service, method *protogen.
 func generateServerStreamingActionBody(file *protogen.File, service *protogen.Service, method *protogen.Method, configMessageType string) []jen.Code {
 	var statements []jen.Code
 
+	// Defer after hooks in reverse order (LIFO)
+	// IMPORTANT: Register defer FIRST so it runs even if before hooks fail
+	statements = append(statements,
+		generateAfterHooksDefer(),
+		jen.Line(),
+	)
+
 	// Call before hooks in order (FIFO)
 	statements = append(statements,
 		jen.For(
@@ -1537,12 +1545,6 @@ func generateServerStreamingActionBody(file *protogen.File, service *protogen.Se
 				)),
 			),
 		),
-		jen.Line(),
-	)
-
-	// Defer after hooks in reverse order (LIFO)
-	statements = append(statements,
-		generateAfterHooksDefer(),
 		jen.Line(),
 	)
 

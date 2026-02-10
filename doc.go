@@ -12,7 +12,7 @@
 //	        log.Printf("Running command: %s", cmd.Name)
 //	        return nil
 //	    }),
-//	    protocli.WithAfterCommand(func(ctx context.Context, cmd *cli.Command) error {
+//	    protocli.AfterCommand(func(ctx context.Context, cmd *cli.Command) error {
 //	        log.Printf("Completed command: %s", cmd.Name)
 //	        return nil
 //	    }),

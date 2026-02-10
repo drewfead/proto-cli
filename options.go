@@ -287,6 +287,10 @@ type rootCommandOptions struct {
 	loggingConfig           LoggingConfigCallback // Function to configure slog logger
 	defaultVerbosity        *slog.Level           // Default verbosity level (nil = info)
 	helpCustomization       *HelpCustomization    // Help text customization options
+	configManager           proto.Message         // Config message for config management command suite
+	configServiceName       string                // Service name for config management
+	globalConfigPath        string                // Custom global config path
+	localConfigPath         string                // Custom local config path
 }
 
 // AddBeforeCommand adds a before command hook.
@@ -813,6 +817,55 @@ func WithRootCommandHelpTemplate(template string) RootOnlyOption {
 //	    cmd.Copyright = "(c) 2026 MyCompany"
 //	    cmd.Authors = []any{"John Doe <john@example.com>"}
 //	})
+
+// WithConfigManagementCommands enables the config command suite (init, set, get, list).
+// This adds 'config' subcommands to the root CLI for managing configuration files.
+// Config files are YAML-based and validated against the service's config proto schema.
+//
+// By default:
+//   - Global config: ~/.config/appname/config.yaml
+//   - Local config: ./.appname/config.yaml
+//
+// Use WithGlobalConfigPath and WithLocalConfigPath to customize locations.
+//
+// Example:
+//
+//	protocli.WithConfigManagementCommands(&simple.UserServiceConfig{}, "myapp", "userservice")
+func WithConfigManagementCommands(configMsg proto.Message, appName string, serviceName string) RootOnlyOption {
+	return RootOnlyOption(func(o *rootCommandOptions) {
+		o.configManager = configMsg
+		o.configServiceName = serviceName
+		// Paths will be set from configPaths in RootCommand
+		// Use WithLocalConfigPath/WithGlobalConfigPath to override
+	})
+}
+
+// WithGlobalConfigPath sets a custom global config file path.
+// This overrides the default ~/.config/appname/config.yaml location.
+// Type-safe: only works with RootOptions.
+//
+// Example:
+//
+//	protocli.WithGlobalConfigPath("/etc/myapp/config.yaml")
+func WithGlobalConfigPath(path string) RootOnlyOption {
+	return RootOnlyOption(func(o *rootCommandOptions) {
+		o.globalConfigPath = path
+	})
+}
+
+// WithLocalConfigPath sets a custom local config file path.
+// This overrides the default ./.appname/config.yaml location.
+// Type-safe: only works with RootOptions.
+//
+// Example:
+//
+//	protocli.WithLocalConfigPath("./config.yaml")
+func WithLocalConfigPath(path string) RootOnlyOption {
+	return RootOnlyOption(func(o *rootCommandOptions) {
+		o.localConfigPath = path
+	})
+}
+
 // Helper functions to apply options
 
 // ApplyServiceOptions applies functional options and returns configured service settings.

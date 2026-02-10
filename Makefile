@@ -68,6 +68,12 @@ generate/clean: ## Clean and regenerate all proto files
 	go generate ./...
 	@echo "✓ Clean regeneration complete"
 
+.PHONY: publish
+publish: lint/proto ## Publish proto module to Buf Schema Registry
+	@echo "Publishing to Buf Schema Registry (buf.build/fernet/proto-cli)..."
+	go run github.com/bufbuild/buf/cmd/buf push
+	@echo "✓ Published to BSR"
+
 ##@ Test
 
 .PHONY: test

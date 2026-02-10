@@ -117,6 +117,8 @@ func main() {
 		protocli.Service(adminServiceCLI),
 		protocli.WithConfigFactory("userservice", newUserService),
 		protocli.WithEnvPrefix("USERCLI"),
+		// Enable config management commands (config set, get, list, init)
+		protocli.WithConfigManagementCommands(&simple.UserServiceConfig{}, "usercli", "userservice"),
 		// Config files are loaded from:
 		//   ./usercli.yaml (default)
 		//   ~/.config/usercli/config.yaml (default)

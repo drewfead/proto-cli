@@ -12,6 +12,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/drewfead/proto-cli/cliconfig"
 	"github.com/drewfead/proto-cli/clilog"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/urfave/cli/v3"
@@ -198,6 +199,41 @@ func RootCommand(appName string, opts ...RootOption) (*cli.Command, error) {
 			return runDaemon(ctx, cmd, services, options)
 		},
 	})
+
+	// Add config command suite if enabled
+	if opts, ok := options.(*rootCommandOptions); ok && opts.configManager != nil {
+		manager := cliconfig.NewManager(opts.configManager, appName)
+
+		// Set service name for service-scoped config
+		if opts.configServiceName != "" {
+			manager.SetServiceName(opts.configServiceName)
+		}
+
+		// Use the same config paths as ConfigLoader for unified behavior
+		// First path = local config, second path (if exists) = global config
+		if len(configPaths) > 0 {
+			manager.SetLocalPath(configPaths[0])
+		}
+		if len(configPaths) > 1 {
+			manager.SetGlobalPath(configPaths[1])
+		}
+
+		// Allow explicit overrides via WithGlobalConfigPath/WithLocalConfigPath
+		if opts.globalConfigPath != "" {
+			manager.SetGlobalPath(opts.globalConfigPath)
+		}
+		if opts.localConfigPath != "" {
+			manager.SetLocalPath(opts.localConfigPath)
+		}
+
+		// Check for collision with config command
+		if commandNames["config"] {
+			return nil, fmt.Errorf("%w: 'config' command conflicts with a service command",
+				ErrAmbiguousCommandInvocation)
+		}
+		commandNames["config"] = true
+		commands = append(commands, cliconfig.Commands(manager))
+	}
 
 	// Global flags including --config and --verbosity
 	globalFlags := []cli.Flag{
@@ -399,6 +435,7 @@ func runDaemon(ctx context.Context, cmd *cli.Command, services []*ServiceCLI, op
 	// Setup signal handling for graceful shutdown
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(sigChan)
 
 	// Start server in goroutine
 	servErr := make(chan error, 1)
@@ -411,10 +448,13 @@ func runDaemon(ctx context.Context, cmd *cli.Command, services []*ServiceCLI, op
 		hook(ctx)
 	}
 
-	// Wait for signal or server error
+	// Wait for signal, context cancellation, or server error
 	select {
 	case sig := <-sigChan:
-		slog.Info("Received signal %v, initiating graceful shutdown...", "shutdown.signal", sig)
+		slog.Info("Received signal, initiating graceful shutdown", "signal", sig)
+		return gracefulShutdown(ctx, grpcServer, options)
+	case <-ctx.Done():
+		slog.Info("Context cancelled, initiating graceful shutdown")
 		return gracefulShutdown(ctx, grpcServer, options)
 	case err := <-servErr:
 		if err != nil {
@@ -427,7 +467,6 @@ func runDaemon(ctx context.Context, cmd *cli.Command, services []*ServiceCLI, op
 // gracefulShutdown handles graceful shutdown with timeout and hooks.
 func gracefulShutdown(ctx context.Context, grpcServer *grpc.Server, options RootConfig) error {
 	timeout := options.GracefulShutdownTimeout()
-	slog.Warn("Graceful shutdown timed out", "timeout.after", timeout)
 
 	// Create shutdown context with timeout
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
@@ -454,7 +493,7 @@ func gracefulShutdown(ctx context.Context, grpcServer *grpc.Server, options Root
 		slog.Info("Graceful shutdown complete")
 		return nil
 	case <-ctx.Done():
-		slog.Warn("Graceful shutdown interrupted, forcing stop")
+		slog.Warn("Graceful shutdown timed out, forcing stop", "timeout", timeout)
 		grpcServer.Stop()
 		return nil
 	}

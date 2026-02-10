@@ -36,6 +36,14 @@ message FlagOptions {
   string shorthand = 2;
   string usage = 3;
   bool required = 4;
+
+  // Placeholder for flag value shown in usage text (e.g., "<host>", "<port>")
+  // Integrates with urfave/cli's placeholder syntax
+  string placeholder = 5;
+
+  // Long-form description for detailed documentation
+  // Used in config file comments, extended help text, and generated docs
+  string description = 6;
 }
 
 // Service options annotation

@@ -3,9 +3,7 @@ package protocli_test
 import (
 	"context"
 	"fmt"
-	"os"
 	"sync"
-	"syscall"
 	"testing"
 	"time"
 
@@ -28,16 +26,37 @@ func preventExit(t *testing.T) {
 	}
 }
 
-// TestDaemonLifecycleHooks_StartupReadyShutdown verifies that all lifecycle hooks are called..
+// waitForReady waits for the ready channel or fails the test on timeout.
+func waitForReady(t *testing.T, ready <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-ready:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for daemon to become ready")
+	}
+}
+
+// waitForDone waits for the daemon goroutine to finish or fails the test on timeout.
+func waitForDone(t *testing.T, done <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for daemon to shut down")
+	}
+}
+
+// TestDaemonLifecycleHooks_StartupReadyShutdown verifies that all lifecycle hooks are called.
 func TestIntegration_DaemonLifecycle_StartupReadyShutdown(t *testing.T) {
 	preventExit(t)
 
 	var (
 		mu             sync.Mutex
 		startupCalled  bool
-		readyCalled    bool
 		shutdownCalled bool
 	)
+
+	readyCh := make(chan struct{})
 
 	startup := func(_ context.Context, server *grpc.Server, _ *runtime.ServeMux) error {
 		mu.Lock()
@@ -48,9 +67,7 @@ func TestIntegration_DaemonLifecycle_StartupReadyShutdown(t *testing.T) {
 	}
 
 	ready := func(_ context.Context) {
-		mu.Lock()
-		readyCalled = true
-		mu.Unlock()
+		close(readyCh)
 	}
 
 	shutdown := func(ctx context.Context) {
@@ -62,8 +79,10 @@ func TestIntegration_DaemonLifecycle_StartupReadyShutdown(t *testing.T) {
 		assert.True(t, hasDeadline, "shutdown context should have deadline")
 	}
 
-	// Create service with lifecycle hooks
-	ctx := context.Background()
+	// Use a cancellable context to trigger shutdown
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	userServiceCLI := simple.UserServiceCommand(ctx, newUserService)
 
 	rootCmd, err := protocli.RootCommand("testcli",
@@ -75,37 +94,34 @@ func TestIntegration_DaemonLifecycle_StartupReadyShutdown(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	// Start daemon in background
+	// Start daemon in background and track completion
+	done := make(chan struct{})
 	go func() {
+		defer close(done)
 		_ = rootCmd.Run(ctx, []string{"testcli", "daemonize", "--port", "50199"})
 	}()
 
-	// Wait for server to start
-	time.Sleep(500 * time.Millisecond)
+	// Wait for server to become ready
+	waitForReady(t, readyCh)
 
-	// Verify startup and ready hooks were called
+	// Verify startup hook was called
 	mu.Lock()
-	startupWasCalled := startupCalled
-	readyWasCalled := readyCalled
+	assert.True(t, startupCalled, "OnDaemonStartup should be called")
 	mu.Unlock()
-	assert.True(t, startupWasCalled, "OnDaemonStartup should be called")
-	assert.True(t, readyWasCalled, "OnDaemonReady should be called")
 
-	// Send SIGTERM to trigger shutdown
-	proc, _ := os.FindProcess(os.Getpid())
-	_ = proc.Signal(syscall.SIGTERM)
+	// Cancel context to trigger shutdown
+	cancel()
 
-	// Wait for shutdown (longer than graceful shutdown timeout)
-	time.Sleep(3 * time.Second)
+	// Wait for daemon to finish
+	waitForDone(t, done)
 
 	// Verify shutdown hook was called
 	mu.Lock()
-	shutdownWasCalled := shutdownCalled
+	assert.True(t, shutdownCalled, "OnDaemonShutdown should be called")
 	mu.Unlock()
-	assert.True(t, shutdownWasCalled, "OnDaemonShutdown should be called")
 }
 
-// TestDaemonLifecycleHooks_StartupError verifies that startup error prevents daemon from starting..
+// TestDaemonLifecycleHooks_StartupError verifies that startup error prevents daemon from starting.
 func TestIntegration_DaemonLifecycle_StartupError(t *testing.T) {
 	startupWithError := func(_ context.Context, _ *grpc.Server, _ *runtime.ServeMux) error {
 		return fmt.Errorf("%w: startup validation failed", assert.AnError)
@@ -126,7 +142,7 @@ func TestIntegration_DaemonLifecycle_StartupError(t *testing.T) {
 	assert.Contains(t, err.Error(), "startup validation failed")
 }
 
-// TestDaemonLifecycleHooks_MultipleHooks verifies multiple hooks run in correct order..
+// TestDaemonLifecycleHooks_MultipleHooks verifies multiple hooks run in correct order.
 func TestIntegration_DaemonLifecycle_MultipleHooks(t *testing.T) {
 	preventExit(t)
 
@@ -134,6 +150,8 @@ func TestIntegration_DaemonLifecycle_MultipleHooks(t *testing.T) {
 		mu        sync.Mutex
 		callOrder []string
 	)
+
+	readyCh := make(chan struct{}, 1)
 
 	startup1 := func(_ context.Context, _ *grpc.Server, _ *runtime.ServeMux) error {
 		mu.Lock()
@@ -149,6 +167,7 @@ func TestIntegration_DaemonLifecycle_MultipleHooks(t *testing.T) {
 		return nil
 	}
 
+	// Use the second ready hook to signal readiness (both will have fired)
 	ready1 := func(_ context.Context) {
 		mu.Lock()
 		callOrder = append(callOrder, "ready1")
@@ -159,6 +178,7 @@ func TestIntegration_DaemonLifecycle_MultipleHooks(t *testing.T) {
 		mu.Lock()
 		callOrder = append(callOrder, "ready2")
 		mu.Unlock()
+		readyCh <- struct{}{}
 	}
 
 	shutdown1 := func(_ context.Context) {
@@ -173,7 +193,9 @@ func TestIntegration_DaemonLifecycle_MultipleHooks(t *testing.T) {
 		mu.Unlock()
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	userServiceCLI := simple.UserServiceCommand(ctx, newUserService)
 
 	rootCmd, err := protocli.RootCommand("testcli",
@@ -189,19 +211,20 @@ func TestIntegration_DaemonLifecycle_MultipleHooks(t *testing.T) {
 	require.NoError(t, err)
 
 	// Start daemon in background
+	done := make(chan struct{})
 	go func() {
+		defer close(done)
 		_ = rootCmd.Run(ctx, []string{"testcli", "daemonize", "--port", "50201"})
 	}()
 
-	// Wait for server to start
-	time.Sleep(500 * time.Millisecond)
+	// Wait for ready
+	waitForReady(t, readyCh)
 
-	// Send SIGTERM
-	proc, _ := os.FindProcess(os.Getpid())
-	_ = proc.Signal(syscall.SIGTERM)
+	// Cancel context to trigger shutdown
+	cancel()
 
-	// Wait for shutdown (longer than graceful shutdown timeout)
-	time.Sleep(3 * time.Second)
+	// Wait for daemon to finish
+	waitForDone(t, done)
 
 	// Verify order:
 	// - Startup hooks: registration order
@@ -228,8 +251,13 @@ func TestIntegration_DaemonLifecycle_MultipleHooks(t *testing.T) {
 func TestIntegration_DaemonLifecycle_GracefulShutdownTimeout(t *testing.T) {
 	preventExit(t)
 
+	readyCh := make(chan struct{})
 	shutdownStarted := make(chan time.Time, 1)
 	shutdownCompleted := make(chan time.Time, 1)
+
+	ready := func(_ context.Context) {
+		close(readyCh)
+	}
 
 	shutdown := func(_ context.Context) {
 		shutdownStarted <- time.Now()
@@ -238,30 +266,34 @@ func TestIntegration_DaemonLifecycle_GracefulShutdownTimeout(t *testing.T) {
 		shutdownCompleted <- time.Now()
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	userServiceCLI := simple.UserServiceCommand(ctx, newUserService)
 
 	rootCmd, err := protocli.RootCommand("testcli",
 		protocli.Service(userServiceCLI),
+		protocli.OnDaemonReady(ready),
 		protocli.OnDaemonShutdown(shutdown),
 		protocli.WithGracefulShutdownTimeout(1*time.Second),
 	)
 	require.NoError(t, err)
 
 	// Start daemon in background
+	done := make(chan struct{})
 	go func() {
+		defer close(done)
 		_ = rootCmd.Run(ctx, []string{"testcli", "daemonize", "--port", "50202"})
 	}()
 
-	// Wait for server to start
-	time.Sleep(500 * time.Millisecond)
+	// Wait for ready
+	waitForReady(t, readyCh)
 
-	// Send SIGTERM
-	proc, _ := os.FindProcess(os.Getpid())
-	_ = proc.Signal(syscall.SIGTERM)
+	// Cancel context to trigger shutdown
+	cancel()
 
-	// Wait for shutdown (longer than graceful shutdown timeout)
-	time.Sleep(3 * time.Second)
+	// Wait for daemon to finish
+	waitForDone(t, done)
 
 	// Verify shutdown hook was called
 	select {
@@ -281,34 +313,44 @@ func TestIntegration_DaemonLifecycle_AccessToServerInStartup(t *testing.T) {
 		serverConfigured bool
 	)
 
+	readyCh := make(chan struct{})
+
 	startup := func(_ context.Context, server *grpc.Server, _ *runtime.ServeMux) error {
 		// Startup hook has access to gRPC server before it starts
 		// This allows configuring server, adding interceptors, etc.
 		assert.NotNil(t, server)
 
-		// Example: Could register additional interceptors, configure server, etc.
 		mu.Lock()
 		serverConfigured = true
 		mu.Unlock()
 		return nil
 	}
 
-	ctx := context.Background()
+	ready := func(_ context.Context) {
+		close(readyCh)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	userServiceCLI := simple.UserServiceCommand(ctx, newUserService)
 
 	rootCmd, err := protocli.RootCommand("testcli",
 		protocli.Service(userServiceCLI),
 		protocli.OnDaemonStartup(startup),
+		protocli.OnDaemonReady(ready),
 	)
 	require.NoError(t, err)
 
 	// Start daemon in background
+	done := make(chan struct{})
 	go func() {
+		defer close(done)
 		_ = rootCmd.Run(ctx, []string{"testcli", "daemonize", "--port", "50203"})
 	}()
 
-	// Wait for server to start
-	time.Sleep(500 * time.Millisecond)
+	// Wait for ready
+	waitForReady(t, readyCh)
 
 	mu.Lock()
 	configured := serverConfigured
@@ -316,9 +358,8 @@ func TestIntegration_DaemonLifecycle_AccessToServerInStartup(t *testing.T) {
 	assert.True(t, configured, "Server should be configured in startup hook")
 
 	// Cleanup
-	proc, _ := os.FindProcess(os.Getpid())
-	_ = proc.Signal(syscall.SIGTERM)
-	time.Sleep(3 * time.Second)
+	cancel()
+	waitForDone(t, done)
 }
 
 // Helper: userService implementation for tests.
