@@ -179,6 +179,19 @@ func stripServiceSuffix(s string) string {
 	return strings.TrimSuffix(s, "Service")
 }
 
+// cleanProtoComment trims whitespace from a protogen comment string.
+func cleanProtoComment(comment protogen.Comments) string {
+	return strings.TrimSpace(string(comment))
+}
+
+// firstLine returns the first line of a multiline string.
+func firstLine(s string) string {
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		return strings.TrimSpace(s[:i])
+	}
+	return s
+}
+
 // getServiceOptions extracts (cli.service) annotation from a service.
 func getServiceOptions(service *protogen.Service) *annotations.ServiceOptions {
 	opts := service.Desc.Options()
@@ -323,6 +336,14 @@ func generateServiceCommands(file *protogen.File, service *protogen.Service) []j
 		}
 		if serviceOpts.ArgsUsage != "" {
 			serviceArgsUsage = serviceOpts.ArgsUsage
+		}
+	}
+
+	// Fallback to proto source comment if no annotation provided a description
+	defaultDescription := stripServiceSuffix(service.GoName) + " commands"
+	if serviceDescription == defaultDescription {
+		if comment := cleanProtoComment(service.Comments.Leading); comment != "" {
+			serviceDescription = firstLine(comment)
 		}
 	}
 
@@ -549,6 +570,13 @@ func generateMethodCommand(service *protogen.Service, method *protogen.Method, c
 		}
 	}
 
+	// Fallback to proto source comment if no annotation provided a description
+	if cmdUsage == method.GoName {
+		if comment := cleanProtoComment(method.Comments.Leading); comment != "" {
+			cmdUsage = firstLine(comment)
+		}
+	}
+
 	// Create a safe variable name (replace hyphens with underscores)
 	cmdVarName := strings.ReplaceAll(cmdName, "-", "_")
 
@@ -660,12 +688,22 @@ func generateFlag(field *protogen.Field) jen.Code {
 		if flagOpts.Usage != "" {
 			usage = flagOpts.Usage
 		}
+	}
+
+	// Fallback to proto source comment if no annotation provided usage text
+	if usage == field.GoName {
+		if comment := cleanProtoComment(field.Comments.Leading); comment != "" {
+			usage = firstLine(comment)
+		}
+	}
+
+	if flagOpts != nil {
 		if flagOpts.Shorthand != "" {
 			shorthand = flagOpts.Shorthand
 		}
 	}
 
-	// Helper function to build flag dict with optional Aliases
+	// Helper function to build flag dict with optional Aliases, Required, DefaultText
 	buildFlagDict := func() jen.Dict {
 		dict := jen.Dict{
 			jen.Id("Name"):  jen.Lit(flagName),
@@ -673,6 +711,12 @@ func generateFlag(field *protogen.Field) jen.Code {
 		}
 		if shorthand != "" {
 			dict[jen.Id("Aliases")] = jen.Index().String().Values(jen.Lit(shorthand))
+		}
+		if flagOpts != nil && flagOpts.GetRequired() {
+			dict[jen.Id("Required")] = jen.True()
+		}
+		if flagOpts != nil && flagOpts.GetPlaceholder() != "" {
+			dict[jen.Id("DefaultText")] = jen.Lit(flagOpts.GetPlaceholder())
 		}
 		return dict
 	}
@@ -699,6 +743,8 @@ func generateFlag(field *protogen.Field) jen.Code {
 		return jen.Op("&").Qual("github.com/urfave/cli/v3", "StringFlag").Values(buildFlagDict())
 	case protoreflect.EnumKind:
 		// Enums are represented as string flags for better UX
+		// Append valid enum values to usage text
+		usage = usage + " [" + getEnumValuesPiped(field.Enum) + "]"
 		return jen.Op("&").Qual("github.com/urfave/cli/v3", "StringFlag").Values(buildFlagDict())
 	case protoreflect.MessageKind:
 		// For message fields (e.g., google.protobuf.Timestamp, nested messages),
@@ -711,14 +757,7 @@ func generateFlag(field *protogen.Field) jen.Code {
 			usage = fmt.Sprintf("%s (%s)", field.GoName, fullyQualifiedName)
 		}
 
-		dict := jen.Dict{
-			jen.Id("Name"):  jen.Lit(flagName),
-			jen.Id("Usage"): jen.Lit(usage),
-		}
-		if shorthand != "" {
-			dict[jen.Id("Aliases")] = jen.Index().String().Values(jen.Lit(shorthand))
-		}
-		return jen.Op("&").Qual("github.com/urfave/cli/v3", "StringFlag").Values(dict)
+		return jen.Op("&").Qual("github.com/urfave/cli/v3", "StringFlag").Values(buildFlagDict())
 	case protoreflect.GroupKind:
 		// GroupKind is deprecated in proto3 and not supported
 		fmt.Fprintf(os.Stderr, "WARNING: Field %s uses deprecated GroupKind and will not generate a CLI flag\n", field.Desc.FullName())
@@ -774,9 +813,16 @@ func generateConfigFlags(file *protogen.File, configMessageType string, cmdVarNa
 			usage = field.GoName
 		}
 
+		// Fallback to proto source comment if no annotation provided usage text
+		if usage == field.GoName {
+			if comment := cleanProtoComment(field.Comments.Leading); comment != "" {
+				usage = firstLine(comment)
+			}
+		}
+
 		shorthand := flagOpts.Shorthand
 
-		// Helper to build flag dict with optional Aliases
+		// Helper to build flag dict with optional Aliases, Required, DefaultText
 		buildFlagDict := func() jen.Dict {
 			dict := jen.Dict{
 				jen.Id("Name"):  jen.Lit(flagName),
@@ -784,6 +830,12 @@ func generateConfigFlags(file *protogen.File, configMessageType string, cmdVarNa
 			}
 			if shorthand != "" {
 				dict[jen.Id("Aliases")] = jen.Index().String().Values(jen.Lit(shorthand))
+			}
+			if flagOpts != nil && flagOpts.GetRequired() {
+				dict[jen.Id("Required")] = jen.True()
+			}
+			if flagOpts != nil && flagOpts.GetPlaceholder() != "" {
+				dict[jen.Id("DefaultText")] = jen.Lit(flagOpts.GetPlaceholder())
 			}
 			return dict
 		}
@@ -810,6 +862,8 @@ func generateConfigFlags(file *protogen.File, configMessageType string, cmdVarNa
 		case protoreflect.BytesKind:
 			flagCode = jen.Op("&").Qual("github.com/urfave/cli/v3", "StringFlag").Values(buildFlagDict())
 		case protoreflect.EnumKind:
+			// Append valid enum values to usage text
+			usage = usage + " [" + getEnumValuesPiped(field.Enum) + "]"
 			flagCode = jen.Op("&").Qual("github.com/urfave/cli/v3", "StringFlag").Values(buildFlagDict())
 		case protoreflect.MessageKind:
 			// MessageKind requires custom deserializers, skip auto-generation
@@ -1414,6 +1468,14 @@ func generateServerStreamingCommand(service *protogen.Service, method *protogen.
 		}
 	}
 
+	// Fallback to proto source comment if no annotation provided a description
+	defaultStreamingUsage := method.GoName + " (streaming)"
+	if cmdUsage == defaultStreamingUsage {
+		if comment := cleanProtoComment(method.Comments.Leading); comment != "" {
+			cmdUsage = firstLine(comment)
+		}
+	}
+
 	// Create a safe variable name (replace hyphens with underscores)
 	cmdVarName := strings.ReplaceAll(cmdName, "-", "_")
 
@@ -2002,6 +2064,23 @@ func getEnumValueCLIName(value *protogen.EnumValue) string {
 	}
 
 	return enumValueOpts.Name
+}
+
+// getEnumValuesPiped returns a pipe-separated list of valid enum values for usage text (e.g., "debug|info|warn|error")
+func getEnumValuesPiped(enum *protogen.Enum) string {
+	var values []string
+	for _, value := range enum.Values {
+		if value.Desc.Number() == 0 {
+			continue
+		}
+		customName := getEnumValueCLIName(value)
+		if customName != "" {
+			values = append(values, customName)
+		} else {
+			values = append(values, strings.ToLower(string(value.Desc.Name())))
+		}
+	}
+	return strings.Join(values, "|")
 }
 
 // getEnumValidValues returns a comma-separated list of valid enum values for error messages

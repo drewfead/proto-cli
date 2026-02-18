@@ -88,9 +88,10 @@ func UserServiceCommand(ctx context.Context, implOrFactory interface{}, opts ...
 	}}
 
 	flags_get = append(flags_get, &v3.Int64Flag{
-		Aliases: []string{"i"},
-		Name:    "id",
-		Usage:   "User ID to retrieve",
+		Aliases:  []string{"i"},
+		Name:     "id",
+		Required: true,
+		Usage:    "User ID to retrieve",
 	})
 	flags_get = append(flags_get, &v3.BoolFlag{
 		Aliases: []string{"d"},
@@ -110,8 +111,9 @@ func UserServiceCommand(ctx context.Context, implOrFactory interface{}, opts ...
 
 	// Add config field flags for single-command mode
 	flags_get = append(flags_get, &v3.StringFlag{
-		Name:  "db-url",
-		Usage: "PostgreSQL connection URL",
+		Name:     "db-url",
+		Required: true,
+		Usage:    "PostgreSQL connection URL",
 	})
 	flags_get = append(flags_get, &v3.Int64Flag{
 		Name:  "max-conns",
@@ -119,7 +121,7 @@ func UserServiceCommand(ctx context.Context, implOrFactory interface{}, opts ...
 	})
 	flags_get = append(flags_get, &v3.StringFlag{
 		Name:  "log-level",
-		Usage: "Logging level",
+		Usage: "Logging level [debug|info|warn|error]",
 	})
 	flags_get = append(flags_get, &v3.StringFlag{
 		Name:  "allowed-origins",
@@ -293,14 +295,16 @@ func UserServiceCommand(ctx context.Context, implOrFactory interface{}, opts ...
 	}}
 
 	flags_create = append(flags_create, &v3.StringFlag{
-		Aliases: []string{"n"},
-		Name:    "name",
-		Usage:   "User's full name",
+		Aliases:  []string{"n"},
+		Name:     "name",
+		Required: true,
+		Usage:    "User's full name",
 	})
 	flags_create = append(flags_create, &v3.StringFlag{
-		Aliases: []string{"e"},
-		Name:    "email",
-		Usage:   "User's email address",
+		Aliases:  []string{"e"},
+		Name:     "email",
+		Required: true,
+		Usage:    "User's email address",
 	})
 	flags_create = append(flags_create, &v3.StringFlag{
 		Name:  "address",
@@ -312,7 +316,7 @@ func UserServiceCommand(ctx context.Context, implOrFactory interface{}, opts ...
 	})
 	flags_create = append(flags_create, &v3.StringFlag{
 		Name:  "phone-number",
-		Usage: "PhoneNumber",
+		Usage: "Field without annotation - demonstrates kebab-case default",
 	})
 	flags_create = append(flags_create, &v3.StringFlag{
 		Name:  "nickname",
@@ -328,13 +332,14 @@ func UserServiceCommand(ctx context.Context, implOrFactory interface{}, opts ...
 	})
 	flags_create = append(flags_create, &v3.StringFlag{
 		Name:  "log-level",
-		Usage: "Optional logging level preference for the user",
+		Usage: "Optional logging level preference for the user [debug|info|warn|error]",
 	})
 
 	// Add config field flags for single-command mode
 	flags_create = append(flags_create, &v3.StringFlag{
-		Name:  "db-url",
-		Usage: "PostgreSQL connection URL",
+		Name:     "db-url",
+		Required: true,
+		Usage:    "PostgreSQL connection URL",
 	})
 	flags_create = append(flags_create, &v3.Int64Flag{
 		Name:  "max-conns",
@@ -342,7 +347,7 @@ func UserServiceCommand(ctx context.Context, implOrFactory interface{}, opts ...
 	})
 	flags_create = append(flags_create, &v3.StringFlag{
 		Name:  "log-level",
-		Usage: "Logging level",
+		Usage: "Logging level [debug|info|warn|error]",
 	})
 	flags_create = append(flags_create, &v3.StringFlag{
 		Name:  "allowed-origins",
@@ -606,9 +611,10 @@ func UserServiceCommandsFlat(ctx context.Context, implOrFactory interface{}, opt
 	}}
 
 	flags_get = append(flags_get, &v3.Int64Flag{
-		Aliases: []string{"i"},
-		Name:    "id",
-		Usage:   "User ID to retrieve",
+		Aliases:  []string{"i"},
+		Name:     "id",
+		Required: true,
+		Usage:    "User ID to retrieve",
 	})
 	flags_get = append(flags_get, &v3.BoolFlag{
 		Aliases: []string{"d"},
@@ -628,8 +634,9 @@ func UserServiceCommandsFlat(ctx context.Context, implOrFactory interface{}, opt
 
 	// Add config field flags for single-command mode
 	flags_get = append(flags_get, &v3.StringFlag{
-		Name:  "db-url",
-		Usage: "PostgreSQL connection URL",
+		Name:     "db-url",
+		Required: true,
+		Usage:    "PostgreSQL connection URL",
 	})
 	flags_get = append(flags_get, &v3.Int64Flag{
 		Name:  "max-conns",
@@ -637,7 +644,7 @@ func UserServiceCommandsFlat(ctx context.Context, implOrFactory interface{}, opt
 	})
 	flags_get = append(flags_get, &v3.StringFlag{
 		Name:  "log-level",
-		Usage: "Logging level",
+		Usage: "Logging level [debug|info|warn|error]",
 	})
 	flags_get = append(flags_get, &v3.StringFlag{
 		Name:  "allowed-origins",
@@ -811,14 +818,16 @@ func UserServiceCommandsFlat(ctx context.Context, implOrFactory interface{}, opt
 	}}
 
 	flags_create = append(flags_create, &v3.StringFlag{
-		Aliases: []string{"n"},
-		Name:    "name",
-		Usage:   "User's full name",
+		Aliases:  []string{"n"},
+		Name:     "name",
+		Required: true,
+		Usage:    "User's full name",
 	})
 	flags_create = append(flags_create, &v3.StringFlag{
-		Aliases: []string{"e"},
-		Name:    "email",
-		Usage:   "User's email address",
+		Aliases:  []string{"e"},
+		Name:     "email",
+		Required: true,
+		Usage:    "User's email address",
 	})
 	flags_create = append(flags_create, &v3.StringFlag{
 		Name:  "address",
@@ -830,7 +839,7 @@ func UserServiceCommandsFlat(ctx context.Context, implOrFactory interface{}, opt
 	})
 	flags_create = append(flags_create, &v3.StringFlag{
 		Name:  "phone-number",
-		Usage: "PhoneNumber",
+		Usage: "Field without annotation - demonstrates kebab-case default",
 	})
 	flags_create = append(flags_create, &v3.StringFlag{
 		Name:  "nickname",
@@ -846,13 +855,14 @@ func UserServiceCommandsFlat(ctx context.Context, implOrFactory interface{}, opt
 	})
 	flags_create = append(flags_create, &v3.StringFlag{
 		Name:  "log-level",
-		Usage: "Optional logging level preference for the user",
+		Usage: "Optional logging level preference for the user [debug|info|warn|error]",
 	})
 
 	// Add config field flags for single-command mode
 	flags_create = append(flags_create, &v3.StringFlag{
-		Name:  "db-url",
-		Usage: "PostgreSQL connection URL",
+		Name:     "db-url",
+		Required: true,
+		Usage:    "PostgreSQL connection URL",
 	})
 	flags_create = append(flags_create, &v3.Int64Flag{
 		Name:  "max-conns",
@@ -860,7 +870,7 @@ func UserServiceCommandsFlat(ctx context.Context, implOrFactory interface{}, opt
 	})
 	flags_create = append(flags_create, &v3.StringFlag{
 		Name:  "log-level",
-		Usage: "Logging level",
+		Usage: "Logging level [debug|info|warn|error]",
 	})
 	flags_create = append(flags_create, &v3.StringFlag{
 		Name:  "allowed-origins",

@@ -101,6 +101,7 @@ func TestIntegration_EnumParsing_StringValues(t *testing.T) {
 				"testcli", "user-service", "create",
 				"--name", "Test User",
 				"--email", "test@example.com",
+				"--db-url", "postgres://localhost:5432/testdb",
 				"--log-level", tt.flagValue,
 			}
 			err = rootCmd.Run(ctx, args)

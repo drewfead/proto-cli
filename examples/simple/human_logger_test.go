@@ -54,6 +54,7 @@ func TestIntegration_HumanLogger_SingleCommandMode(t *testing.T) {
 	args := []string{
 		"testcli", "user-service", "get",
 		"--id", "123",
+		"--db-url", "postgres://localhost:5432/testdb",
 	}
 	err = rootCmd.Run(ctx, args)
 	require.NoError(t, err)
@@ -189,6 +190,7 @@ func TestIntegration_HumanLogger_RespectsVerbosityFlag(t *testing.T) {
 	args := []string{
 		"testcli", "user-service", "get",
 		"--id", "123",
+		"--db-url", "postgres://localhost:5432/testdb",
 		"--verbosity", "warn",
 	}
 	err = rootCmd.Run(ctx, args)

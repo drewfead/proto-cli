@@ -243,7 +243,7 @@ func TestIntegration_CommandHooks_ExecutionOrder(t *testing.T) {
 			setWriterOnAllCommands(rootCmd, &buf)
 
 			// Execute command
-			args := []string{"testcli", "user-service", "get", "--id", "1"}
+			args := []string{"testcli", "user-service", "get", "--id", "1", "--db-url", "postgres://localhost:5432/testdb"}
 			err = rootCmd.Run(ctx, args)
 
 			if tt.expectError {
@@ -285,7 +285,7 @@ func TestIntegration_CommandHooks_WithHoistedService(t *testing.T) {
 	setWriterOnAllCommands(rootCmd, &buf)
 
 	// Execute hoisted command (RPC command at root level)
-	args := []string{"testcli", "get", "--id", "1"}
+	args := []string{"testcli", "get", "--id", "1", "--db-url", "postgres://localhost:5432/testdb"}
 	err = rootCmd.Run(ctx, args)
 	require.NoError(t, err)
 
@@ -306,7 +306,7 @@ func TestIntegration_CommandHooks_EmptyHooks(t *testing.T) {
 	rootCmd.Writer = &buf
 	setWriterOnAllCommands(rootCmd, &buf)
 
-	args := []string{"testcli", "user-service", "get", "--id", "1"}
+	args := []string{"testcli", "user-service", "get", "--id", "1", "--db-url", "postgres://localhost:5432/testdb"}
 	err = rootCmd.Run(ctx, args)
 	require.NoError(t, err, "Commands should work with empty hook slices")
 }

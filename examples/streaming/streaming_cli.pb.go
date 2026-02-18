@@ -177,12 +177,6 @@ func StreamingServiceCommand(ctx context.Context, implOrFactory interface{}, opt
 
 	commands = append(commands, &v3.Command{
 		Action: func(cmdCtx context.Context, cmd *v3.Command) error {
-			for _, hook := range options.BeforeCommandHooks() {
-				if err := hook(cmdCtx, cmd); err != nil {
-					return fmt.Errorf("before hook failed: %w", err)
-				}
-			}
-
 			defer func() {
 				hooks := options.AfterCommandHooks()
 				for i := len(hooks) - 1; i >= 0; i-- {
@@ -191,6 +185,12 @@ func StreamingServiceCommand(ctx context.Context, implOrFactory interface{}, opt
 					}
 				}
 			}()
+
+			for _, hook := range options.BeforeCommandHooks() {
+				if err := hook(cmdCtx, cmd); err != nil {
+					return fmt.Errorf("before hook failed: %w", err)
+				}
+			}
 
 			// Build request message
 			var req *ListItemsRequest
@@ -403,12 +403,6 @@ func StreamingServiceCommand(ctx context.Context, implOrFactory interface{}, opt
 
 	commands = append(commands, &v3.Command{
 		Action: func(cmdCtx context.Context, cmd *v3.Command) error {
-			for _, hook := range options.BeforeCommandHooks() {
-				if err := hook(cmdCtx, cmd); err != nil {
-					return fmt.Errorf("before hook failed: %w", err)
-				}
-			}
-
 			defer func() {
 				hooks := options.AfterCommandHooks()
 				for i := len(hooks) - 1; i >= 0; i-- {
@@ -417,6 +411,12 @@ func StreamingServiceCommand(ctx context.Context, implOrFactory interface{}, opt
 					}
 				}
 			}()
+
+			for _, hook := range options.BeforeCommandHooks() {
+				if err := hook(cmdCtx, cmd); err != nil {
+					return fmt.Errorf("before hook failed: %w", err)
+				}
+			}
 
 			// Build request message
 			var req *WatchRequest
@@ -662,12 +662,6 @@ func StreamingServiceCommandsFlat(ctx context.Context, implOrFactory interface{}
 
 	commands = append(commands, &v3.Command{
 		Action: func(cmdCtx context.Context, cmd *v3.Command) error {
-			for _, hook := range options.BeforeCommandHooks() {
-				if err := hook(cmdCtx, cmd); err != nil {
-					return fmt.Errorf("before hook failed: %w", err)
-				}
-			}
-
 			defer func() {
 				hooks := options.AfterCommandHooks()
 				for i := len(hooks) - 1; i >= 0; i-- {
@@ -676,6 +670,12 @@ func StreamingServiceCommandsFlat(ctx context.Context, implOrFactory interface{}
 					}
 				}
 			}()
+
+			for _, hook := range options.BeforeCommandHooks() {
+				if err := hook(cmdCtx, cmd); err != nil {
+					return fmt.Errorf("before hook failed: %w", err)
+				}
+			}
 
 			// Build request message
 			var req *ListItemsRequest
@@ -888,12 +888,6 @@ func StreamingServiceCommandsFlat(ctx context.Context, implOrFactory interface{}
 
 	commands = append(commands, &v3.Command{
 		Action: func(cmdCtx context.Context, cmd *v3.Command) error {
-			for _, hook := range options.BeforeCommandHooks() {
-				if err := hook(cmdCtx, cmd); err != nil {
-					return fmt.Errorf("before hook failed: %w", err)
-				}
-			}
-
 			defer func() {
 				hooks := options.AfterCommandHooks()
 				for i := len(hooks) - 1; i >= 0; i-- {
@@ -902,6 +896,12 @@ func StreamingServiceCommandsFlat(ctx context.Context, implOrFactory interface{}
 					}
 				}
 			}()
+
+			for _, hook := range options.BeforeCommandHooks() {
+				if err := hook(cmdCtx, cmd); err != nil {
+					return fmt.Errorf("before hook failed: %w", err)
+				}
+			}
 
 			// Build request message
 			var req *WatchRequest
