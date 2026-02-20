@@ -27,6 +27,12 @@ message CommandOptions {
   // Description of arguments this command accepts
   // Example: "<user-id>" or "[filter-expression]"
   string args_usage = 5;
+
+  // When true, the command always runs in-process (local call path only).
+  // The --remote flag is suppressed entirely for this command.
+  // Note: the method is still available on the gRPC server if the service is
+  // registered; local_only only affects the generated CLI layer.
+  bool local_only = 6;
 }
 
 // CLI flag annotation for message fields

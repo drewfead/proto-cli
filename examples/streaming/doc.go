@@ -27,5 +27,5 @@
 package streaming
 
 //go:generate sh -c "true"
-//go:generate go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint fmt .
-//go:generate go run mvdan.cc/gofumpt -l -w .
+//go:generate go tool golangci-lint fmt .
+//go:generate go tool gofumpt -l -w .

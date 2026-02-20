@@ -53,21 +53,59 @@ proto-cli is a protoc plugin that transforms Protocol Buffer service definitions
 
 ### Installation
 
+**1. Add the module dependency:**
+
+```bash
+go get github.com/drewfead/proto-cli@latest
+```
+
+**2. Pin the code generator as a tool dependency:**
+
+**Go 1.24+ (recommended):** Use the built-in [tool dependency tracking](https://www.alexedwards.net/blog/how-to-manage-tool-dependencies-in-go-1.24-plus) to add the generator and its companion plugins directly to your `go.mod`:
+
+```bash
+go get -tool github.com/drewfead/proto-cli/cmd/proto-cli-gen@latest
+go get -tool google.golang.org/protobuf/cmd/protoc-gen-go@latest
+go get -tool google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+```
+
+This adds a `tool` directive to your `go.mod`, keeping tool versions pinned and separate from your library dependencies.
+
+**Go 1.23 and earlier:** Use a `tools/tools.go` file with a build tag to prevent compilation while keeping the dependency in `go.sum`:
+
+```go
+//go:build tools
+
+package tools
+
+import (
+	_ "github.com/drewfead/proto-cli/cmd/proto-cli-gen"
+	_ "google.golang.org/grpc/cmd/protoc-gen-go-grpc"
+	_ "google.golang.org/protobuf/cmd/protoc-gen-go"
+)
+```
+
+Then run `go mod tidy` to resolve the dependencies.
+
+**3. Configure buf to invoke the plugins:**
+
 Add to `buf.gen.yaml`:
 
 ```yaml
 version: v2
 plugins:
-  - local: ["go", "run", "google.golang.org/protobuf/cmd/protoc-gen-go"]
+  - local: ["go", "tool", "protoc-gen-go"]
     out: .
     opt: [paths=source_relative]
-  - local: ["go", "run", "google.golang.org/grpc/cmd/protoc-gen-go-grpc"]
+  - local: ["go", "tool", "protoc-gen-go-grpc"]
     out: .
     opt: [paths=source_relative]
-  - local: ["go", "run", "github.com/drewfead/proto-cli/cmd/gen"]
+  - local: ["go", "tool", "proto-cli-gen"]
     out: .
     opt: [paths=source_relative]
 ```
+
+`go tool` resolves each binary from the `tool` directive in your `go.mod` — no separate install step, and every developer gets the exact same version.
 
 ### Basic Example
 
@@ -669,7 +707,7 @@ make build/example
 
 ```
 proto-cli/
-├── cmd/gen/          # Code generator (protoc plugin)
+├── cmd/proto-cli-gen/ # Code generator (protoc plugin, invoked via go tool)
 ├── cliconfig/        # Config management commands (init, set, get, list)
 ├── clilog/           # Structured logging (human-friendly and JSON handlers)
 ├── examples/
@@ -677,7 +715,9 @@ proto-cli/
 │   │   ├── usercli/      # Multi-service CLI
 │   │   └── usercli_flat/ # Flat command structure
 │   └── streaming/    # Server streaming example
+├── internal/generate/ # Code generation logic (jennifer-based)
 ├── proto/cli/v1/     # CLI annotation proto definitions
+├── go.mod            # Tool dependencies tracked via `tool` directive (Go 1.24+)
 ├── root.go           # Root command and daemon lifecycle
 ├── options.go        # Configuration options (functional options API)
 ├── config.go         # Configuration loading (files, env, flags)

@@ -39,7 +39,12 @@ type CommandOptions struct {
 	UsageText string `protobuf:"bytes,4,opt,name=usage_text,json=usageText,proto3" json:"usage_text,omitempty"`
 	// Description of arguments this command accepts
 	// Example: "<user-id>" or "[filter-expression]"
-	ArgsUsage     string `protobuf:"bytes,5,opt,name=args_usage,json=argsUsage,proto3" json:"args_usage,omitempty"`
+	ArgsUsage string `protobuf:"bytes,5,opt,name=args_usage,json=argsUsage,proto3" json:"args_usage,omitempty"`
+	// When true, the command always runs in-process (local call path only).
+	// The --remote flag is suppressed entirely for this command.
+	// Note: the method is still available on the gRPC server if the service is
+	// registered; local_only only affects the generated CLI layer.
+	LocalOnly     bool `protobuf:"varint,6,opt,name=local_only,json=localOnly,proto3" json:"local_only,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -107,6 +112,13 @@ func (x *CommandOptions) GetArgsUsage() string {
 		return x.ArgsUsage
 	}
 	return ""
+}
+
+func (x *CommandOptions) GetLocalOnly() bool {
+	if x != nil {
+		return x.LocalOnly
+	}
+	return false
 }
 
 // CLI flag annotation for message fields
@@ -452,7 +464,7 @@ var File_proto_cli_v1_cli_proto protoreflect.FileDescriptor
 
 const file_proto_cli_v1_cli_proto_rawDesc = "" +
 	"\n" +
-	"\x16proto/cli/v1/cli.proto\x12\x06cli.v1\x1a google/protobuf/descriptor.proto\"\xaf\x01\n" +
+	"\x16proto/cli/v1/cli.proto\x12\x06cli.v1\x1a google/protobuf/descriptor.proto\"\xce\x01\n" +
 	"\x0eCommandOptions\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12)\n" +
@@ -460,7 +472,9 @@ const file_proto_cli_v1_cli_proto_rawDesc = "" +
 	"\n" +
 	"usage_text\x18\x04 \x01(\tR\tusageText\x12\x1d\n" +
 	"\n" +
-	"args_usage\x18\x05 \x01(\tR\targsUsage\"\xb5\x01\n" +
+	"args_usage\x18\x05 \x01(\tR\targsUsage\x12\x1d\n" +
+	"\n" +
+	"local_only\x18\x06 \x01(\bR\tlocalOnly\"\xb5\x01\n" +
 	"\vFlagOptions\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1c\n" +
 	"\tshorthand\x18\x02 \x01(\tR\tshorthand\x12\x14\n" +

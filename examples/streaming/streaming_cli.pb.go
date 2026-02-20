@@ -16,8 +16,8 @@ import (
 	"strings"
 )
 
-// getOutputWriter opens the specified output file or returns cmd.Writer (if set) or stdout
-func getOutputWriter(cmd *v3.Command, path string) (io.Writer, error) {
+// getStreamingServiceOutputWriter opens the specified output file or returns cmd.Writer (if set) or stdout
+func getStreamingServiceOutputWriter(cmd *v3.Command, path string) (io.Writer, error) {
 	if path == "-" || path == "" {
 		// Use cmd.Writer if set, otherwise try root command's Writer, otherwise stdout
 		if cmd.Writer != nil {
@@ -31,14 +31,14 @@ func getOutputWriter(cmd *v3.Command, path string) (io.Writer, error) {
 	return os.Create(path)
 }
 
-// localServerStream_ListItems is a helper type for local server streaming calls to ListItems
-type localServerStream_ListItems struct {
+// localServerStream_StreamingService_ListItems is a helper type for local server streaming calls to ListItems
+type localServerStream_StreamingService_ListItems struct {
 	ctx       context.Context
 	responses chan *ItemResponse
 	errors    chan error
 }
 
-func (s *localServerStream_ListItems) Send(resp *ItemResponse) error {
+func (s *localServerStream_StreamingService_ListItems) Send(resp *ItemResponse) error {
 	select {
 	case s.responses <- resp:
 		return nil
@@ -47,21 +47,21 @@ func (s *localServerStream_ListItems) Send(resp *ItemResponse) error {
 	}
 }
 
-func (s *localServerStream_ListItems) Context() context.Context {
+func (s *localServerStream_StreamingService_ListItems) Context() context.Context {
 	return s.ctx
 }
 
-func (s *localServerStream_ListItems) SetHeader(metadata.MD) error {
+func (s *localServerStream_StreamingService_ListItems) SetHeader(metadata.MD) error {
 	return nil
 }
 
-func (s *localServerStream_ListItems) SendHeader(metadata.MD) error {
+func (s *localServerStream_StreamingService_ListItems) SendHeader(metadata.MD) error {
 	return nil
 }
 
-func (s *localServerStream_ListItems) SetTrailer(metadata.MD) {}
+func (s *localServerStream_StreamingService_ListItems) SetTrailer(metadata.MD) {}
 
-func (s *localServerStream_ListItems) SendMsg(m any) error {
+func (s *localServerStream_StreamingService_ListItems) SendMsg(m any) error {
 	msg, ok := m.(*ItemResponse)
 	if !ok {
 		return fmt.Errorf("invalid message type: expected *%s, got %T", "ItemResponse", m)
@@ -69,18 +69,18 @@ func (s *localServerStream_ListItems) SendMsg(m any) error {
 	return s.Send(msg)
 }
 
-func (s *localServerStream_ListItems) RecvMsg(m any) error {
+func (s *localServerStream_StreamingService_ListItems) RecvMsg(m any) error {
 	return fmt.Errorf("RecvMsg not supported on server streaming")
 }
 
-// localServerStream_WatchItems is a helper type for local server streaming calls to WatchItems
-type localServerStream_WatchItems struct {
+// localServerStream_StreamingService_WatchItems is a helper type for local server streaming calls to WatchItems
+type localServerStream_StreamingService_WatchItems struct {
 	ctx       context.Context
 	responses chan *ItemEvent
 	errors    chan error
 }
 
-func (s *localServerStream_WatchItems) Send(resp *ItemEvent) error {
+func (s *localServerStream_StreamingService_WatchItems) Send(resp *ItemEvent) error {
 	select {
 	case s.responses <- resp:
 		return nil
@@ -89,21 +89,21 @@ func (s *localServerStream_WatchItems) Send(resp *ItemEvent) error {
 	}
 }
 
-func (s *localServerStream_WatchItems) Context() context.Context {
+func (s *localServerStream_StreamingService_WatchItems) Context() context.Context {
 	return s.ctx
 }
 
-func (s *localServerStream_WatchItems) SetHeader(metadata.MD) error {
+func (s *localServerStream_StreamingService_WatchItems) SetHeader(metadata.MD) error {
 	return nil
 }
 
-func (s *localServerStream_WatchItems) SendHeader(metadata.MD) error {
+func (s *localServerStream_StreamingService_WatchItems) SendHeader(metadata.MD) error {
 	return nil
 }
 
-func (s *localServerStream_WatchItems) SetTrailer(metadata.MD) {}
+func (s *localServerStream_StreamingService_WatchItems) SetTrailer(metadata.MD) {}
 
-func (s *localServerStream_WatchItems) SendMsg(m any) error {
+func (s *localServerStream_StreamingService_WatchItems) SendMsg(m any) error {
 	msg, ok := m.(*ItemEvent)
 	if !ok {
 		return fmt.Errorf("invalid message type: expected *%s, got %T", "ItemEvent", m)
@@ -111,7 +111,7 @@ func (s *localServerStream_WatchItems) SendMsg(m any) error {
 	return s.Send(msg)
 }
 
-func (s *localServerStream_WatchItems) RecvMsg(m any) error {
+func (s *localServerStream_StreamingService_WatchItems) RecvMsg(m any) error {
 	return fmt.Errorf("RecvMsg not supported on server streaming")
 }
 
@@ -232,7 +232,7 @@ func StreamingServiceCommand(ctx context.Context, implOrFactory interface{}, opt
 			}
 
 			// Open output writer
-			outputWriter, err := getOutputWriter(cmd, cmd.String("output"))
+			outputWriter, err := getStreamingServiceOutputWriter(cmd, cmd.String("output"))
 			if err != nil {
 				return fmt.Errorf("failed to open output: %w", err)
 			}
@@ -311,7 +311,7 @@ func StreamingServiceCommand(ctx context.Context, implOrFactory interface{}, opt
 				svcImpl := implOrFactory.(StreamingServiceServer)
 
 				// Create local stream wrapper for direct call
-				localStream := &localServerStream_ListItems{
+				localStream := &localServerStream_StreamingService_ListItems{
 					ctx:       cmdCtx,
 					errors:    make(chan error),
 					responses: make(chan *ItemResponse),
@@ -445,7 +445,7 @@ func StreamingServiceCommand(ctx context.Context, implOrFactory interface{}, opt
 			}
 
 			// Open output writer
-			outputWriter, err := getOutputWriter(cmd, cmd.String("output"))
+			outputWriter, err := getStreamingServiceOutputWriter(cmd, cmd.String("output"))
 			if err != nil {
 				return fmt.Errorf("failed to open output: %w", err)
 			}
@@ -524,7 +524,7 @@ func StreamingServiceCommand(ctx context.Context, implOrFactory interface{}, opt
 				svcImpl := implOrFactory.(StreamingServiceServer)
 
 				// Create local stream wrapper for direct call
-				localStream := &localServerStream_WatchItems{
+				localStream := &localServerStream_StreamingService_WatchItems{
 					ctx:       cmdCtx,
 					errors:    make(chan error),
 					responses: make(chan *ItemEvent),
@@ -717,7 +717,7 @@ func StreamingServiceCommandsFlat(ctx context.Context, implOrFactory interface{}
 			}
 
 			// Open output writer
-			outputWriter, err := getOutputWriter(cmd, cmd.String("output"))
+			outputWriter, err := getStreamingServiceOutputWriter(cmd, cmd.String("output"))
 			if err != nil {
 				return fmt.Errorf("failed to open output: %w", err)
 			}
@@ -796,7 +796,7 @@ func StreamingServiceCommandsFlat(ctx context.Context, implOrFactory interface{}
 				svcImpl := implOrFactory.(StreamingServiceServer)
 
 				// Create local stream wrapper for direct call
-				localStream := &localServerStream_ListItems{
+				localStream := &localServerStream_StreamingService_ListItems{
 					ctx:       cmdCtx,
 					errors:    make(chan error),
 					responses: make(chan *ItemResponse),
@@ -930,7 +930,7 @@ func StreamingServiceCommandsFlat(ctx context.Context, implOrFactory interface{}
 			}
 
 			// Open output writer
-			outputWriter, err := getOutputWriter(cmd, cmd.String("output"))
+			outputWriter, err := getStreamingServiceOutputWriter(cmd, cmd.String("output"))
 			if err != nil {
 				return fmt.Errorf("failed to open output: %w", err)
 			}
@@ -1009,7 +1009,7 @@ func StreamingServiceCommandsFlat(ctx context.Context, implOrFactory interface{}
 				svcImpl := implOrFactory.(StreamingServiceServer)
 
 				// Create local stream wrapper for direct call
-				localStream := &localServerStream_WatchItems{
+				localStream := &localServerStream_StreamingService_WatchItems{
 					ctx:       cmdCtx,
 					errors:    make(chan error),
 					responses: make(chan *ItemEvent),

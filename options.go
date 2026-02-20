@@ -7,6 +7,7 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/drewfead/proto-cli/cliauth"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/urfave/cli/v3"
 	"google.golang.org/grpc"
@@ -154,6 +155,9 @@ type RootConfig interface {
 	LoggingConfig() LoggingConfigCallback
 	DefaultVerbosity() string
 	HelpCustomization() *HelpCustomization
+	IgnoreLocalOnly() bool
+	LoginProvider() cliauth.LoginProvider
+	AuthOptions() []cliauth.Option
 }
 
 // HelpCustomization holds options for customizing help text display.
@@ -291,6 +295,9 @@ type rootCommandOptions struct {
 	configServiceName       string                // Service name for config management
 	globalConfigPath        string                // Custom global config path
 	localConfigPath         string                // Custom local config path
+	ignoreLocalOnly         bool                  // If true, skip local-only interceptors in daemon mode
+	loginProvider           cliauth.LoginProvider // Auth login provider
+	authOptions             []cliauth.Option      // Auth configuration options
 }
 
 // AddBeforeCommand adds a before command hook.
@@ -423,6 +430,21 @@ func (o *rootCommandOptions) DefaultVerbosity() string {
 // HelpCustomization returns the help customization options.
 func (o *rootCommandOptions) HelpCustomization() *HelpCustomization {
 	return o.helpCustomization
+}
+
+// IgnoreLocalOnly returns whether local-only interceptors should be skipped in daemon mode.
+func (o *rootCommandOptions) IgnoreLocalOnly() bool {
+	return o.ignoreLocalOnly
+}
+
+// LoginProvider returns the configured auth login provider.
+func (o *rootCommandOptions) LoginProvider() cliauth.LoginProvider {
+	return o.loginProvider
+}
+
+// AuthOptions returns the configured auth options.
+func (o *rootCommandOptions) AuthOptions() []cliauth.Option {
+	return o.authOptions
 }
 
 // slogLevelToString converts an slog.Level to the CLI verbosity string format.
@@ -577,6 +599,25 @@ func Hoisted() ServiceRegistrationOption {
 	return func(reg *serviceRegistration) {
 		reg.hoisted = true
 	}
+}
+
+// LocalOnly returns an option that marks additional methods as local-only in code.
+// Methods should be specified as full gRPC method paths (e.g., "/pkg.Svc/Method").
+// Use generated constants from *_grpc.pb.go for type safety.
+// Example: protocli.LocalOnly(simple.UserService_GetUser_FullMethodName)
+func LocalOnly(methods ...string) ServiceRegistrationOption {
+	return func(reg *serviceRegistration) {
+		reg.service.LocalOnlyMethods = append(reg.service.LocalOnlyMethods, methods...)
+	}
+}
+
+// IgnoreLocalOnly disables automatic local-only method rejection in daemon mode.
+// When set, the daemon will not mount interceptors that reject calls to local-only methods.
+// Type-safe: only works with RootOptions.
+func IgnoreLocalOnly() RootOnlyOption {
+	return RootOnlyOption(func(o *rootCommandOptions) {
+		o.ignoreLocalOnly = true
+	})
 }
 
 // Service registers a service CLI (root level only).
@@ -837,6 +878,17 @@ func WithConfigManagementCommands(configMsg proto.Message, appName string, servi
 		o.configServiceName = serviceName
 		// Paths will be set from configPaths in RootCommand
 		// Use WithLocalConfigPath/WithGlobalConfigPath to override
+	})
+}
+
+// WithAuth enables the auth command suite (login, logout, status).
+// The provider implements LoginProvider and optionally InteractiveLoginProvider,
+// LogoutProvider, and StatusProvider to control which subcommands are available.
+// Use cliauth.WithStore and cliauth.WithDecorator options to customize behavior.
+func WithAuth(provider cliauth.LoginProvider, opts ...cliauth.Option) RootOnlyOption {
+	return RootOnlyOption(func(o *rootCommandOptions) {
+		o.loginProvider = provider
+		o.authOptions = opts
 	})
 }
 

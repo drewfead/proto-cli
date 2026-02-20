@@ -12,11 +12,14 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/drewfead/proto-cli/cliauth"
 	"github.com/drewfead/proto-cli/cliconfig"
 	"github.com/drewfead/proto-cli/clilog"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/urfave/cli/v3"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -29,6 +32,7 @@ type ServiceCLI struct {
 	FactoryOrImpl       any                                      // Factory function or direct service implementation
 	RegisterFunc        func(*grpc.Server, any)                  // Register service with gRPC server (takes impl)
 	GatewayRegisterFunc func(ctx context.Context, mux any) error // mux is *runtime.ServeMux from grpc-gateway
+	LocalOnlyMethods    []string                                 // Full gRPC method paths that are local-only (e.g., "/pkg.Svc/Method")
 }
 
 // parseVerbosity parses the verbosity flag value into a slog.Level.
@@ -235,6 +239,18 @@ func RootCommand(appName string, opts ...RootOption) (*cli.Command, error) {
 		commands = append(commands, cliconfig.Commands(manager))
 	}
 
+	// Add auth command suite if enabled
+	var authCfg *cliauth.Config
+	if opts, ok := options.(*rootCommandOptions); ok && opts.loginProvider != nil {
+		authCfg = cliauth.NewConfig(appName, opts.loginProvider, opts.authOptions...)
+		if commandNames["auth"] {
+			return nil, fmt.Errorf("%w: 'auth' command conflicts with a service command",
+				ErrAmbiguousCommandInvocation)
+		}
+		commandNames["auth"] = true
+		commands = append(commands, cliauth.Commands(authCfg))
+	}
+
 	// Global flags including --config and --verbosity
 	globalFlags := []cli.Flag{
 		&cli.StringSliceFlag{
@@ -270,6 +286,12 @@ func RootCommand(appName string, opts ...RootOption) (*cli.Command, error) {
 		if cmd.Name != "daemonize" {
 			setupSlog(ctx, cmd.Root(), false, options.LoggingConfig())
 		}
+
+		// Decorate context with auth metadata if configured
+		if authCfg != nil {
+			ctx = cliauth.DecorateContext(ctx, authCfg)
+		}
+
 		return ctx, nil
 	}
 
@@ -403,7 +425,17 @@ func runDaemon(ctx context.Context, cmd *cli.Command, services []*ServiceCLI, op
 	}
 
 	// Create gRPC server with configured options
-	grpcServer := grpc.NewServer(options.GRPCServerOptions()...)
+	serverOpts := options.GRPCServerOptions()
+	if !options.IgnoreLocalOnly() {
+		localOnlySet := collectLocalOnlyMethods(servicesToRegister)
+		if len(localOnlySet) > 0 {
+			serverOpts = append(serverOpts,
+				grpc.ChainUnaryInterceptor(localOnlyUnaryInterceptor(localOnlySet)),
+				grpc.ChainStreamInterceptor(localOnlyStreamInterceptor(localOnlySet)),
+			)
+		}
+	}
+	grpcServer := grpc.NewServer(serverOpts...)
 
 	// Create gateway mux if transcoding is enabled
 	var gwMux *runtime.ServeMux
@@ -461,6 +493,49 @@ func runDaemon(ctx context.Context, cmd *cli.Command, services []*ServiceCLI, op
 			return fmt.Errorf("server error: %w", err)
 		}
 		return nil
+	}
+}
+
+// collectLocalOnlyMethods merges all LocalOnlyMethods from the given services into a set.
+func collectLocalOnlyMethods(services []*ServiceCLI) map[string]bool {
+	set := make(map[string]bool)
+	for _, svc := range services {
+		for _, method := range svc.LocalOnlyMethods {
+			set[method] = true
+		}
+	}
+	return set
+}
+
+// localOnlyUnaryInterceptor returns a unary server interceptor that rejects
+// calls to local-only methods with codes.Unimplemented.
+func localOnlyUnaryInterceptor(methods map[string]bool) grpc.UnaryServerInterceptor {
+	return func(
+		ctx context.Context,
+		req any,
+		info *grpc.UnaryServerInfo,
+		handler grpc.UnaryHandler,
+	) (any, error) {
+		if methods[info.FullMethod] {
+			return nil, status.Errorf(codes.Unimplemented, "method %s is local-only and not available in daemon mode", info.FullMethod)
+		}
+		return handler(ctx, req)
+	}
+}
+
+// localOnlyStreamInterceptor returns a stream server interceptor that rejects
+// calls to local-only methods with codes.Unimplemented.
+func localOnlyStreamInterceptor(methods map[string]bool) grpc.StreamServerInterceptor {
+	return func(
+		srv any,
+		ss grpc.ServerStream,
+		info *grpc.StreamServerInfo,
+		handler grpc.StreamHandler,
+	) error {
+		if methods[info.FullMethod] {
+			return status.Errorf(codes.Unimplemented, "method %s is local-only and not available in daemon mode", info.FullMethod)
+		}
+		return handler(srv, ss)
 	}
 }
 

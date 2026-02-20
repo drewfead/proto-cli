@@ -17,8 +17,8 @@ import (
 	"strings"
 )
 
-// getOutputWriter opens the specified output file or returns cmd.Writer (if set) or stdout
-func getOutputWriter(cmd *v3.Command, path string) (io.Writer, error) {
+// getUserServiceOutputWriter opens the specified output file or returns cmd.Writer (if set) or stdout
+func getUserServiceOutputWriter(cmd *v3.Command, path string) (io.Writer, error) {
 	if path == "-" || path == "" {
 		// Use cmd.Writer if set, otherwise try root command's Writer, otherwise stdout
 		if cmd.Writer != nil {
@@ -32,9 +32,9 @@ func getOutputWriter(cmd *v3.Command, path string) (io.Writer, error) {
 	return os.Create(path)
 }
 
-// parseLogLevel parses a string value to LogLevel enum
+// parseUserServiceLogLevel parses a string value to LogLevel enum
 // Accepts enum value names (case-insensitive) or custom CLI names if specified
-func parseLogLevel(value string) (LogLevel, error) {
+func parseUserServiceLogLevel(value string) (LogLevel, error) {
 	// Convert to lowercase for case-insensitive comparison
 	lower := strings.ToLower(value)
 
@@ -238,7 +238,7 @@ func UserServiceCommand(ctx context.Context, implOrFactory interface{}, opts ...
 			}
 
 			// Open output writer
-			outputWriter, err := getOutputWriter(cmd, cmd.String("output"))
+			outputWriter, err := getUserServiceOutputWriter(cmd, cmd.String("output"))
 			if err != nil {
 				return fmt.Errorf("failed to open output: %w", err)
 			}
@@ -468,7 +468,7 @@ func UserServiceCommand(ctx context.Context, implOrFactory interface{}, opts ...
 					req.Verified = &val
 				}
 				if cmd.IsSet("log-level") {
-					val, err := parseLogLevel(cmd.String("log-level"))
+					val, err := parseUserServiceLogLevel(cmd.String("log-level"))
 					if err != nil {
 						return fmt.Errorf("invalid value for --log-level: %w", err)
 					}
@@ -524,7 +524,7 @@ func UserServiceCommand(ctx context.Context, implOrFactory interface{}, opts ...
 			}
 
 			// Open output writer
-			outputWriter, err := getOutputWriter(cmd, cmd.String("output"))
+			outputWriter, err := getUserServiceOutputWriter(cmd, cmd.String("output"))
 			if err != nil {
 				return fmt.Errorf("failed to open output: %w", err)
 			}
@@ -761,7 +761,7 @@ func UserServiceCommandsFlat(ctx context.Context, implOrFactory interface{}, opt
 			}
 
 			// Open output writer
-			outputWriter, err := getOutputWriter(cmd, cmd.String("output"))
+			outputWriter, err := getUserServiceOutputWriter(cmd, cmd.String("output"))
 			if err != nil {
 				return fmt.Errorf("failed to open output: %w", err)
 			}
@@ -991,7 +991,7 @@ func UserServiceCommandsFlat(ctx context.Context, implOrFactory interface{}, opt
 					req.Verified = &val
 				}
 				if cmd.IsSet("log-level") {
-					val, err := parseLogLevel(cmd.String("log-level"))
+					val, err := parseUserServiceLogLevel(cmd.String("log-level"))
 					if err != nil {
 						return fmt.Errorf("invalid value for --log-level: %w", err)
 					}
@@ -1047,7 +1047,7 @@ func UserServiceCommandsFlat(ctx context.Context, implOrFactory interface{}, opt
 			}
 
 			// Open output writer
-			outputWriter, err := getOutputWriter(cmd, cmd.String("output"))
+			outputWriter, err := getUserServiceOutputWriter(cmd, cmd.String("output"))
 			if err != nil {
 				return fmt.Errorf("failed to open output: %w", err)
 			}
@@ -1105,6 +1105,21 @@ func UserServiceCommandsFlat(ctx context.Context, implOrFactory interface{}, opt
 	commands = append(commands, daemonCmd)
 
 	return commands
+}
+
+// getAdminServiceOutputWriter opens the specified output file or returns cmd.Writer (if set) or stdout
+func getAdminServiceOutputWriter(cmd *v3.Command, path string) (io.Writer, error) {
+	if path == "-" || path == "" {
+		// Use cmd.Writer if set, otherwise try root command's Writer, otherwise stdout
+		if cmd.Writer != nil {
+			return cmd.Writer, nil
+		}
+		if cmd.Root().Writer != nil {
+			return cmd.Root().Writer, nil
+		}
+		return os.Stdout, nil
+	}
+	return os.Create(path)
 }
 
 // AdminServiceCommand creates a CLI for AdminService with options
@@ -1214,7 +1229,7 @@ func AdminServiceCommand(ctx context.Context, implOrFactory interface{}, opts ..
 			}
 
 			// Open output writer
-			outputWriter, err := getOutputWriter(cmd, cmd.String("output"))
+			outputWriter, err := getAdminServiceOutputWriter(cmd, cmd.String("output"))
 			if err != nil {
 				return fmt.Errorf("failed to open output: %w", err)
 			}
@@ -1378,7 +1393,7 @@ func AdminServiceCommandsFlat(ctx context.Context, implOrFactory interface{}, op
 			}
 
 			// Open output writer
-			outputWriter, err := getOutputWriter(cmd, cmd.String("output"))
+			outputWriter, err := getAdminServiceOutputWriter(cmd, cmd.String("output"))
 			if err != nil {
 				return fmt.Errorf("failed to open output: %w", err)
 			}

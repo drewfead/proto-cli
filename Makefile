@@ -12,11 +12,11 @@ INSTALL_LOCATION ?= ~/bin
 build: build/gen build/example build/streaming ## Build all binaries
 
 .PHONY: build/gen
-build/gen: ## Build the protoc-gen-cli code generator
-	@echo "Building protoc-gen-cli..."
+build/gen: ## Build the proto-cli-gen code generator
+	@echo "Building proto-cli-gen..."
 	@mkdir -p $(BIN_DIR)
-	go build -o $(BIN_DIR)/protoc-gen-cli ./cmd/gen
-	@echo "✓ Built: $(BIN_DIR)/protoc-gen-cli"
+	go build -o $(BIN_DIR)/proto-cli-gen ./cmd/proto-cli-gen
+	@echo "✓ Built: $(BIN_DIR)/proto-cli-gen"
 
 .PHONY: build/example
 build/example: generate ## Build the example usercli binary (generates proto files first)
@@ -33,11 +33,11 @@ build/streaming: generate ## Build the streaming example streamcli binary
 	@echo "✓ Built: $(BIN_DIR)/streamcli"
 
 .PHONY: install
-install: build/gen ## Build and install protoc-gen-cli to ~/bin (override with INSTALL_LOCATION=/path)
-	@echo "Installing protoc-gen-cli to $(INSTALL_LOCATION)..."
+install: build/gen ## Build and install proto-cli-gen to ~/bin (override with INSTALL_LOCATION=/path)
+	@echo "Installing proto-cli-gen to $(INSTALL_LOCATION)..."
 	@mkdir -p $(INSTALL_LOCATION)
-	cp $(BIN_DIR)/protoc-gen-cli $(INSTALL_LOCATION)/protoc-gen-cli
-	@echo "✓ Installed: $(INSTALL_LOCATION)/protoc-gen-cli"
+	cp $(BIN_DIR)/proto-cli-gen $(INSTALL_LOCATION)/proto-cli-gen
+	@echo "✓ Installed: $(INSTALL_LOCATION)/proto-cli-gen"
 
 .PHONY: clean
 clean: ## Clean build artifacts and generated proto files
@@ -54,7 +54,7 @@ clean: ## Clean build artifacts and generated proto files
 .PHONY: generate
 generate: ## Generate proto files using buf
 	@echo "Generating proto files..."
-	go run github.com/bufbuild/buf/cmd/buf generate --template buf.gen.examples.yaml
+	go tool buf generate --template buf.gen.examples.yaml
 	go generate ./...
 	@echo "✓ Proto generation complete"
 
@@ -71,7 +71,7 @@ generate/clean: ## Clean and regenerate all proto files
 .PHONY: publish
 publish: lint/proto ## Publish proto module to Buf Schema Registry
 	@echo "Publishing to Buf Schema Registry (buf.build/fernet/proto-cli)..."
-	go run github.com/bufbuild/buf/cmd/buf push
+	go tool buf push
 	@echo "✓ Published to BSR"
 
 ##@ Test
@@ -95,32 +95,32 @@ lint: lint/go lint/proto lint/fmt ## Run all linters and format checks
 
 .PHONY: lint/go
 lint/go: ## Run Go linter
-	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint run ./...
+	go tool golangci-lint run ./...
 
 .PHONY: lint/proto
 lint/proto: ## Run proto linter (buf lint)
-	go run github.com/bufbuild/buf/cmd/buf lint
+	go tool buf lint
 
 .PHONY: fmt
 fmt: ## Auto-format code
 	@echo "Formatting Go code..."
-	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint fmt ./...
-	go run mvdan.cc/gofumpt -l -w .
+	go tool golangci-lint fmt ./...
+	go tool gofumpt -l -w .
 	@echo "Formatting proto files..."
-	go run github.com/bufbuild/buf/cmd/buf format -w
+	go tool buf format -w
 	@echo "✓ Formatting complete"
 
 .PHONY: lint/fmt
 lint/fmt: ## Check if code is properly formatted
 	@echo "Checking Go formatting..."
-	@if [ -n "$$(go run mvdan.cc/gofumpt -l .)" ]; then \
+	@if [ -n "$$(go tool gofumpt -l .)" ]; then \
 		echo "The following files need formatting:"; \
-		go run mvdan.cc/gofumpt -l .; \
+		go tool gofumpt -l .; \
 		echo "Run 'make fmt' to fix"; \
 		exit 1; \
 	fi
 	@echo "Checking proto formatting..."
-	@go run github.com/bufbuild/buf/cmd/buf format -d --exit-code
+	@go tool buf format -d --exit-code
 	@echo "✓ All files are properly formatted"
 
 ##@ Misc.
