@@ -135,6 +135,7 @@ type ServiceConfig interface {
 	BeforeCommandHooks() []func(context.Context, *cli.Command) error
 	AfterCommandHooks() []func(context.Context, *cli.Command) error
 	OutputFormats() []OutputFormat
+	InputFormats() []InputFormat
 	FlagDeserializer(messageName string) (FlagDeserializer, bool)
 }
 
@@ -195,6 +196,7 @@ type serviceCommandOptions struct {
 	afterCommandHooks  []func(context.Context, *cli.Command) error
 	outputFormats      []OutputFormat
 	flagDeserializers  map[string]FlagDeserializer // messageName -> deserializer
+	inputFormats       []InputFormat
 }
 
 // AddBeforeCommand adds a before command hook.
@@ -229,6 +231,12 @@ func (o *serviceCommandOptions) AfterCommandHooks() []func(context.Context, *cli
 // OutputFormats returns the registered output formats.
 func (o *serviceCommandOptions) OutputFormats() []OutputFormat {
 	return o.outputFormats
+}
+
+// InputFormats returns the registered input formats.
+// Returns default input formats (protojson + YAML) if none were explicitly registered.
+func (o *serviceCommandOptions) InputFormats() []InputFormat {
+	return o.inputFormats
 }
 
 // FlagDeserializer returns the deserializer for a message type, if registered.
@@ -586,6 +594,16 @@ func WithFlagDeserializer(messageName string, deserializer FlagDeserializer) Ser
 	})
 }
 
+// WithInputFormat registers a custom input format for file-based request input.
+// Multiple formats can be registered. Built-in formats (protojson, YAML) are always available
+// unless overridden by a format with the same name.
+// Type-safe: only works with ServiceOptions.
+func WithInputFormat(format InputFormat) ServiceOnlyOption {
+	return ServiceOnlyOption(func(o *serviceCommandOptions) {
+		o.inputFormats = append(o.inputFormats, format)
+	})
+}
+
 // Root-only options
 
 // ServiceRegistrationOption configures how a service is registered in the root command.
@@ -930,6 +948,11 @@ func ApplyServiceOptions(opts ...ServiceOption) ServiceConfig {
 	// If no output formats are registered, use Go format as the default.
 	if len(options.outputFormats) == 0 {
 		options.outputFormats = []OutputFormat{Go()}
+	}
+
+	// If no input formats are registered, use default input formats (protojson + YAML).
+	if len(options.inputFormats) == 0 {
+		options.inputFormats = DefaultInputFormats()
 	}
 
 	return options

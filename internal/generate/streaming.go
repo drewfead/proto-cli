@@ -72,6 +72,14 @@ func generateServerStreamingCommand(service *protogen.Service, method *protogen.
 			jen.Id("Value"): jen.Lit("\n"),
 			jen.Id("Usage"): jen.Lit("Delimiter between streamed messages"),
 		}),
+		jen.Op("&").Qual("github.com/urfave/cli/v3", "StringFlag").Values(jen.Dict{
+			jen.Id("Name"):  jen.Lit("input-file"),
+			jen.Id("Usage"): jen.Lit("Read request from file (JSON or YAML). CLI flags override file values"),
+		}),
+		jen.Op("&").Qual("github.com/urfave/cli/v3", "StringFlag").Values(jen.Dict{
+			jen.Id("Name"):  jen.Lit("input-format"),
+			jen.Id("Usage"): jen.Lit("Input file format (auto-detected from extension if not set)"),
+		}),
 	}
 	if !localOnly {
 		initialFlags = append([]jen.Code{
@@ -191,7 +199,7 @@ func generateServerStreamingActionBody(file *protogen.File, service *protogen.Se
 		jen.Line(),
 	)
 
-	// Build request (same as unary)
+	// Build request - check for input file, custom deserializer, or auto-generated flags
 	requestFullyQualifiedName := string(method.Input.Desc.FullName())
 	requestTypeName := method.Input.GoIdent.GoName
 	requestQualifiedType := qualifyType(file, method.Input, true)
@@ -202,52 +210,74 @@ func generateServerStreamingActionBody(file *protogen.File, service *protogen.Se
 		jen.Line(),
 	)
 
-	// Generate the if-else block for custom deserializer vs auto-generated
-	deserializerCheck := []jen.Code{
-		jen.Comment(fmt.Sprintf("Check for custom flag deserializer for %s", requestFullyQualifiedName)),
-		jen.List(jen.Id("deserializer"), jen.Id("hasDeserializer")).Op(":=").Id("options").Dot("FlagDeserializer").Call(
-			jen.Lit(requestFullyQualifiedName),
-		),
-		jen.If(jen.Id("hasDeserializer")).Block(
-			jen.Comment("Use custom deserializer for top-level request"),
-			jen.Id("requestFlags").Op(":=").Qual("github.com/drewfead/proto-cli", "NewFlagContainer").Call(
-				jen.Id("cmd"),
-				jen.Lit(""),
-			),
-			jen.List(jen.Id("msg"), jen.Err()).Op(":=").Id("deserializer").Call(
-				jen.Id("cmdCtx"),
-				jen.Id("requestFlags"),
-			),
-			jen.If(jen.Err().Op("!=").Nil()).Block(
-				jen.Return(jen.Qual("fmt", "Errorf").Call(
-					jen.Lit("custom deserializer failed: %w"),
-					jen.Err(),
-				)),
-			),
-			jen.If(jen.Id("msg").Op("==").Nil()).Block(
-				jen.Return(jen.Qual("fmt", "Errorf").Call(
-					jen.Lit("custom deserializer returned nil message"),
-				)),
-			),
-			jen.Var().Id("ok").Bool(),
-			jen.List(jen.Id("req"), jen.Id("ok")).Op("=").Id("msg").Assert(requestQualifiedType),
-			jen.If(jen.Op("!").Id("ok")).Block(
-				jen.Return(jen.Qual("fmt", "Errorf").Call(
-					jen.Lit("custom deserializer returned wrong type: expected *%s, got %T"),
-					jen.Lit(requestTypeName),
-					jen.Id("msg"),
-				)),
-			),
-		).Else().Block(
+	// Generate the if-else block: input-file → custom deserializer → auto-generated
+	requestBuildBlock := []jen.Code{
+		jen.Comment("Check for file-based input"),
+		jen.Id("inputFile").Op(":=").Id("cmd").Dot("String").Call(jen.Lit("input-file")),
+		jen.If(jen.Id("inputFile").Op("!=").Lit("")).Block(
 			append([]jen.Code{
-				jen.Comment("Use auto-generated flag parsing"),
+				jen.Comment("Read request from file"),
 				jen.Id("req").Op("=").Op("&").Add(qualifyType(file, method.Input, false)).Values(),
-			}, generateRequestFieldAssignments(file, service, method)...)...,
+				jen.If(
+					jen.Err().Op(":=").Qual("github.com/drewfead/proto-cli", "ReadInputFile").Call(
+						jen.Id("inputFile"),
+						jen.Id("cmd").Dot("String").Call(jen.Lit("input-format")),
+						jen.Id("options").Dot("InputFormats").Call(),
+						jen.Id("req"),
+					),
+					jen.Err().Op("!=").Nil(),
+				).Block(
+					jen.Return(jen.Err()),
+				),
+				jen.Comment("Apply flag overrides (only explicitly-set flags)"),
+			}, generateRequestFieldOverrides(file, service, method)...)...,
+		).Else().Block(
+			// Inner if-else: custom deserializer vs auto-generated
+			jen.Comment(fmt.Sprintf("Check for custom flag deserializer for %s", requestFullyQualifiedName)),
+			jen.List(jen.Id("deserializer"), jen.Id("hasDeserializer")).Op(":=").Id("options").Dot("FlagDeserializer").Call(
+				jen.Lit(requestFullyQualifiedName),
+			),
+			jen.If(jen.Id("hasDeserializer")).Block(
+				jen.Comment("Use custom deserializer for top-level request"),
+				jen.Id("requestFlags").Op(":=").Qual("github.com/drewfead/proto-cli", "NewFlagContainer").Call(
+					jen.Id("cmd"),
+					jen.Lit(""),
+				),
+				jen.List(jen.Id("msg"), jen.Err()).Op(":=").Id("deserializer").Call(
+					jen.Id("cmdCtx"),
+					jen.Id("requestFlags"),
+				),
+				jen.If(jen.Err().Op("!=").Nil()).Block(
+					jen.Return(jen.Qual("fmt", "Errorf").Call(
+						jen.Lit("custom deserializer failed: %w"),
+						jen.Err(),
+					)),
+				),
+				jen.If(jen.Id("msg").Op("==").Nil()).Block(
+					jen.Return(jen.Qual("fmt", "Errorf").Call(
+						jen.Lit("custom deserializer returned nil message"),
+					)),
+				),
+				jen.Var().Id("ok").Bool(),
+				jen.List(jen.Id("req"), jen.Id("ok")).Op("=").Id("msg").Assert(requestQualifiedType),
+				jen.If(jen.Op("!").Id("ok")).Block(
+					jen.Return(jen.Qual("fmt", "Errorf").Call(
+						jen.Lit("custom deserializer returned wrong type: expected *%s, got %T"),
+						jen.Lit(requestTypeName),
+						jen.Id("msg"),
+					)),
+				),
+			).Else().Block(
+				append([]jen.Code{
+					jen.Comment("Use auto-generated flag parsing"),
+					jen.Id("req").Op("=").Op("&").Add(qualifyType(file, method.Input, false)).Values(),
+				}, generateRequestFieldAssignments(file, service, method)...)...,
+			),
 		),
 		jen.Line(),
 	}
 
-	statements = append(statements, deserializerCheck...)
+	statements = append(statements, requestBuildBlock...)
 
 	// Open output writer
 	statements = append(statements, generateOutputWriterOpening(service)...)

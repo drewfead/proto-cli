@@ -8,7 +8,45 @@ import (
 	annotations "github.com/drewfead/proto-cli/proto/cli/v1"
 	"google.golang.org/protobuf/compiler/protogen"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
+
+// flagTypeInfo maps a proto field kind to its urfave/cli v3 flag type name
+// and the corresponding cmd accessor method name, for both singular and slice variants.
+type flagTypeInfo struct {
+	SingularFlag    string // e.g. "Int32Flag"
+	SliceFlag       string // e.g. "Int32SliceFlag"
+	SingularAccessor string // e.g. "Int32"
+	SliceAccessor   string // e.g. "Int32Slice"
+}
+
+// scalarFlagTypes maps proto kinds to their urfave/cli flag type info.
+// Special cases (message, group) are not included — they require custom handling.
+// Bool, bytes, and enum slice variants use StringSliceFlag since urfave/cli v3
+// has no BoolSliceFlag, and bytes/enums need string-based parsing.
+var scalarFlagTypes = map[protoreflect.Kind]flagTypeInfo{
+	protoreflect.Int32Kind:    {SingularFlag: "Int32Flag", SliceFlag: "Int32SliceFlag", SingularAccessor: "Int32", SliceAccessor: "Int32Slice"},
+	protoreflect.Sint32Kind:   {SingularFlag: "Int32Flag", SliceFlag: "Int32SliceFlag", SingularAccessor: "Int32", SliceAccessor: "Int32Slice"},
+	protoreflect.Sfixed32Kind: {SingularFlag: "Int32Flag", SliceFlag: "Int32SliceFlag", SingularAccessor: "Int32", SliceAccessor: "Int32Slice"},
+	protoreflect.Int64Kind:    {SingularFlag: "Int64Flag", SliceFlag: "Int64SliceFlag", SingularAccessor: "Int64", SliceAccessor: "Int64Slice"},
+	protoreflect.Sint64Kind:   {SingularFlag: "Int64Flag", SliceFlag: "Int64SliceFlag", SingularAccessor: "Int64", SliceAccessor: "Int64Slice"},
+	protoreflect.Sfixed64Kind: {SingularFlag: "Int64Flag", SliceFlag: "Int64SliceFlag", SingularAccessor: "Int64", SliceAccessor: "Int64Slice"},
+	protoreflect.Uint32Kind:   {SingularFlag: "Uint32Flag", SliceFlag: "Uint32SliceFlag", SingularAccessor: "Uint32", SliceAccessor: "Uint32Slice"},
+	protoreflect.Fixed32Kind:  {SingularFlag: "Uint32Flag", SliceFlag: "Uint32SliceFlag", SingularAccessor: "Uint32", SliceAccessor: "Uint32Slice"},
+	protoreflect.Uint64Kind:   {SingularFlag: "Uint64Flag", SliceFlag: "Uint64SliceFlag", SingularAccessor: "Uint64", SliceAccessor: "Uint64Slice"},
+	protoreflect.Fixed64Kind:  {SingularFlag: "Uint64Flag", SliceFlag: "Uint64SliceFlag", SingularAccessor: "Uint64", SliceAccessor: "Uint64Slice"},
+	protoreflect.FloatKind:    {SingularFlag: "Float32Flag", SliceFlag: "Float32SliceFlag", SingularAccessor: "Float32", SliceAccessor: "Float32Slice"},
+	protoreflect.DoubleKind:   {SingularFlag: "Float64Flag", SliceFlag: "Float64SliceFlag", SingularAccessor: "Float64", SliceAccessor: "Float64Slice"},
+	protoreflect.StringKind:   {SingularFlag: "StringFlag", SliceFlag: "StringSliceFlag", SingularAccessor: "String", SliceAccessor: "StringSlice"},
+	protoreflect.BoolKind:     {SingularFlag: "BoolFlag", SliceFlag: "StringSliceFlag", SingularAccessor: "Bool", SliceAccessor: "StringSlice"},
+	protoreflect.BytesKind:    {SingularFlag: "StringFlag", SliceFlag: "StringSliceFlag", SingularAccessor: "String", SliceAccessor: "StringSlice"},
+	protoreflect.EnumKind:     {SingularFlag: "StringFlag", SliceFlag: "StringSliceFlag", SingularAccessor: "String", SliceAccessor: "StringSlice"},
+}
+
+// cliFlagRef returns a jen expression for &cli.FlagType{dict} given a flag type name.
+func cliFlagRef(flagTypeName string, dict jen.Dict) *jen.Statement {
+	return jen.Op("&").Qual("github.com/urfave/cli/v3", flagTypeName).Values(dict)
+}
 
 // toKebabCase converts Go field names to kebab-case for CLI flags.
 // Inserts a hyphen before each uppercase letter (except the first).

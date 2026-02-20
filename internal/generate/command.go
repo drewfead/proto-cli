@@ -95,6 +95,14 @@ func generateMethodCommand(service *protogen.Service, method *protogen.Method, c
 			jen.Id("Value"): jen.Lit("-"),
 			jen.Id("Usage"): jen.Lit("Output file (- for stdout)"),
 		}),
+		jen.Op("&").Qual("github.com/urfave/cli/v3", "StringFlag").Values(jen.Dict{
+			jen.Id("Name"):  jen.Lit("input-file"),
+			jen.Id("Usage"): jen.Lit("Read request from file (JSON or YAML). CLI flags override file values"),
+		}),
+		jen.Op("&").Qual("github.com/urfave/cli/v3", "StringFlag").Values(jen.Dict{
+			jen.Id("Name"):  jen.Lit("input-format"),
+			jen.Id("Usage"): jen.Lit("Input file format (auto-detected from extension if not set)"),
+		}),
 	}
 	if !localOnly {
 		initialFlags = append([]jen.Code{
@@ -229,31 +237,29 @@ func generateFlag(field *protogen.Field) jen.Code {
 		return dict
 	}
 
-	switch field.Desc.Kind() {
-	case protoreflect.Int32Kind, protoreflect.Sint32Kind, protoreflect.Sfixed32Kind:
-		return jen.Op("&").Qual("github.com/urfave/cli/v3", "Int32Flag").Values(buildFlagDict())
-	case protoreflect.Int64Kind, protoreflect.Sint64Kind, protoreflect.Sfixed64Kind:
-		return jen.Op("&").Qual("github.com/urfave/cli/v3", "Int64Flag").Values(buildFlagDict())
-	case protoreflect.Uint32Kind, protoreflect.Fixed32Kind:
-		return jen.Op("&").Qual("github.com/urfave/cli/v3", "Uint32Flag").Values(buildFlagDict())
-	case protoreflect.Uint64Kind, protoreflect.Fixed64Kind:
-		return jen.Op("&").Qual("github.com/urfave/cli/v3", "Uint64Flag").Values(buildFlagDict())
-	case protoreflect.FloatKind:
-		return jen.Op("&").Qual("github.com/urfave/cli/v3", "Float32Flag").Values(buildFlagDict())
-	case protoreflect.DoubleKind:
-		return jen.Op("&").Qual("github.com/urfave/cli/v3", "Float64Flag").Values(buildFlagDict())
-	case protoreflect.StringKind:
-		return jen.Op("&").Qual("github.com/urfave/cli/v3", "StringFlag").Values(buildFlagDict())
-	case protoreflect.BoolKind:
-		return jen.Op("&").Qual("github.com/urfave/cli/v3", "BoolFlag").Values(buildFlagDict())
-	case protoreflect.BytesKind:
-		// Represent bytes as string flag, user will need to decode
-		return jen.Op("&").Qual("github.com/urfave/cli/v3", "StringFlag").Values(buildFlagDict())
-	case protoreflect.EnumKind:
-		// Enums are represented as string flags for better UX
-		// Append valid enum values to usage text
+	// Handle repeated (list) fields — use slice flag types
+	if field.Desc.IsList() {
+		if field.Desc.Kind() == protoreflect.EnumKind {
+			usage = usage + " [" + getEnumValuesPiped(field.Enum) + "]"
+		}
+		if ft, ok := scalarFlagTypes[field.Desc.Kind()]; ok {
+			return cliFlagRef(ft.SliceFlag, buildFlagDict())
+		}
+		// MessageKind falls through to singular handling; other unknown kinds return nil
+		if field.Desc.Kind() != protoreflect.MessageKind {
+			return nil
+		}
+	}
+
+	// Append valid enum values to usage text for singular enums
+	if field.Desc.Kind() == protoreflect.EnumKind {
 		usage = usage + " [" + getEnumValuesPiped(field.Enum) + "]"
-		return jen.Op("&").Qual("github.com/urfave/cli/v3", "StringFlag").Values(buildFlagDict())
+	}
+	if ft, ok := scalarFlagTypes[field.Desc.Kind()]; ok {
+		return cliFlagRef(ft.SingularFlag, buildFlagDict())
+	}
+
+	switch field.Desc.Kind() {
 	case protoreflect.MessageKind:
 		// For message fields (e.g., google.protobuf.Timestamp, nested messages),
 		// generate a StringFlag that custom deserializers can parse
@@ -350,36 +356,26 @@ func generateConfigFlags(file *protogen.File, configMessageType string, cmdVarNa
 
 		// Generate flag based on field type
 		var flagCode jen.Code
-		switch field.Desc.Kind() {
-		case protoreflect.Int32Kind, protoreflect.Sint32Kind, protoreflect.Sfixed32Kind:
-			flagCode = jen.Op("&").Qual("github.com/urfave/cli/v3", "Int32Flag").Values(buildFlagDict())
-		case protoreflect.Int64Kind, protoreflect.Sint64Kind, protoreflect.Sfixed64Kind:
-			flagCode = jen.Op("&").Qual("github.com/urfave/cli/v3", "Int64Flag").Values(buildFlagDict())
-		case protoreflect.Uint32Kind, protoreflect.Fixed32Kind:
-			flagCode = jen.Op("&").Qual("github.com/urfave/cli/v3", "Uint32Flag").Values(buildFlagDict())
-		case protoreflect.Uint64Kind, protoreflect.Fixed64Kind:
-			flagCode = jen.Op("&").Qual("github.com/urfave/cli/v3", "Uint64Flag").Values(buildFlagDict())
-		case protoreflect.FloatKind:
-			flagCode = jen.Op("&").Qual("github.com/urfave/cli/v3", "Float32Flag").Values(buildFlagDict())
-		case protoreflect.DoubleKind:
-			flagCode = jen.Op("&").Qual("github.com/urfave/cli/v3", "Float64Flag").Values(buildFlagDict())
-		case protoreflect.StringKind:
-			flagCode = jen.Op("&").Qual("github.com/urfave/cli/v3", "StringFlag").Values(buildFlagDict())
-		case protoreflect.BoolKind:
-			flagCode = jen.Op("&").Qual("github.com/urfave/cli/v3", "BoolFlag").Values(buildFlagDict())
-		case protoreflect.BytesKind:
-			flagCode = jen.Op("&").Qual("github.com/urfave/cli/v3", "StringFlag").Values(buildFlagDict())
-		case protoreflect.EnumKind:
-			// Append valid enum values to usage text
-			usage = usage + " [" + getEnumValuesPiped(field.Enum) + "]"
-			flagCode = jen.Op("&").Qual("github.com/urfave/cli/v3", "StringFlag").Values(buildFlagDict())
-		case protoreflect.MessageKind:
+
+		switch {
+		case field.Desc.Kind() == protoreflect.MessageKind:
 			// MessageKind requires custom deserializers, skip auto-generation
 			continue
-		case protoreflect.GroupKind:
+		case field.Desc.Kind() == protoreflect.GroupKind:
 			// GroupKind is deprecated in proto3 and not supported
 			fmt.Fprintf(os.Stderr, "WARNING: Field %s uses deprecated GroupKind and will not generate a CLI flag\n", field.Desc.FullName())
 			continue
+		default:
+			if field.Desc.Kind() == protoreflect.EnumKind {
+				usage = usage + " [" + getEnumValuesPiped(field.Enum) + "]"
+			}
+			if ft, ok := scalarFlagTypes[field.Desc.Kind()]; ok {
+				if field.Desc.IsList() {
+					flagCode = cliFlagRef(ft.SliceFlag, buildFlagDict())
+				} else {
+					flagCode = cliFlagRef(ft.SingularFlag, buildFlagDict())
+				}
+			}
 		}
 
 		if flagCode != nil {
@@ -401,6 +397,70 @@ func generateRequestFieldAssignments(file *protogen.File, service *protogen.Serv
 
 	for _, field := range method.Input.Fields {
 		flagName := toKebabCase(field.GoName)
+
+		// Handle repeated (list) fields
+		if field.Desc.IsList() {
+			switch field.Desc.Kind() {
+			case protoreflect.BoolKind:
+				// No BoolSliceFlag — parse each string element with strconv.ParseBool
+				statements = append(statements,
+					jen.For(
+						jen.List(jen.Id("_"), jen.Id("s")).Op(":=").Range().Id("cmd").Dot("StringSlice").Call(jen.Lit(flagName)),
+					).Block(
+						jen.List(jen.Id("v"), jen.Err()).Op(":=").Qual("strconv", "ParseBool").Call(jen.Id("s")),
+						jen.If(jen.Err().Op("!=").Nil()).Block(
+							jen.Return(jen.Qual("fmt", "Errorf").Call(
+								jen.Lit(fmt.Sprintf("invalid bool value for --%s: %%w", flagName)),
+								jen.Err(),
+							)),
+						),
+						jen.Id("req").Dot(field.GoName).Op("=").Append(jen.Id("req").Dot(field.GoName), jen.Id("v")),
+					),
+				)
+			case protoreflect.BytesKind:
+				// Convert each string element to []byte
+				statements = append(statements,
+					jen.For(
+						jen.List(jen.Id("_"), jen.Id("s")).Op(":=").Range().Id("cmd").Dot("StringSlice").Call(jen.Lit(flagName)),
+					).Block(
+						jen.Id("req").Dot(field.GoName).Op("=").Append(
+							jen.Id("req").Dot(field.GoName),
+							jen.Index().Byte().Call(jen.Id("s")),
+						),
+					),
+				)
+			case protoreflect.EnumKind:
+				// Parse each string element via the generated enum parser
+				enumTypeName := field.Enum.GoIdent.GoName
+				parserFuncName := enumParserFuncName(service, enumTypeName)
+				statements = append(statements,
+					jen.For(
+						jen.List(jen.Id("_"), jen.Id("s")).Op(":=").Range().Id("cmd").Dot("StringSlice").Call(jen.Lit(flagName)),
+					).Block(
+						jen.List(jen.Id("val"), jen.Err()).Op(":=").Id(parserFuncName).Call(jen.Id("s")),
+						jen.If(jen.Err().Op("!=").Nil()).Block(
+							jen.Return(jen.Qual("fmt", "Errorf").Call(
+								jen.Lit(fmt.Sprintf("invalid value for --%s: %%w", flagName)),
+								jen.Err(),
+							)),
+						),
+						jen.Id("req").Dot(field.GoName).Op("=").Append(jen.Id("req").Dot(field.GoName), jen.Id("val")),
+					),
+				)
+			case protoreflect.MessageKind:
+				// Repeated messages need deserializers — fall through to singular handling
+			default:
+				// Direct slice assignment for numeric and string types
+				if ft, ok := scalarFlagTypes[field.Desc.Kind()]; ok {
+					statements = append(statements,
+						jen.Id("req").Dot(field.GoName).Op("=").Id("cmd").Dot(ft.SliceAccessor).Call(jen.Lit(flagName)),
+					)
+				}
+			}
+			if field.Desc.Kind() != protoreflect.MessageKind {
+				continue
+			}
+		}
 
 		switch field.Desc.Kind() {
 		case protoreflect.MessageKind:
@@ -641,6 +701,329 @@ func generateRequestFieldAssignments(file *protogen.File, service *protogen.Serv
 	return statements
 }
 
+// generateRequestFieldOverrides generates code to override request fields from CLI flags,
+// but ONLY when the flag was explicitly set (cmd.IsSet). This is used when a request
+// was loaded from an input file and flags should selectively override fields.
+//
+//nolint:gocyclo,dupl,maintidx // Complexity comes from handling all proto kinds with IsSet checks
+func generateRequestFieldOverrides(file *protogen.File, service *protogen.Service, method *protogen.Method) []jen.Code {
+	var statements []jen.Code
+
+	for _, field := range method.Input.Fields {
+		flagName := toKebabCase(field.GoName)
+
+		// Handle repeated (list) fields — only override if flag was explicitly set
+		if field.Desc.IsList() {
+			switch field.Desc.Kind() {
+			case protoreflect.BoolKind:
+				// No BoolSliceFlag — parse each string element with strconv.ParseBool
+				statements = append(statements,
+					jen.If(jen.Id("cmd").Dot("IsSet").Call(jen.Lit(flagName))).Block(
+						jen.Id("req").Dot(field.GoName).Op("=").Nil(),
+						jen.For(
+							jen.List(jen.Id("_"), jen.Id("s")).Op(":=").Range().Id("cmd").Dot("StringSlice").Call(jen.Lit(flagName)),
+						).Block(
+							jen.List(jen.Id("v"), jen.Err()).Op(":=").Qual("strconv", "ParseBool").Call(jen.Id("s")),
+							jen.If(jen.Err().Op("!=").Nil()).Block(
+								jen.Return(jen.Qual("fmt", "Errorf").Call(
+									jen.Lit(fmt.Sprintf("invalid bool value for --%s: %%w", flagName)),
+									jen.Err(),
+								)),
+							),
+							jen.Id("req").Dot(field.GoName).Op("=").Append(jen.Id("req").Dot(field.GoName), jen.Id("v")),
+						),
+					),
+				)
+			case protoreflect.BytesKind:
+				// Convert each string element to []byte
+				statements = append(statements,
+					jen.If(jen.Id("cmd").Dot("IsSet").Call(jen.Lit(flagName))).Block(
+						jen.Id("req").Dot(field.GoName).Op("=").Nil(),
+						jen.For(
+							jen.List(jen.Id("_"), jen.Id("s")).Op(":=").Range().Id("cmd").Dot("StringSlice").Call(jen.Lit(flagName)),
+						).Block(
+							jen.Id("req").Dot(field.GoName).Op("=").Append(
+								jen.Id("req").Dot(field.GoName),
+								jen.Index().Byte().Call(jen.Id("s")),
+							),
+						),
+					),
+				)
+			case protoreflect.EnumKind:
+				// Parse each string element via the generated enum parser
+				enumTypeName := field.Enum.GoIdent.GoName
+				parserFuncName := enumParserFuncName(service, enumTypeName)
+				statements = append(statements,
+					jen.If(jen.Id("cmd").Dot("IsSet").Call(jen.Lit(flagName))).Block(
+						jen.Id("req").Dot(field.GoName).Op("=").Nil(),
+						jen.For(
+							jen.List(jen.Id("_"), jen.Id("s")).Op(":=").Range().Id("cmd").Dot("StringSlice").Call(jen.Lit(flagName)),
+						).Block(
+							jen.List(jen.Id("val"), jen.Err()).Op(":=").Id(parserFuncName).Call(jen.Id("s")),
+							jen.If(jen.Err().Op("!=").Nil()).Block(
+								jen.Return(jen.Qual("fmt", "Errorf").Call(
+									jen.Lit(fmt.Sprintf("invalid value for --%s: %%w", flagName)),
+									jen.Err(),
+								)),
+							),
+							jen.Id("req").Dot(field.GoName).Op("=").Append(jen.Id("req").Dot(field.GoName), jen.Id("val")),
+						),
+					),
+				)
+			case protoreflect.MessageKind:
+				// Repeated messages need deserializers — fall through to singular handling
+			default:
+				// Direct slice assignment for numeric and string types
+				if ft, ok := scalarFlagTypes[field.Desc.Kind()]; ok {
+					statements = append(statements,
+						jen.If(jen.Id("cmd").Dot("IsSet").Call(jen.Lit(flagName))).Block(
+							jen.Id("req").Dot(field.GoName).Op("=").Id("cmd").Dot(ft.SliceAccessor).Call(jen.Lit(flagName)),
+						),
+					)
+				}
+			}
+			if field.Desc.Kind() != protoreflect.MessageKind {
+				continue
+			}
+		}
+
+		switch field.Desc.Kind() {
+		case protoreflect.MessageKind:
+			// For message fields, check if there's a custom deserializer
+			messageType := field.Message
+			fullyQualifiedName := string(messageType.Desc.FullName())
+			goTypeName := messageType.GoIdent.GoName
+			qualifiedType := qualifyType(file, messageType, true)
+
+			statements = append(statements,
+				jen.If(jen.Id("cmd").Dot("IsSet").Call(jen.Lit(flagName))).Block(
+					jen.If(
+						jen.List(jen.Id("fieldDeserializer"), jen.Id("hasFieldDeserializer")).Op(":=").Id("options").Dot("FlagDeserializer").Call(
+							jen.Lit(fullyQualifiedName),
+						),
+						jen.Id("hasFieldDeserializer"),
+					).Block(
+						jen.Id("fieldFlags").Op(":=").Qual("github.com/drewfead/proto-cli", "NewFlagContainer").Call(
+							jen.Id("cmd"),
+							jen.Lit(flagName),
+						),
+						jen.List(jen.Id("fieldMsg"), jen.Id("fieldErr")).Op(":=").Id("fieldDeserializer").Call(
+							jen.Id("cmdCtx"),
+							jen.Id("fieldFlags"),
+						),
+						jen.If(jen.Id("fieldErr").Op("!=").Nil()).Block(
+							jen.Return(jen.Qual("fmt", "Errorf").Call(
+								jen.Lit(fmt.Sprintf("failed to deserialize field %s: %%w", field.GoName)),
+								jen.Id("fieldErr"),
+							)),
+						),
+						jen.If(jen.Id("fieldMsg").Op("!=").Nil()).Block(
+							jen.List(jen.Id("typedField"), jen.Id("fieldOk")).Op(":=").Id("fieldMsg").Assert(qualifiedType),
+							jen.If(jen.Op("!").Id("fieldOk")).Block(
+								jen.Return(jen.Qual("fmt", "Errorf").Call(
+									jen.Lit(fmt.Sprintf("custom deserializer for %s returned wrong type: expected *%s, got %%T", fullyQualifiedName, goTypeName)),
+									jen.Id("fieldMsg"),
+								)),
+							),
+							jen.Id("req").Dot(field.GoName).Op("=").Id("typedField"),
+						),
+					).Else().Block(
+						jen.Return(jen.Qual("fmt", "Errorf").Call(
+							jen.Lit(fmt.Sprintf("flag --%s requires a custom deserializer for %s (register with protocli.WithFlagDeserializer)", flagName, fullyQualifiedName)),
+						)),
+					),
+				),
+			)
+
+		case protoreflect.Int32Kind, protoreflect.Sint32Kind, protoreflect.Sfixed32Kind:
+			oneof := field.Desc.ContainingOneof()
+			isOptional := field.Desc.HasPresence() && (oneof == nil || (oneof != nil && oneof.IsSynthetic()))
+			if isOptional {
+				statements = append(statements,
+					jen.If(jen.Id("cmd").Dot("IsSet").Call(jen.Lit(flagName))).Block(
+						jen.Id("val").Op(":=").Id("cmd").Dot("Int32").Call(jen.Lit(flagName)),
+						jen.Id("req").Dot(field.GoName).Op("=").Op("&").Id("val"),
+					),
+				)
+			} else {
+				statements = append(statements,
+					jen.If(jen.Id("cmd").Dot("IsSet").Call(jen.Lit(flagName))).Block(
+						jen.Id("req").Dot(field.GoName).Op("=").Id("cmd").Dot("Int32").Call(jen.Lit(flagName)),
+					),
+				)
+			}
+		case protoreflect.Int64Kind, protoreflect.Sint64Kind, protoreflect.Sfixed64Kind:
+			oneof := field.Desc.ContainingOneof()
+			isOptional := field.Desc.HasPresence() && (oneof == nil || (oneof != nil && oneof.IsSynthetic()))
+			if isOptional {
+				statements = append(statements,
+					jen.If(jen.Id("cmd").Dot("IsSet").Call(jen.Lit(flagName))).Block(
+						jen.Id("val").Op(":=").Id("cmd").Dot("Int64").Call(jen.Lit(flagName)),
+						jen.Id("req").Dot(field.GoName).Op("=").Op("&").Id("val"),
+					),
+				)
+			} else {
+				statements = append(statements,
+					jen.If(jen.Id("cmd").Dot("IsSet").Call(jen.Lit(flagName))).Block(
+						jen.Id("req").Dot(field.GoName).Op("=").Id("cmd").Dot("Int64").Call(jen.Lit(flagName)),
+					),
+				)
+			}
+		case protoreflect.Uint32Kind, protoreflect.Fixed32Kind:
+			oneof := field.Desc.ContainingOneof()
+			isOptional := field.Desc.HasPresence() && (oneof == nil || (oneof != nil && oneof.IsSynthetic()))
+			if isOptional {
+				statements = append(statements,
+					jen.If(jen.Id("cmd").Dot("IsSet").Call(jen.Lit(flagName))).Block(
+						jen.Id("val").Op(":=").Id("cmd").Dot("Uint32").Call(jen.Lit(flagName)),
+						jen.Id("req").Dot(field.GoName).Op("=").Op("&").Id("val"),
+					),
+				)
+			} else {
+				statements = append(statements,
+					jen.If(jen.Id("cmd").Dot("IsSet").Call(jen.Lit(flagName))).Block(
+						jen.Id("req").Dot(field.GoName).Op("=").Id("cmd").Dot("Uint32").Call(jen.Lit(flagName)),
+					),
+				)
+			}
+		case protoreflect.Uint64Kind, protoreflect.Fixed64Kind:
+			oneof := field.Desc.ContainingOneof()
+			isOptional := field.Desc.HasPresence() && (oneof == nil || (oneof != nil && oneof.IsSynthetic()))
+			if isOptional {
+				statements = append(statements,
+					jen.If(jen.Id("cmd").Dot("IsSet").Call(jen.Lit(flagName))).Block(
+						jen.Id("val").Op(":=").Id("cmd").Dot("Uint64").Call(jen.Lit(flagName)),
+						jen.Id("req").Dot(field.GoName).Op("=").Op("&").Id("val"),
+					),
+				)
+			} else {
+				statements = append(statements,
+					jen.If(jen.Id("cmd").Dot("IsSet").Call(jen.Lit(flagName))).Block(
+						jen.Id("req").Dot(field.GoName).Op("=").Id("cmd").Dot("Uint64").Call(jen.Lit(flagName)),
+					),
+				)
+			}
+		case protoreflect.FloatKind:
+			oneof := field.Desc.ContainingOneof()
+			isOptional := field.Desc.HasPresence() && (oneof == nil || (oneof != nil && oneof.IsSynthetic()))
+			if isOptional {
+				statements = append(statements,
+					jen.If(jen.Id("cmd").Dot("IsSet").Call(jen.Lit(flagName))).Block(
+						jen.Id("val").Op(":=").Id("cmd").Dot("Float32").Call(jen.Lit(flagName)),
+						jen.Id("req").Dot(field.GoName).Op("=").Op("&").Id("val"),
+					),
+				)
+			} else {
+				statements = append(statements,
+					jen.If(jen.Id("cmd").Dot("IsSet").Call(jen.Lit(flagName))).Block(
+						jen.Id("req").Dot(field.GoName).Op("=").Id("cmd").Dot("Float32").Call(jen.Lit(flagName)),
+					),
+				)
+			}
+		case protoreflect.DoubleKind:
+			oneof := field.Desc.ContainingOneof()
+			isOptional := field.Desc.HasPresence() && (oneof == nil || (oneof != nil && oneof.IsSynthetic()))
+			if isOptional {
+				statements = append(statements,
+					jen.If(jen.Id("cmd").Dot("IsSet").Call(jen.Lit(flagName))).Block(
+						jen.Id("val").Op(":=").Id("cmd").Dot("Float64").Call(jen.Lit(flagName)),
+						jen.Id("req").Dot(field.GoName).Op("=").Op("&").Id("val"),
+					),
+				)
+			} else {
+				statements = append(statements,
+					jen.If(jen.Id("cmd").Dot("IsSet").Call(jen.Lit(flagName))).Block(
+						jen.Id("req").Dot(field.GoName).Op("=").Id("cmd").Dot("Float64").Call(jen.Lit(flagName)),
+					),
+				)
+			}
+		case protoreflect.StringKind:
+			oneof := field.Desc.ContainingOneof()
+			isOptional := field.Desc.HasPresence() && (oneof == nil || (oneof != nil && oneof.IsSynthetic()))
+			if isOptional {
+				statements = append(statements,
+					jen.If(jen.Id("cmd").Dot("IsSet").Call(jen.Lit(flagName))).Block(
+						jen.Id("val").Op(":=").Id("cmd").Dot("String").Call(jen.Lit(flagName)),
+						jen.Id("req").Dot(field.GoName).Op("=").Op("&").Id("val"),
+					),
+				)
+			} else {
+				statements = append(statements,
+					jen.If(jen.Id("cmd").Dot("IsSet").Call(jen.Lit(flagName))).Block(
+						jen.Id("req").Dot(field.GoName).Op("=").Id("cmd").Dot("String").Call(jen.Lit(flagName)),
+					),
+				)
+			}
+		case protoreflect.BoolKind:
+			oneof := field.Desc.ContainingOneof()
+			isOptional := field.Desc.HasPresence() && (oneof == nil || (oneof != nil && oneof.IsSynthetic()))
+			if isOptional {
+				statements = append(statements,
+					jen.If(jen.Id("cmd").Dot("IsSet").Call(jen.Lit(flagName))).Block(
+						jen.Id("val").Op(":=").Id("cmd").Dot("Bool").Call(jen.Lit(flagName)),
+						jen.Id("req").Dot(field.GoName).Op("=").Op("&").Id("val"),
+					),
+				)
+			} else {
+				statements = append(statements,
+					jen.If(jen.Id("cmd").Dot("IsSet").Call(jen.Lit(flagName))).Block(
+						jen.Id("req").Dot(field.GoName).Op("=").Id("cmd").Dot("Bool").Call(jen.Lit(flagName)),
+					),
+				)
+			}
+		case protoreflect.BytesKind:
+			statements = append(statements,
+				jen.If(jen.Id("cmd").Dot("IsSet").Call(jen.Lit(flagName))).Block(
+					jen.Id("req").Dot(field.GoName).Op("=").Index().Byte().Call(
+						jen.Id("cmd").Dot("String").Call(jen.Lit(flagName)),
+					),
+				),
+			)
+		case protoreflect.EnumKind:
+			enumTypeName := field.Enum.GoIdent.GoName
+			parserFuncName := enumParserFuncName(service, enumTypeName)
+			oneof := field.Desc.ContainingOneof()
+			isOptional := field.Desc.HasPresence() && (oneof == nil || (oneof != nil && oneof.IsSynthetic()))
+
+			if isOptional {
+				statements = append(statements,
+					jen.If(jen.Id("cmd").Dot("IsSet").Call(jen.Lit(flagName))).Block(
+						jen.List(jen.Id("val"), jen.Err()).Op(":=").Id(parserFuncName).Call(
+							jen.Id("cmd").Dot("String").Call(jen.Lit(flagName)),
+						),
+						jen.If(jen.Err().Op("!=").Nil()).Block(
+							jen.Return(jen.Qual("fmt", "Errorf").Call(
+								jen.Lit(fmt.Sprintf("invalid value for --%s: %%w", flagName)),
+								jen.Err(),
+							)),
+						),
+						jen.Id("req").Dot(field.GoName).Op("=").Op("&").Id("val"),
+					),
+				)
+			} else {
+				statements = append(statements,
+					jen.If(jen.Id("cmd").Dot("IsSet").Call(jen.Lit(flagName))).Block(
+						jen.List(jen.Id("val"), jen.Err()).Op(":=").Id(parserFuncName).Call(
+							jen.Id("cmd").Dot("String").Call(jen.Lit(flagName)),
+						),
+						jen.If(jen.Err().Op("!=").Nil()).Block(
+							jen.Return(jen.Qual("fmt", "Errorf").Call(
+								jen.Lit(fmt.Sprintf("invalid value for --%s: %%w", flagName)),
+								jen.Err(),
+							)),
+						),
+						jen.Id("req").Dot(field.GoName).Op("=").Id("val"),
+					),
+				)
+			}
+		case protoreflect.GroupKind:
+			// GroupKind is deprecated and not supported
+		}
+	}
+
+	return statements
+}
+
 // generateOutputWriterOpening generates code to open the output writer and set up cleanup
 func generateOutputWriterOpening(service *protogen.Service) []jen.Code {
 	return []jen.Code{
@@ -690,66 +1073,87 @@ func generateActionBodyWithHooks(file *protogen.File, service *protogen.Service,
 		jen.Line(),
 	)
 
-	// Build request - check for custom deserializer first
+	// Build request - check for input file, custom deserializer, or auto-generated flags
 	requestFullyQualifiedName := string(method.Input.Desc.FullName())
 	requestTypeName := method.Input.GoIdent.GoName
 	requestQualifiedType := qualifyType(file, method.Input, true)
 
-	// First, check for custom deserializer
 	statements = append(statements,
 		jen.Comment("Build request message"),
 		jen.Var().Id("req").Add(requestQualifiedType),
 		jen.Line(),
 	)
 
-	// Generate the if-else block for custom deserializer vs auto-generated
-	deserializerCheck := []jen.Code{
-		jen.Comment(fmt.Sprintf("Check for custom flag deserializer for %s", requestFullyQualifiedName)),
-		jen.List(jen.Id("deserializer"), jen.Id("hasDeserializer")).Op(":=").Id("options").Dot("FlagDeserializer").Call(
-			jen.Lit(requestFullyQualifiedName),
-		),
-		jen.If(jen.Id("hasDeserializer")).Block(
-			jen.Comment("Use custom deserializer for top-level request"),
-			jen.Comment("Create FlagContainer (deserializer can access multiple flags via Command())"),
-			jen.Id("requestFlags").Op(":=").Qual("github.com/drewfead/proto-cli", "NewFlagContainer").Call(
-				jen.Id("cmd"),
-				jen.Lit(""), // Empty flag name for top-level requests
-			),
-			jen.List(jen.Id("msg"), jen.Err()).Op(":=").Id("deserializer").Call(
-				jen.Id("cmdCtx"),
-				jen.Id("requestFlags"),
-			),
-			jen.If(jen.Err().Op("!=").Nil()).Block(
-				jen.Return(jen.Qual("fmt", "Errorf").Call(
-					jen.Lit("custom deserializer failed: %w"),
-					jen.Err(),
-				)),
-			),
-			jen.Comment("Handle nil return from deserializer"),
-			jen.If(jen.Id("msg").Op("==").Nil()).Block(
-				jen.Return(jen.Qual("fmt", "Errorf").Call(
-					jen.Lit("custom deserializer returned nil message"),
-				)),
-			),
-			jen.Var().Id("ok").Bool(),
-			jen.List(jen.Id("req"), jen.Id("ok")).Op("=").Id("msg").Assert(requestQualifiedType),
-			jen.If(jen.Op("!").Id("ok")).Block(
-				jen.Return(jen.Qual("fmt", "Errorf").Call(
-					jen.Lit("custom deserializer returned wrong type: expected *%s, got %T"),
-					jen.Lit(requestTypeName),
-					jen.Id("msg"),
-				)),
-			),
-		).Else().Block(
+	// Generate the if-else block: input-file → custom deserializer → auto-generated
+	requestBuildBlock := []jen.Code{
+		jen.Comment("Check for file-based input"),
+		jen.Id("inputFile").Op(":=").Id("cmd").Dot("String").Call(jen.Lit("input-file")),
+		jen.If(jen.Id("inputFile").Op("!=").Lit("")).Block(
 			append([]jen.Code{
-				jen.Comment("Use auto-generated flag parsing"),
+				jen.Comment("Read request from file"),
 				jen.Id("req").Op("=").Op("&").Add(qualifyType(file, method.Input, false)).Values(),
-			}, generateRequestFieldAssignments(file, service, method)...)...,
+				jen.If(
+					jen.Err().Op(":=").Qual("github.com/drewfead/proto-cli", "ReadInputFile").Call(
+						jen.Id("inputFile"),
+						jen.Id("cmd").Dot("String").Call(jen.Lit("input-format")),
+						jen.Id("options").Dot("InputFormats").Call(),
+						jen.Id("req"),
+					),
+					jen.Err().Op("!=").Nil(),
+				).Block(
+					jen.Return(jen.Err()),
+				),
+				jen.Comment("Apply flag overrides (only explicitly-set flags)"),
+			}, generateRequestFieldOverrides(file, service, method)...)...,
+		).Else().Block(
+			// Inner if-else: custom deserializer vs auto-generated
+			jen.Comment(fmt.Sprintf("Check for custom flag deserializer for %s", requestFullyQualifiedName)),
+			jen.List(jen.Id("deserializer"), jen.Id("hasDeserializer")).Op(":=").Id("options").Dot("FlagDeserializer").Call(
+				jen.Lit(requestFullyQualifiedName),
+			),
+			jen.If(jen.Id("hasDeserializer")).Block(
+				jen.Comment("Use custom deserializer for top-level request"),
+				jen.Comment("Create FlagContainer (deserializer can access multiple flags via Command())"),
+				jen.Id("requestFlags").Op(":=").Qual("github.com/drewfead/proto-cli", "NewFlagContainer").Call(
+					jen.Id("cmd"),
+					jen.Lit(""), // Empty flag name for top-level requests
+				),
+				jen.List(jen.Id("msg"), jen.Err()).Op(":=").Id("deserializer").Call(
+					jen.Id("cmdCtx"),
+					jen.Id("requestFlags"),
+				),
+				jen.If(jen.Err().Op("!=").Nil()).Block(
+					jen.Return(jen.Qual("fmt", "Errorf").Call(
+						jen.Lit("custom deserializer failed: %w"),
+						jen.Err(),
+					)),
+				),
+				jen.Comment("Handle nil return from deserializer"),
+				jen.If(jen.Id("msg").Op("==").Nil()).Block(
+					jen.Return(jen.Qual("fmt", "Errorf").Call(
+						jen.Lit("custom deserializer returned nil message"),
+					)),
+				),
+				jen.Var().Id("ok").Bool(),
+				jen.List(jen.Id("req"), jen.Id("ok")).Op("=").Id("msg").Assert(requestQualifiedType),
+				jen.If(jen.Op("!").Id("ok")).Block(
+					jen.Return(jen.Qual("fmt", "Errorf").Call(
+						jen.Lit("custom deserializer returned wrong type: expected *%s, got %T"),
+						jen.Lit(requestTypeName),
+						jen.Id("msg"),
+					)),
+				),
+			).Else().Block(
+				append([]jen.Code{
+					jen.Comment("Use auto-generated flag parsing"),
+					jen.Id("req").Op("=").Op("&").Add(qualifyType(file, method.Input, false)).Values(),
+				}, generateRequestFieldAssignments(file, service, method)...)...,
+			),
 		),
 		jen.Line(),
 	}
 
-	statements = append(statements, deserializerCheck...)
+	statements = append(statements, requestBuildBlock...)
 
 	// Generate remote/local call logic
 	if localOnly {

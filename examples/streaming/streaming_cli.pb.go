@@ -144,6 +144,12 @@ func StreamingServiceCommand(ctx context.Context, implOrFactory interface{}, opt
 		Name:  "delimiter",
 		Usage: "Delimiter between streamed messages",
 		Value: "\n",
+	}, &v3.StringFlag{
+		Name:  "input-file",
+		Usage: "Read request from file (JSON or YAML). CLI flags override file values",
+	}, &v3.StringFlag{
+		Name:  "input-format",
+		Usage: "Input file format (auto-detected from extension if not set)",
 	}}
 
 	flags_list_items = append(flags_list_items, &v3.StringFlag{
@@ -195,28 +201,21 @@ func StreamingServiceCommand(ctx context.Context, implOrFactory interface{}, opt
 			// Build request message
 			var req *ListItemsRequest
 
-			// Check for custom flag deserializer for streaming.ListItemsRequest
-			deserializer, hasDeserializer := options.FlagDeserializer("streaming.ListItemsRequest")
-			if hasDeserializer {
-				// Use custom deserializer for top-level request
-				requestFlags := protocli.NewFlagContainer(cmd, "")
-				msg, err := deserializer(cmdCtx, requestFlags)
-				if err != nil {
-					return fmt.Errorf("custom deserializer failed: %w", err)
-				}
-				if msg == nil {
-					return fmt.Errorf("custom deserializer returned nil message")
-				}
-				var ok bool
-				req, ok = msg.(*ListItemsRequest)
-				if !ok {
-					return fmt.Errorf("custom deserializer returned wrong type: expected *%s, got %T", "ListItemsRequest", msg)
-				}
-			} else {
-				// Use auto-generated flag parsing
+			// Check for file-based input
+			inputFile := cmd.String("input-file")
+			if inputFile != "" {
+				// Read request from file
 				req = &ListItemsRequest{}
-				req.Category = cmd.String("category")
-				req.Limit = cmd.Int32("limit")
+				if err := protocli.ReadInputFile(inputFile, cmd.String("input-format"), options.InputFormats(), req); err != nil {
+					return err
+				}
+				// Apply flag overrides (only explicitly-set flags)
+				if cmd.IsSet("category") {
+					req.Category = cmd.String("category")
+				}
+				if cmd.IsSet("limit") {
+					req.Limit = cmd.Int32("limit")
+				}
 				if cmd.IsSet("offset") {
 					val := cmd.Int32("offset")
 					req.Offset = &val
@@ -228,6 +227,42 @@ func StreamingServiceCommand(ctx context.Context, implOrFactory interface{}, opt
 				if cmd.IsSet("include-deleted") {
 					val := cmd.Bool("include-deleted")
 					req.IncludeDeleted = &val
+				}
+			} else {
+				// Check for custom flag deserializer for streaming.ListItemsRequest
+				deserializer, hasDeserializer := options.FlagDeserializer("streaming.ListItemsRequest")
+				if hasDeserializer {
+					// Use custom deserializer for top-level request
+					requestFlags := protocli.NewFlagContainer(cmd, "")
+					msg, err := deserializer(cmdCtx, requestFlags)
+					if err != nil {
+						return fmt.Errorf("custom deserializer failed: %w", err)
+					}
+					if msg == nil {
+						return fmt.Errorf("custom deserializer returned nil message")
+					}
+					var ok bool
+					req, ok = msg.(*ListItemsRequest)
+					if !ok {
+						return fmt.Errorf("custom deserializer returned wrong type: expected *%s, got %T", "ListItemsRequest", msg)
+					}
+				} else {
+					// Use auto-generated flag parsing
+					req = &ListItemsRequest{}
+					req.Category = cmd.String("category")
+					req.Limit = cmd.Int32("limit")
+					if cmd.IsSet("offset") {
+						val := cmd.Int32("offset")
+						req.Offset = &val
+					}
+					if cmd.IsSet("sort-by") {
+						val := cmd.String("sort-by")
+						req.SortBy = &val
+					}
+					if cmd.IsSet("include-deleted") {
+						val := cmd.Bool("include-deleted")
+						req.IncludeDeleted = &val
+					}
 				}
 			}
 
@@ -386,6 +421,12 @@ func StreamingServiceCommand(ctx context.Context, implOrFactory interface{}, opt
 		Name:  "delimiter",
 		Usage: "Delimiter between streamed messages",
 		Value: "\n",
+	}, &v3.StringFlag{
+		Name:  "input-file",
+		Usage: "Read request from file (JSON or YAML). CLI flags override file values",
+	}, &v3.StringFlag{
+		Name:  "input-format",
+		Usage: "Input file format (auto-detected from extension if not set)",
 	}}
 
 	flags_watch_items = append(flags_watch_items, &v3.Int64Flag{
@@ -421,27 +462,41 @@ func StreamingServiceCommand(ctx context.Context, implOrFactory interface{}, opt
 			// Build request message
 			var req *WatchRequest
 
-			// Check for custom flag deserializer for streaming.WatchRequest
-			deserializer, hasDeserializer := options.FlagDeserializer("streaming.WatchRequest")
-			if hasDeserializer {
-				// Use custom deserializer for top-level request
-				requestFlags := protocli.NewFlagContainer(cmd, "")
-				msg, err := deserializer(cmdCtx, requestFlags)
-				if err != nil {
-					return fmt.Errorf("custom deserializer failed: %w", err)
+			// Check for file-based input
+			inputFile := cmd.String("input-file")
+			if inputFile != "" {
+				// Read request from file
+				req = &WatchRequest{}
+				if err := protocli.ReadInputFile(inputFile, cmd.String("input-format"), options.InputFormats(), req); err != nil {
+					return err
 				}
-				if msg == nil {
-					return fmt.Errorf("custom deserializer returned nil message")
-				}
-				var ok bool
-				req, ok = msg.(*WatchRequest)
-				if !ok {
-					return fmt.Errorf("custom deserializer returned wrong type: expected *%s, got %T", "WatchRequest", msg)
+				// Apply flag overrides (only explicitly-set flags)
+				if cmd.IsSet("start-id") {
+					req.StartId = cmd.Int64("start-id")
 				}
 			} else {
-				// Use auto-generated flag parsing
-				req = &WatchRequest{}
-				req.StartId = cmd.Int64("start-id")
+				// Check for custom flag deserializer for streaming.WatchRequest
+				deserializer, hasDeserializer := options.FlagDeserializer("streaming.WatchRequest")
+				if hasDeserializer {
+					// Use custom deserializer for top-level request
+					requestFlags := protocli.NewFlagContainer(cmd, "")
+					msg, err := deserializer(cmdCtx, requestFlags)
+					if err != nil {
+						return fmt.Errorf("custom deserializer failed: %w", err)
+					}
+					if msg == nil {
+						return fmt.Errorf("custom deserializer returned nil message")
+					}
+					var ok bool
+					req, ok = msg.(*WatchRequest)
+					if !ok {
+						return fmt.Errorf("custom deserializer returned wrong type: expected *%s, got %T", "WatchRequest", msg)
+					}
+				} else {
+					// Use auto-generated flag parsing
+					req = &WatchRequest{}
+					req.StartId = cmd.Int64("start-id")
+				}
 			}
 
 			// Open output writer
@@ -629,6 +684,12 @@ func StreamingServiceCommandsFlat(ctx context.Context, implOrFactory interface{}
 		Name:  "delimiter",
 		Usage: "Delimiter between streamed messages",
 		Value: "\n",
+	}, &v3.StringFlag{
+		Name:  "input-file",
+		Usage: "Read request from file (JSON or YAML). CLI flags override file values",
+	}, &v3.StringFlag{
+		Name:  "input-format",
+		Usage: "Input file format (auto-detected from extension if not set)",
 	}}
 
 	flags_list_items = append(flags_list_items, &v3.StringFlag{
@@ -680,28 +741,21 @@ func StreamingServiceCommandsFlat(ctx context.Context, implOrFactory interface{}
 			// Build request message
 			var req *ListItemsRequest
 
-			// Check for custom flag deserializer for streaming.ListItemsRequest
-			deserializer, hasDeserializer := options.FlagDeserializer("streaming.ListItemsRequest")
-			if hasDeserializer {
-				// Use custom deserializer for top-level request
-				requestFlags := protocli.NewFlagContainer(cmd, "")
-				msg, err := deserializer(cmdCtx, requestFlags)
-				if err != nil {
-					return fmt.Errorf("custom deserializer failed: %w", err)
-				}
-				if msg == nil {
-					return fmt.Errorf("custom deserializer returned nil message")
-				}
-				var ok bool
-				req, ok = msg.(*ListItemsRequest)
-				if !ok {
-					return fmt.Errorf("custom deserializer returned wrong type: expected *%s, got %T", "ListItemsRequest", msg)
-				}
-			} else {
-				// Use auto-generated flag parsing
+			// Check for file-based input
+			inputFile := cmd.String("input-file")
+			if inputFile != "" {
+				// Read request from file
 				req = &ListItemsRequest{}
-				req.Category = cmd.String("category")
-				req.Limit = cmd.Int32("limit")
+				if err := protocli.ReadInputFile(inputFile, cmd.String("input-format"), options.InputFormats(), req); err != nil {
+					return err
+				}
+				// Apply flag overrides (only explicitly-set flags)
+				if cmd.IsSet("category") {
+					req.Category = cmd.String("category")
+				}
+				if cmd.IsSet("limit") {
+					req.Limit = cmd.Int32("limit")
+				}
 				if cmd.IsSet("offset") {
 					val := cmd.Int32("offset")
 					req.Offset = &val
@@ -713,6 +767,42 @@ func StreamingServiceCommandsFlat(ctx context.Context, implOrFactory interface{}
 				if cmd.IsSet("include-deleted") {
 					val := cmd.Bool("include-deleted")
 					req.IncludeDeleted = &val
+				}
+			} else {
+				// Check for custom flag deserializer for streaming.ListItemsRequest
+				deserializer, hasDeserializer := options.FlagDeserializer("streaming.ListItemsRequest")
+				if hasDeserializer {
+					// Use custom deserializer for top-level request
+					requestFlags := protocli.NewFlagContainer(cmd, "")
+					msg, err := deserializer(cmdCtx, requestFlags)
+					if err != nil {
+						return fmt.Errorf("custom deserializer failed: %w", err)
+					}
+					if msg == nil {
+						return fmt.Errorf("custom deserializer returned nil message")
+					}
+					var ok bool
+					req, ok = msg.(*ListItemsRequest)
+					if !ok {
+						return fmt.Errorf("custom deserializer returned wrong type: expected *%s, got %T", "ListItemsRequest", msg)
+					}
+				} else {
+					// Use auto-generated flag parsing
+					req = &ListItemsRequest{}
+					req.Category = cmd.String("category")
+					req.Limit = cmd.Int32("limit")
+					if cmd.IsSet("offset") {
+						val := cmd.Int32("offset")
+						req.Offset = &val
+					}
+					if cmd.IsSet("sort-by") {
+						val := cmd.String("sort-by")
+						req.SortBy = &val
+					}
+					if cmd.IsSet("include-deleted") {
+						val := cmd.Bool("include-deleted")
+						req.IncludeDeleted = &val
+					}
 				}
 			}
 
@@ -871,6 +961,12 @@ func StreamingServiceCommandsFlat(ctx context.Context, implOrFactory interface{}
 		Name:  "delimiter",
 		Usage: "Delimiter between streamed messages",
 		Value: "\n",
+	}, &v3.StringFlag{
+		Name:  "input-file",
+		Usage: "Read request from file (JSON or YAML). CLI flags override file values",
+	}, &v3.StringFlag{
+		Name:  "input-format",
+		Usage: "Input file format (auto-detected from extension if not set)",
 	}}
 
 	flags_watch_items = append(flags_watch_items, &v3.Int64Flag{
@@ -906,27 +1002,41 @@ func StreamingServiceCommandsFlat(ctx context.Context, implOrFactory interface{}
 			// Build request message
 			var req *WatchRequest
 
-			// Check for custom flag deserializer for streaming.WatchRequest
-			deserializer, hasDeserializer := options.FlagDeserializer("streaming.WatchRequest")
-			if hasDeserializer {
-				// Use custom deserializer for top-level request
-				requestFlags := protocli.NewFlagContainer(cmd, "")
-				msg, err := deserializer(cmdCtx, requestFlags)
-				if err != nil {
-					return fmt.Errorf("custom deserializer failed: %w", err)
+			// Check for file-based input
+			inputFile := cmd.String("input-file")
+			if inputFile != "" {
+				// Read request from file
+				req = &WatchRequest{}
+				if err := protocli.ReadInputFile(inputFile, cmd.String("input-format"), options.InputFormats(), req); err != nil {
+					return err
 				}
-				if msg == nil {
-					return fmt.Errorf("custom deserializer returned nil message")
-				}
-				var ok bool
-				req, ok = msg.(*WatchRequest)
-				if !ok {
-					return fmt.Errorf("custom deserializer returned wrong type: expected *%s, got %T", "WatchRequest", msg)
+				// Apply flag overrides (only explicitly-set flags)
+				if cmd.IsSet("start-id") {
+					req.StartId = cmd.Int64("start-id")
 				}
 			} else {
-				// Use auto-generated flag parsing
-				req = &WatchRequest{}
-				req.StartId = cmd.Int64("start-id")
+				// Check for custom flag deserializer for streaming.WatchRequest
+				deserializer, hasDeserializer := options.FlagDeserializer("streaming.WatchRequest")
+				if hasDeserializer {
+					// Use custom deserializer for top-level request
+					requestFlags := protocli.NewFlagContainer(cmd, "")
+					msg, err := deserializer(cmdCtx, requestFlags)
+					if err != nil {
+						return fmt.Errorf("custom deserializer failed: %w", err)
+					}
+					if msg == nil {
+						return fmt.Errorf("custom deserializer returned nil message")
+					}
+					var ok bool
+					req, ok = msg.(*WatchRequest)
+					if !ok {
+						return fmt.Errorf("custom deserializer returned wrong type: expected *%s, got %T", "WatchRequest", msg)
+					}
+				} else {
+					// Use auto-generated flag parsing
+					req = &WatchRequest{}
+					req.StartId = cmd.Int64("start-id")
+				}
 			}
 
 			// Open output writer

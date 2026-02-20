@@ -85,6 +85,12 @@ func UserServiceCommand(ctx context.Context, implOrFactory interface{}, opts ...
 		Name:  "output",
 		Usage: "Output file (- for stdout)",
 		Value: "-",
+	}, &v3.StringFlag{
+		Name:  "input-file",
+		Usage: "Read request from file (JSON or YAML). CLI flags override file values",
+	}, &v3.StringFlag{
+		Name:  "input-format",
+		Usage: "Input file format (auto-detected from extension if not set)",
 	}}
 
 	flags_get = append(flags_get, &v3.Int64Flag{
@@ -123,7 +129,7 @@ func UserServiceCommand(ctx context.Context, implOrFactory interface{}, opts ...
 		Name:  "log-level",
 		Usage: "Logging level [debug|info|warn|error]",
 	})
-	flags_get = append(flags_get, &v3.StringFlag{
+	flags_get = append(flags_get, &v3.StringSliceFlag{
 		Name:  "allowed-origins",
 		Usage: "CORS allowed origins",
 	})
@@ -156,30 +162,21 @@ func UserServiceCommand(ctx context.Context, implOrFactory interface{}, opts ...
 			// Build request message
 			var req *GetUserRequest
 
-			// Check for custom flag deserializer for example.GetUserRequest
-			deserializer, hasDeserializer := options.FlagDeserializer("example.GetUserRequest")
-			if hasDeserializer {
-				// Use custom deserializer for top-level request
-				// Create FlagContainer (deserializer can access multiple flags via Command())
-				requestFlags := protocli.NewFlagContainer(cmd, "")
-				msg, err := deserializer(cmdCtx, requestFlags)
-				if err != nil {
-					return fmt.Errorf("custom deserializer failed: %w", err)
-				}
-				// Handle nil return from deserializer
-				if msg == nil {
-					return fmt.Errorf("custom deserializer returned nil message")
-				}
-				var ok bool
-				req, ok = msg.(*GetUserRequest)
-				if !ok {
-					return fmt.Errorf("custom deserializer returned wrong type: expected *%s, got %T", "GetUserRequest", msg)
-				}
-			} else {
-				// Use auto-generated flag parsing
+			// Check for file-based input
+			inputFile := cmd.String("input-file")
+			if inputFile != "" {
+				// Read request from file
 				req = &GetUserRequest{}
-				req.Id = cmd.Int64("id")
-				req.IncludeDetails = cmd.Bool("include-details")
+				if err := protocli.ReadInputFile(inputFile, cmd.String("input-format"), options.InputFormats(), req); err != nil {
+					return err
+				}
+				// Apply flag overrides (only explicitly-set flags)
+				if cmd.IsSet("id") {
+					req.Id = cmd.Int64("id")
+				}
+				if cmd.IsSet("include-details") {
+					req.IncludeDetails = cmd.Bool("include-details")
+				}
 				if cmd.IsSet("fields-filter") {
 					val := cmd.String("fields-filter")
 					req.FieldsFilter = &val
@@ -187,6 +184,40 @@ func UserServiceCommand(ctx context.Context, implOrFactory interface{}, opts ...
 				if cmd.IsSet("timeout-ms") {
 					val := cmd.Int32("timeout-ms")
 					req.TimeoutMs = &val
+				}
+			} else {
+				// Check for custom flag deserializer for example.GetUserRequest
+				deserializer, hasDeserializer := options.FlagDeserializer("example.GetUserRequest")
+				if hasDeserializer {
+					// Use custom deserializer for top-level request
+					// Create FlagContainer (deserializer can access multiple flags via Command())
+					requestFlags := protocli.NewFlagContainer(cmd, "")
+					msg, err := deserializer(cmdCtx, requestFlags)
+					if err != nil {
+						return fmt.Errorf("custom deserializer failed: %w", err)
+					}
+					// Handle nil return from deserializer
+					if msg == nil {
+						return fmt.Errorf("custom deserializer returned nil message")
+					}
+					var ok bool
+					req, ok = msg.(*GetUserRequest)
+					if !ok {
+						return fmt.Errorf("custom deserializer returned wrong type: expected *%s, got %T", "GetUserRequest", msg)
+					}
+				} else {
+					// Use auto-generated flag parsing
+					req = &GetUserRequest{}
+					req.Id = cmd.Int64("id")
+					req.IncludeDetails = cmd.Bool("include-details")
+					if cmd.IsSet("fields-filter") {
+						val := cmd.String("fields-filter")
+						req.FieldsFilter = &val
+					}
+					if cmd.IsSet("timeout-ms") {
+						val := cmd.Int32("timeout-ms")
+						req.TimeoutMs = &val
+					}
 				}
 			}
 
@@ -292,6 +323,12 @@ func UserServiceCommand(ctx context.Context, implOrFactory interface{}, opts ...
 		Name:  "output",
 		Usage: "Output file (- for stdout)",
 		Value: "-",
+	}, &v3.StringFlag{
+		Name:  "input-file",
+		Usage: "Read request from file (JSON or YAML). CLI flags override file values",
+	}, &v3.StringFlag{
+		Name:  "input-format",
+		Usage: "Input file format (auto-detected from extension if not set)",
 	}}
 
 	flags_create = append(flags_create, &v3.StringFlag{
@@ -349,7 +386,7 @@ func UserServiceCommand(ctx context.Context, implOrFactory interface{}, opts ...
 		Name:  "log-level",
 		Usage: "Logging level [debug|info|warn|error]",
 	})
-	flags_create = append(flags_create, &v3.StringFlag{
+	flags_create = append(flags_create, &v3.StringSliceFlag{
 		Name:  "allowed-origins",
 		Usage: "CORS allowed origins",
 	})
@@ -382,79 +419,60 @@ func UserServiceCommand(ctx context.Context, implOrFactory interface{}, opts ...
 			// Build request message
 			var req *CreateUserRequest
 
-			// Check for custom flag deserializer for example.CreateUserRequest
-			deserializer, hasDeserializer := options.FlagDeserializer("example.CreateUserRequest")
-			if hasDeserializer {
-				// Use custom deserializer for top-level request
-				// Create FlagContainer (deserializer can access multiple flags via Command())
-				requestFlags := protocli.NewFlagContainer(cmd, "")
-				msg, err := deserializer(cmdCtx, requestFlags)
-				if err != nil {
-					return fmt.Errorf("custom deserializer failed: %w", err)
-				}
-				// Handle nil return from deserializer
-				if msg == nil {
-					return fmt.Errorf("custom deserializer returned nil message")
-				}
-				var ok bool
-				req, ok = msg.(*CreateUserRequest)
-				if !ok {
-					return fmt.Errorf("custom deserializer returned wrong type: expected *%s, got %T", "CreateUserRequest", msg)
-				}
-			} else {
-				// Use auto-generated flag parsing
+			// Check for file-based input
+			inputFile := cmd.String("input-file")
+			if inputFile != "" {
+				// Read request from file
 				req = &CreateUserRequest{}
-				req.Name = cmd.String("name")
-				req.Email = cmd.String("email")
-				// Field Address: check for custom deserializer for example.Address
-				if fieldDeserializer, hasFieldDeserializer := options.FlagDeserializer("example.Address"); hasFieldDeserializer {
-					// Use custom deserializer for nested message
-					// Create FlagContainer for field flag: address
-					fieldFlags := protocli.NewFlagContainer(cmd, "address")
-					fieldMsg, fieldErr := fieldDeserializer(cmdCtx, fieldFlags)
-					if fieldErr != nil {
-						return fmt.Errorf("failed to deserialize field Address: %w", fieldErr)
-					}
-					// Handle nil return from deserializer (means skip/use default)
-					if fieldMsg != nil {
-						typedField, fieldOk := fieldMsg.(*Address)
-						if !fieldOk {
-							return fmt.Errorf("custom deserializer for example.Address returned wrong type: expected *Address, got %T", fieldMsg)
+				if err := protocli.ReadInputFile(inputFile, cmd.String("input-format"), options.InputFormats(), req); err != nil {
+					return err
+				}
+				// Apply flag overrides (only explicitly-set flags)
+				if cmd.IsSet("name") {
+					req.Name = cmd.String("name")
+				}
+				if cmd.IsSet("email") {
+					req.Email = cmd.String("email")
+				}
+				if cmd.IsSet("address") {
+					if fieldDeserializer, hasFieldDeserializer := options.FlagDeserializer("example.Address"); hasFieldDeserializer {
+						fieldFlags := protocli.NewFlagContainer(cmd, "address")
+						fieldMsg, fieldErr := fieldDeserializer(cmdCtx, fieldFlags)
+						if fieldErr != nil {
+							return fmt.Errorf("failed to deserialize field Address: %w", fieldErr)
 						}
-						req.Address = typedField
-					}
-				} else {
-					// No custom deserializer - check if user provided a value
-					if cmd.IsSet("address") {
+						if fieldMsg != nil {
+							typedField, fieldOk := fieldMsg.(*Address)
+							if !fieldOk {
+								return fmt.Errorf("custom deserializer for example.Address returned wrong type: expected *Address, got %T", fieldMsg)
+							}
+							req.Address = typedField
+						}
+					} else {
 						return fmt.Errorf("flag --address requires a custom deserializer for example.Address (register with protocli.WithFlagDeserializer)")
 					}
-					// No value provided - leave field as nil
 				}
-				// Field RegistrationDate: check for custom deserializer for google.protobuf.Timestamp
-				if fieldDeserializer, hasFieldDeserializer := options.FlagDeserializer("google.protobuf.Timestamp"); hasFieldDeserializer {
-					// Use custom deserializer for nested message
-					// Create FlagContainer for field flag: registration-date
-					fieldFlags := protocli.NewFlagContainer(cmd, "registration-date")
-					fieldMsg, fieldErr := fieldDeserializer(cmdCtx, fieldFlags)
-					if fieldErr != nil {
-						return fmt.Errorf("failed to deserialize field RegistrationDate: %w", fieldErr)
-					}
-					// Handle nil return from deserializer (means skip/use default)
-					if fieldMsg != nil {
-						typedField, fieldOk := fieldMsg.(*timestamppb.Timestamp)
-						if !fieldOk {
-							return fmt.Errorf("custom deserializer for google.protobuf.Timestamp returned wrong type: expected *Timestamp, got %T", fieldMsg)
+				if cmd.IsSet("registration-date") {
+					if fieldDeserializer, hasFieldDeserializer := options.FlagDeserializer("google.protobuf.Timestamp"); hasFieldDeserializer {
+						fieldFlags := protocli.NewFlagContainer(cmd, "registration-date")
+						fieldMsg, fieldErr := fieldDeserializer(cmdCtx, fieldFlags)
+						if fieldErr != nil {
+							return fmt.Errorf("failed to deserialize field RegistrationDate: %w", fieldErr)
 						}
-						req.RegistrationDate = typedField
-					}
-				} else {
-					// No custom deserializer - check if user provided a value
-					if cmd.IsSet("registration-date") {
+						if fieldMsg != nil {
+							typedField, fieldOk := fieldMsg.(*timestamppb.Timestamp)
+							if !fieldOk {
+								return fmt.Errorf("custom deserializer for google.protobuf.Timestamp returned wrong type: expected *Timestamp, got %T", fieldMsg)
+							}
+							req.RegistrationDate = typedField
+						}
+					} else {
 						return fmt.Errorf("flag --registration-date requires a custom deserializer for google.protobuf.Timestamp (register with protocli.WithFlagDeserializer)")
 					}
-					// No value provided - leave field as nil
 				}
-				req.PhoneNumber = cmd.String("phone-number")
+				if cmd.IsSet("phone-number") {
+					req.PhoneNumber = cmd.String("phone-number")
+				}
 				if cmd.IsSet("nickname") {
 					val := cmd.String("nickname")
 					req.Nickname = &val
@@ -473,6 +491,100 @@ func UserServiceCommand(ctx context.Context, implOrFactory interface{}, opts ...
 						return fmt.Errorf("invalid value for --log-level: %w", err)
 					}
 					req.LogLevel = &val
+				}
+			} else {
+				// Check for custom flag deserializer for example.CreateUserRequest
+				deserializer, hasDeserializer := options.FlagDeserializer("example.CreateUserRequest")
+				if hasDeserializer {
+					// Use custom deserializer for top-level request
+					// Create FlagContainer (deserializer can access multiple flags via Command())
+					requestFlags := protocli.NewFlagContainer(cmd, "")
+					msg, err := deserializer(cmdCtx, requestFlags)
+					if err != nil {
+						return fmt.Errorf("custom deserializer failed: %w", err)
+					}
+					// Handle nil return from deserializer
+					if msg == nil {
+						return fmt.Errorf("custom deserializer returned nil message")
+					}
+					var ok bool
+					req, ok = msg.(*CreateUserRequest)
+					if !ok {
+						return fmt.Errorf("custom deserializer returned wrong type: expected *%s, got %T", "CreateUserRequest", msg)
+					}
+				} else {
+					// Use auto-generated flag parsing
+					req = &CreateUserRequest{}
+					req.Name = cmd.String("name")
+					req.Email = cmd.String("email")
+					// Field Address: check for custom deserializer for example.Address
+					if fieldDeserializer, hasFieldDeserializer := options.FlagDeserializer("example.Address"); hasFieldDeserializer {
+						// Use custom deserializer for nested message
+						// Create FlagContainer for field flag: address
+						fieldFlags := protocli.NewFlagContainer(cmd, "address")
+						fieldMsg, fieldErr := fieldDeserializer(cmdCtx, fieldFlags)
+						if fieldErr != nil {
+							return fmt.Errorf("failed to deserialize field Address: %w", fieldErr)
+						}
+						// Handle nil return from deserializer (means skip/use default)
+						if fieldMsg != nil {
+							typedField, fieldOk := fieldMsg.(*Address)
+							if !fieldOk {
+								return fmt.Errorf("custom deserializer for example.Address returned wrong type: expected *Address, got %T", fieldMsg)
+							}
+							req.Address = typedField
+						}
+					} else {
+						// No custom deserializer - check if user provided a value
+						if cmd.IsSet("address") {
+							return fmt.Errorf("flag --address requires a custom deserializer for example.Address (register with protocli.WithFlagDeserializer)")
+						}
+						// No value provided - leave field as nil
+					}
+					// Field RegistrationDate: check for custom deserializer for google.protobuf.Timestamp
+					if fieldDeserializer, hasFieldDeserializer := options.FlagDeserializer("google.protobuf.Timestamp"); hasFieldDeserializer {
+						// Use custom deserializer for nested message
+						// Create FlagContainer for field flag: registration-date
+						fieldFlags := protocli.NewFlagContainer(cmd, "registration-date")
+						fieldMsg, fieldErr := fieldDeserializer(cmdCtx, fieldFlags)
+						if fieldErr != nil {
+							return fmt.Errorf("failed to deserialize field RegistrationDate: %w", fieldErr)
+						}
+						// Handle nil return from deserializer (means skip/use default)
+						if fieldMsg != nil {
+							typedField, fieldOk := fieldMsg.(*timestamppb.Timestamp)
+							if !fieldOk {
+								return fmt.Errorf("custom deserializer for google.protobuf.Timestamp returned wrong type: expected *Timestamp, got %T", fieldMsg)
+							}
+							req.RegistrationDate = typedField
+						}
+					} else {
+						// No custom deserializer - check if user provided a value
+						if cmd.IsSet("registration-date") {
+							return fmt.Errorf("flag --registration-date requires a custom deserializer for google.protobuf.Timestamp (register with protocli.WithFlagDeserializer)")
+						}
+						// No value provided - leave field as nil
+					}
+					req.PhoneNumber = cmd.String("phone-number")
+					if cmd.IsSet("nickname") {
+						val := cmd.String("nickname")
+						req.Nickname = &val
+					}
+					if cmd.IsSet("age") {
+						val := cmd.Int32("age")
+						req.Age = &val
+					}
+					if cmd.IsSet("verified") {
+						val := cmd.Bool("verified")
+						req.Verified = &val
+					}
+					if cmd.IsSet("log-level") {
+						val, err := parseUserServiceLogLevel(cmd.String("log-level"))
+						if err != nil {
+							return fmt.Errorf("invalid value for --log-level: %w", err)
+						}
+						req.LogLevel = &val
+					}
 				}
 			}
 
@@ -608,6 +720,12 @@ func UserServiceCommandsFlat(ctx context.Context, implOrFactory interface{}, opt
 		Name:  "output",
 		Usage: "Output file (- for stdout)",
 		Value: "-",
+	}, &v3.StringFlag{
+		Name:  "input-file",
+		Usage: "Read request from file (JSON or YAML). CLI flags override file values",
+	}, &v3.StringFlag{
+		Name:  "input-format",
+		Usage: "Input file format (auto-detected from extension if not set)",
 	}}
 
 	flags_get = append(flags_get, &v3.Int64Flag{
@@ -646,7 +764,7 @@ func UserServiceCommandsFlat(ctx context.Context, implOrFactory interface{}, opt
 		Name:  "log-level",
 		Usage: "Logging level [debug|info|warn|error]",
 	})
-	flags_get = append(flags_get, &v3.StringFlag{
+	flags_get = append(flags_get, &v3.StringSliceFlag{
 		Name:  "allowed-origins",
 		Usage: "CORS allowed origins",
 	})
@@ -679,30 +797,21 @@ func UserServiceCommandsFlat(ctx context.Context, implOrFactory interface{}, opt
 			// Build request message
 			var req *GetUserRequest
 
-			// Check for custom flag deserializer for example.GetUserRequest
-			deserializer, hasDeserializer := options.FlagDeserializer("example.GetUserRequest")
-			if hasDeserializer {
-				// Use custom deserializer for top-level request
-				// Create FlagContainer (deserializer can access multiple flags via Command())
-				requestFlags := protocli.NewFlagContainer(cmd, "")
-				msg, err := deserializer(cmdCtx, requestFlags)
-				if err != nil {
-					return fmt.Errorf("custom deserializer failed: %w", err)
-				}
-				// Handle nil return from deserializer
-				if msg == nil {
-					return fmt.Errorf("custom deserializer returned nil message")
-				}
-				var ok bool
-				req, ok = msg.(*GetUserRequest)
-				if !ok {
-					return fmt.Errorf("custom deserializer returned wrong type: expected *%s, got %T", "GetUserRequest", msg)
-				}
-			} else {
-				// Use auto-generated flag parsing
+			// Check for file-based input
+			inputFile := cmd.String("input-file")
+			if inputFile != "" {
+				// Read request from file
 				req = &GetUserRequest{}
-				req.Id = cmd.Int64("id")
-				req.IncludeDetails = cmd.Bool("include-details")
+				if err := protocli.ReadInputFile(inputFile, cmd.String("input-format"), options.InputFormats(), req); err != nil {
+					return err
+				}
+				// Apply flag overrides (only explicitly-set flags)
+				if cmd.IsSet("id") {
+					req.Id = cmd.Int64("id")
+				}
+				if cmd.IsSet("include-details") {
+					req.IncludeDetails = cmd.Bool("include-details")
+				}
 				if cmd.IsSet("fields-filter") {
 					val := cmd.String("fields-filter")
 					req.FieldsFilter = &val
@@ -710,6 +819,40 @@ func UserServiceCommandsFlat(ctx context.Context, implOrFactory interface{}, opt
 				if cmd.IsSet("timeout-ms") {
 					val := cmd.Int32("timeout-ms")
 					req.TimeoutMs = &val
+				}
+			} else {
+				// Check for custom flag deserializer for example.GetUserRequest
+				deserializer, hasDeserializer := options.FlagDeserializer("example.GetUserRequest")
+				if hasDeserializer {
+					// Use custom deserializer for top-level request
+					// Create FlagContainer (deserializer can access multiple flags via Command())
+					requestFlags := protocli.NewFlagContainer(cmd, "")
+					msg, err := deserializer(cmdCtx, requestFlags)
+					if err != nil {
+						return fmt.Errorf("custom deserializer failed: %w", err)
+					}
+					// Handle nil return from deserializer
+					if msg == nil {
+						return fmt.Errorf("custom deserializer returned nil message")
+					}
+					var ok bool
+					req, ok = msg.(*GetUserRequest)
+					if !ok {
+						return fmt.Errorf("custom deserializer returned wrong type: expected *%s, got %T", "GetUserRequest", msg)
+					}
+				} else {
+					// Use auto-generated flag parsing
+					req = &GetUserRequest{}
+					req.Id = cmd.Int64("id")
+					req.IncludeDetails = cmd.Bool("include-details")
+					if cmd.IsSet("fields-filter") {
+						val := cmd.String("fields-filter")
+						req.FieldsFilter = &val
+					}
+					if cmd.IsSet("timeout-ms") {
+						val := cmd.Int32("timeout-ms")
+						req.TimeoutMs = &val
+					}
 				}
 			}
 
@@ -815,6 +958,12 @@ func UserServiceCommandsFlat(ctx context.Context, implOrFactory interface{}, opt
 		Name:  "output",
 		Usage: "Output file (- for stdout)",
 		Value: "-",
+	}, &v3.StringFlag{
+		Name:  "input-file",
+		Usage: "Read request from file (JSON or YAML). CLI flags override file values",
+	}, &v3.StringFlag{
+		Name:  "input-format",
+		Usage: "Input file format (auto-detected from extension if not set)",
 	}}
 
 	flags_create = append(flags_create, &v3.StringFlag{
@@ -872,7 +1021,7 @@ func UserServiceCommandsFlat(ctx context.Context, implOrFactory interface{}, opt
 		Name:  "log-level",
 		Usage: "Logging level [debug|info|warn|error]",
 	})
-	flags_create = append(flags_create, &v3.StringFlag{
+	flags_create = append(flags_create, &v3.StringSliceFlag{
 		Name:  "allowed-origins",
 		Usage: "CORS allowed origins",
 	})
@@ -905,79 +1054,60 @@ func UserServiceCommandsFlat(ctx context.Context, implOrFactory interface{}, opt
 			// Build request message
 			var req *CreateUserRequest
 
-			// Check for custom flag deserializer for example.CreateUserRequest
-			deserializer, hasDeserializer := options.FlagDeserializer("example.CreateUserRequest")
-			if hasDeserializer {
-				// Use custom deserializer for top-level request
-				// Create FlagContainer (deserializer can access multiple flags via Command())
-				requestFlags := protocli.NewFlagContainer(cmd, "")
-				msg, err := deserializer(cmdCtx, requestFlags)
-				if err != nil {
-					return fmt.Errorf("custom deserializer failed: %w", err)
-				}
-				// Handle nil return from deserializer
-				if msg == nil {
-					return fmt.Errorf("custom deserializer returned nil message")
-				}
-				var ok bool
-				req, ok = msg.(*CreateUserRequest)
-				if !ok {
-					return fmt.Errorf("custom deserializer returned wrong type: expected *%s, got %T", "CreateUserRequest", msg)
-				}
-			} else {
-				// Use auto-generated flag parsing
+			// Check for file-based input
+			inputFile := cmd.String("input-file")
+			if inputFile != "" {
+				// Read request from file
 				req = &CreateUserRequest{}
-				req.Name = cmd.String("name")
-				req.Email = cmd.String("email")
-				// Field Address: check for custom deserializer for example.Address
-				if fieldDeserializer, hasFieldDeserializer := options.FlagDeserializer("example.Address"); hasFieldDeserializer {
-					// Use custom deserializer for nested message
-					// Create FlagContainer for field flag: address
-					fieldFlags := protocli.NewFlagContainer(cmd, "address")
-					fieldMsg, fieldErr := fieldDeserializer(cmdCtx, fieldFlags)
-					if fieldErr != nil {
-						return fmt.Errorf("failed to deserialize field Address: %w", fieldErr)
-					}
-					// Handle nil return from deserializer (means skip/use default)
-					if fieldMsg != nil {
-						typedField, fieldOk := fieldMsg.(*Address)
-						if !fieldOk {
-							return fmt.Errorf("custom deserializer for example.Address returned wrong type: expected *Address, got %T", fieldMsg)
+				if err := protocli.ReadInputFile(inputFile, cmd.String("input-format"), options.InputFormats(), req); err != nil {
+					return err
+				}
+				// Apply flag overrides (only explicitly-set flags)
+				if cmd.IsSet("name") {
+					req.Name = cmd.String("name")
+				}
+				if cmd.IsSet("email") {
+					req.Email = cmd.String("email")
+				}
+				if cmd.IsSet("address") {
+					if fieldDeserializer, hasFieldDeserializer := options.FlagDeserializer("example.Address"); hasFieldDeserializer {
+						fieldFlags := protocli.NewFlagContainer(cmd, "address")
+						fieldMsg, fieldErr := fieldDeserializer(cmdCtx, fieldFlags)
+						if fieldErr != nil {
+							return fmt.Errorf("failed to deserialize field Address: %w", fieldErr)
 						}
-						req.Address = typedField
-					}
-				} else {
-					// No custom deserializer - check if user provided a value
-					if cmd.IsSet("address") {
+						if fieldMsg != nil {
+							typedField, fieldOk := fieldMsg.(*Address)
+							if !fieldOk {
+								return fmt.Errorf("custom deserializer for example.Address returned wrong type: expected *Address, got %T", fieldMsg)
+							}
+							req.Address = typedField
+						}
+					} else {
 						return fmt.Errorf("flag --address requires a custom deserializer for example.Address (register with protocli.WithFlagDeserializer)")
 					}
-					// No value provided - leave field as nil
 				}
-				// Field RegistrationDate: check for custom deserializer for google.protobuf.Timestamp
-				if fieldDeserializer, hasFieldDeserializer := options.FlagDeserializer("google.protobuf.Timestamp"); hasFieldDeserializer {
-					// Use custom deserializer for nested message
-					// Create FlagContainer for field flag: registration-date
-					fieldFlags := protocli.NewFlagContainer(cmd, "registration-date")
-					fieldMsg, fieldErr := fieldDeserializer(cmdCtx, fieldFlags)
-					if fieldErr != nil {
-						return fmt.Errorf("failed to deserialize field RegistrationDate: %w", fieldErr)
-					}
-					// Handle nil return from deserializer (means skip/use default)
-					if fieldMsg != nil {
-						typedField, fieldOk := fieldMsg.(*timestamppb.Timestamp)
-						if !fieldOk {
-							return fmt.Errorf("custom deserializer for google.protobuf.Timestamp returned wrong type: expected *Timestamp, got %T", fieldMsg)
+				if cmd.IsSet("registration-date") {
+					if fieldDeserializer, hasFieldDeserializer := options.FlagDeserializer("google.protobuf.Timestamp"); hasFieldDeserializer {
+						fieldFlags := protocli.NewFlagContainer(cmd, "registration-date")
+						fieldMsg, fieldErr := fieldDeserializer(cmdCtx, fieldFlags)
+						if fieldErr != nil {
+							return fmt.Errorf("failed to deserialize field RegistrationDate: %w", fieldErr)
 						}
-						req.RegistrationDate = typedField
-					}
-				} else {
-					// No custom deserializer - check if user provided a value
-					if cmd.IsSet("registration-date") {
+						if fieldMsg != nil {
+							typedField, fieldOk := fieldMsg.(*timestamppb.Timestamp)
+							if !fieldOk {
+								return fmt.Errorf("custom deserializer for google.protobuf.Timestamp returned wrong type: expected *Timestamp, got %T", fieldMsg)
+							}
+							req.RegistrationDate = typedField
+						}
+					} else {
 						return fmt.Errorf("flag --registration-date requires a custom deserializer for google.protobuf.Timestamp (register with protocli.WithFlagDeserializer)")
 					}
-					// No value provided - leave field as nil
 				}
-				req.PhoneNumber = cmd.String("phone-number")
+				if cmd.IsSet("phone-number") {
+					req.PhoneNumber = cmd.String("phone-number")
+				}
 				if cmd.IsSet("nickname") {
 					val := cmd.String("nickname")
 					req.Nickname = &val
@@ -996,6 +1126,100 @@ func UserServiceCommandsFlat(ctx context.Context, implOrFactory interface{}, opt
 						return fmt.Errorf("invalid value for --log-level: %w", err)
 					}
 					req.LogLevel = &val
+				}
+			} else {
+				// Check for custom flag deserializer for example.CreateUserRequest
+				deserializer, hasDeserializer := options.FlagDeserializer("example.CreateUserRequest")
+				if hasDeserializer {
+					// Use custom deserializer for top-level request
+					// Create FlagContainer (deserializer can access multiple flags via Command())
+					requestFlags := protocli.NewFlagContainer(cmd, "")
+					msg, err := deserializer(cmdCtx, requestFlags)
+					if err != nil {
+						return fmt.Errorf("custom deserializer failed: %w", err)
+					}
+					// Handle nil return from deserializer
+					if msg == nil {
+						return fmt.Errorf("custom deserializer returned nil message")
+					}
+					var ok bool
+					req, ok = msg.(*CreateUserRequest)
+					if !ok {
+						return fmt.Errorf("custom deserializer returned wrong type: expected *%s, got %T", "CreateUserRequest", msg)
+					}
+				} else {
+					// Use auto-generated flag parsing
+					req = &CreateUserRequest{}
+					req.Name = cmd.String("name")
+					req.Email = cmd.String("email")
+					// Field Address: check for custom deserializer for example.Address
+					if fieldDeserializer, hasFieldDeserializer := options.FlagDeserializer("example.Address"); hasFieldDeserializer {
+						// Use custom deserializer for nested message
+						// Create FlagContainer for field flag: address
+						fieldFlags := protocli.NewFlagContainer(cmd, "address")
+						fieldMsg, fieldErr := fieldDeserializer(cmdCtx, fieldFlags)
+						if fieldErr != nil {
+							return fmt.Errorf("failed to deserialize field Address: %w", fieldErr)
+						}
+						// Handle nil return from deserializer (means skip/use default)
+						if fieldMsg != nil {
+							typedField, fieldOk := fieldMsg.(*Address)
+							if !fieldOk {
+								return fmt.Errorf("custom deserializer for example.Address returned wrong type: expected *Address, got %T", fieldMsg)
+							}
+							req.Address = typedField
+						}
+					} else {
+						// No custom deserializer - check if user provided a value
+						if cmd.IsSet("address") {
+							return fmt.Errorf("flag --address requires a custom deserializer for example.Address (register with protocli.WithFlagDeserializer)")
+						}
+						// No value provided - leave field as nil
+					}
+					// Field RegistrationDate: check for custom deserializer for google.protobuf.Timestamp
+					if fieldDeserializer, hasFieldDeserializer := options.FlagDeserializer("google.protobuf.Timestamp"); hasFieldDeserializer {
+						// Use custom deserializer for nested message
+						// Create FlagContainer for field flag: registration-date
+						fieldFlags := protocli.NewFlagContainer(cmd, "registration-date")
+						fieldMsg, fieldErr := fieldDeserializer(cmdCtx, fieldFlags)
+						if fieldErr != nil {
+							return fmt.Errorf("failed to deserialize field RegistrationDate: %w", fieldErr)
+						}
+						// Handle nil return from deserializer (means skip/use default)
+						if fieldMsg != nil {
+							typedField, fieldOk := fieldMsg.(*timestamppb.Timestamp)
+							if !fieldOk {
+								return fmt.Errorf("custom deserializer for google.protobuf.Timestamp returned wrong type: expected *Timestamp, got %T", fieldMsg)
+							}
+							req.RegistrationDate = typedField
+						}
+					} else {
+						// No custom deserializer - check if user provided a value
+						if cmd.IsSet("registration-date") {
+							return fmt.Errorf("flag --registration-date requires a custom deserializer for google.protobuf.Timestamp (register with protocli.WithFlagDeserializer)")
+						}
+						// No value provided - leave field as nil
+					}
+					req.PhoneNumber = cmd.String("phone-number")
+					if cmd.IsSet("nickname") {
+						val := cmd.String("nickname")
+						req.Nickname = &val
+					}
+					if cmd.IsSet("age") {
+						val := cmd.Int32("age")
+						req.Age = &val
+					}
+					if cmd.IsSet("verified") {
+						val := cmd.Bool("verified")
+						req.Verified = &val
+					}
+					if cmd.IsSet("log-level") {
+						val, err := parseUserServiceLogLevel(cmd.String("log-level"))
+						if err != nil {
+							return fmt.Errorf("invalid value for --log-level: %w", err)
+						}
+						req.LogLevel = &val
+					}
 				}
 			}
 
@@ -1147,6 +1371,12 @@ func AdminServiceCommand(ctx context.Context, implOrFactory interface{}, opts ..
 		Name:  "output",
 		Usage: "Output file (- for stdout)",
 		Value: "-",
+	}, &v3.StringFlag{
+		Name:  "input-file",
+		Usage: "Read request from file (JSON or YAML). CLI flags override file values",
+	}, &v3.StringFlag{
+		Name:  "input-format",
+		Usage: "Input file format (auto-detected from extension if not set)",
 	}}
 
 	// Add format-specific flags from registered formats
@@ -1177,28 +1407,39 @@ func AdminServiceCommand(ctx context.Context, implOrFactory interface{}, opts ..
 			// Build request message
 			var req *AdminRequest
 
-			// Check for custom flag deserializer for example.AdminRequest
-			deserializer, hasDeserializer := options.FlagDeserializer("example.AdminRequest")
-			if hasDeserializer {
-				// Use custom deserializer for top-level request
-				// Create FlagContainer (deserializer can access multiple flags via Command())
-				requestFlags := protocli.NewFlagContainer(cmd, "")
-				msg, err := deserializer(cmdCtx, requestFlags)
-				if err != nil {
-					return fmt.Errorf("custom deserializer failed: %w", err)
-				}
-				// Handle nil return from deserializer
-				if msg == nil {
-					return fmt.Errorf("custom deserializer returned nil message")
-				}
-				var ok bool
-				req, ok = msg.(*AdminRequest)
-				if !ok {
-					return fmt.Errorf("custom deserializer returned wrong type: expected *%s, got %T", "AdminRequest", msg)
-				}
-			} else {
-				// Use auto-generated flag parsing
+			// Check for file-based input
+			inputFile := cmd.String("input-file")
+			if inputFile != "" {
+				// Read request from file
 				req = &AdminRequest{}
+				if err := protocli.ReadInputFile(inputFile, cmd.String("input-format"), options.InputFormats(), req); err != nil {
+					return err
+				}
+				// Apply flag overrides (only explicitly-set flags)
+			} else {
+				// Check for custom flag deserializer for example.AdminRequest
+				deserializer, hasDeserializer := options.FlagDeserializer("example.AdminRequest")
+				if hasDeserializer {
+					// Use custom deserializer for top-level request
+					// Create FlagContainer (deserializer can access multiple flags via Command())
+					requestFlags := protocli.NewFlagContainer(cmd, "")
+					msg, err := deserializer(cmdCtx, requestFlags)
+					if err != nil {
+						return fmt.Errorf("custom deserializer failed: %w", err)
+					}
+					// Handle nil return from deserializer
+					if msg == nil {
+						return fmt.Errorf("custom deserializer returned nil message")
+					}
+					var ok bool
+					req, ok = msg.(*AdminRequest)
+					if !ok {
+						return fmt.Errorf("custom deserializer returned wrong type: expected *%s, got %T", "AdminRequest", msg)
+					}
+				} else {
+					// Use auto-generated flag parsing
+					req = &AdminRequest{}
+				}
 			}
 
 			// Check if using remote gRPC call or direct implementation call
@@ -1311,6 +1552,12 @@ func AdminServiceCommandsFlat(ctx context.Context, implOrFactory interface{}, op
 		Name:  "output",
 		Usage: "Output file (- for stdout)",
 		Value: "-",
+	}, &v3.StringFlag{
+		Name:  "input-file",
+		Usage: "Read request from file (JSON or YAML). CLI flags override file values",
+	}, &v3.StringFlag{
+		Name:  "input-format",
+		Usage: "Input file format (auto-detected from extension if not set)",
 	}}
 
 	// Add format-specific flags from registered formats
@@ -1341,28 +1588,39 @@ func AdminServiceCommandsFlat(ctx context.Context, implOrFactory interface{}, op
 			// Build request message
 			var req *AdminRequest
 
-			// Check for custom flag deserializer for example.AdminRequest
-			deserializer, hasDeserializer := options.FlagDeserializer("example.AdminRequest")
-			if hasDeserializer {
-				// Use custom deserializer for top-level request
-				// Create FlagContainer (deserializer can access multiple flags via Command())
-				requestFlags := protocli.NewFlagContainer(cmd, "")
-				msg, err := deserializer(cmdCtx, requestFlags)
-				if err != nil {
-					return fmt.Errorf("custom deserializer failed: %w", err)
-				}
-				// Handle nil return from deserializer
-				if msg == nil {
-					return fmt.Errorf("custom deserializer returned nil message")
-				}
-				var ok bool
-				req, ok = msg.(*AdminRequest)
-				if !ok {
-					return fmt.Errorf("custom deserializer returned wrong type: expected *%s, got %T", "AdminRequest", msg)
-				}
-			} else {
-				// Use auto-generated flag parsing
+			// Check for file-based input
+			inputFile := cmd.String("input-file")
+			if inputFile != "" {
+				// Read request from file
 				req = &AdminRequest{}
+				if err := protocli.ReadInputFile(inputFile, cmd.String("input-format"), options.InputFormats(), req); err != nil {
+					return err
+				}
+				// Apply flag overrides (only explicitly-set flags)
+			} else {
+				// Check for custom flag deserializer for example.AdminRequest
+				deserializer, hasDeserializer := options.FlagDeserializer("example.AdminRequest")
+				if hasDeserializer {
+					// Use custom deserializer for top-level request
+					// Create FlagContainer (deserializer can access multiple flags via Command())
+					requestFlags := protocli.NewFlagContainer(cmd, "")
+					msg, err := deserializer(cmdCtx, requestFlags)
+					if err != nil {
+						return fmt.Errorf("custom deserializer failed: %w", err)
+					}
+					// Handle nil return from deserializer
+					if msg == nil {
+						return fmt.Errorf("custom deserializer returned nil message")
+					}
+					var ok bool
+					req, ok = msg.(*AdminRequest)
+					if !ok {
+						return fmt.Errorf("custom deserializer returned wrong type: expected *%s, got %T", "AdminRequest", msg)
+					}
+				} else {
+					// Use auto-generated flag parsing
+					req = &AdminRequest{}
+				}
 			}
 
 			// Check if using remote gRPC call or direct implementation call
