@@ -222,6 +222,49 @@ func generateServiceCommands(file *protogen.File, service *protogen.Service) []j
 		jen.Id("Commands"): jen.Id("commands"),
 	}
 
+	// For TUI-enabled services, add --interactive flag and a Before hook that
+	// deep-links into the TUI at this service's method list.
+	tuiEnabled := serviceOpts != nil && serviceOpts.GetTui() != nil
+	if tuiEnabled {
+		serviceCommandDict[jen.Id("Flags")] = jen.Index().Qual("github.com/urfave/cli/v3", "Flag").Values(
+			jen.Op("&").Qual("github.com/urfave/cli/v3", "BoolFlag").Values(jen.Dict{
+				jen.Id("Name"):  jen.Lit("interactive"),
+				jen.Id("Usage"): jen.Lit("Open the interactive TUI at this service"),
+			}),
+		)
+		serviceCommandDict[jen.Id("Before")] = jen.Func().Params(
+			jen.Id("ctx").Qual("context", "Context"),
+			jen.Id("cmd").Op("*").Qual("github.com/urfave/cli/v3", "Command"),
+		).Params(jen.Qual("context", "Context"), jen.Error()).Block(
+			jen.If(
+				jen.Id("cmd").Dot("Args").Call().Dot("Len").Call().Op(">").Lit(0),
+			).Block(
+				jen.Return(
+				jen.Id("ctx"),
+				jen.Qual("github.com/urfave/cli/v3", "Exit").Call(
+					jen.Qual("fmt", "Sprintf").Call(
+						jen.Lit("unsupported argument: %q"),
+						jen.Id("cmd").Dot("Args").Call().Dot("Get").Call(jen.Lit(0)),
+					),
+					jen.Lit(3),
+				),
+			),
+			),
+			jen.If(jen.Id("cmd").Dot("Bool").Call(jen.Lit("interactive"))).Block(
+				jen.If(
+					jen.Err().Op(":=").Qual("github.com/drewfead/proto-cli", "InvokeTUI").Call(
+						jen.Id("ctx"),
+						jen.Id("cmd"),
+						jen.Qual("github.com/drewfead/proto-cli", "StartAtService").Call(jen.Lit(serviceName)),
+					),
+					jen.Err().Op("!=").Nil(),
+				).Block(jen.Return(jen.Id("ctx"), jen.Err())),
+				jen.Return(jen.Id("ctx"), jen.Qual("github.com/urfave/cli/v3", "Exit").Call(jen.Lit(""), jen.Lit(0))),
+			),
+			jen.Return(jen.Id("ctx"), jen.Nil()),
+		)
+	}
+
 	// Add optional help fields to service command if provided
 	if serviceLongDescription != "" {
 		serviceCommandDict[jen.Id("Description")] = jen.Lit(serviceLongDescription)
@@ -262,6 +305,11 @@ func generateServiceCommands(file *protogen.File, service *protogen.Service) []j
 			methodLiterals[i] = jen.Lit(m)
 		}
 		serviceCLIDict[jen.Id("LocalOnlyMethods")] = jen.Index().String().Values(methodLiterals...)
+	}
+
+	// Add TUIDescriptor if service has tui=true annotation
+	if tuiDesc := generateTUIDescriptor(file, service); tuiDesc != nil {
+		serviceCLIDict[jen.Id("TUIDescriptor")] = tuiDesc
 	}
 
 	statements = append(statements,

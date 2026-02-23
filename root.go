@@ -33,7 +33,14 @@ type ServiceCLI struct {
 	RegisterFunc        func(*grpc.Server, any)                  // Register service with gRPC server (takes impl)
 	GatewayRegisterFunc func(ctx context.Context, mux any) error // mux is *runtime.ServeMux from grpc-gateway
 	LocalOnlyMethods    []string                                 // Full gRPC method paths that are local-only (e.g., "/pkg.Svc/Method")
+	TUIDescriptor       *TUIServiceDescriptor                    // nil if tui=false on service annotation
 }
+
+// CLIName returns the service name, satisfying the CLIService interface.
+func (s *ServiceCLI) CLIName() string { return s.ServiceName }
+
+// CLICommand returns the CLI command for this service, satisfying the CLIService interface.
+func (s *ServiceCLI) CLICommand() *cli.Command { return s.Command }
 
 // parseVerbosity parses the verbosity flag value into a slog.Level.
 // Supports: "debug"/"4", "info"/"3", "warn"/"2", "error"/"1", "none"/"0".
@@ -133,7 +140,7 @@ func RootCommand(appName string, opts ...RootOption) (*cli.Command, error) {
 	options := ApplyRootOptions(opts...)
 
 	var commands []*cli.Command
-	services := options.Services()
+	var services []*ServiceCLI // concrete slice for runDaemon
 	commandNames := make(map[string]bool) // Track command names for collision detection
 
 	// Setup default config paths if not provided
@@ -145,7 +152,8 @@ func RootCommand(appName string, opts ...RootOption) (*cli.Command, error) {
 	// Access service registrations to check hoisting
 	// Type assert to access internal registrations
 	if opts, ok := options.(*rootCommandOptions); ok {
-		for _, reg := range opts.ServiceRegistrations() {
+		for _, reg := range opts.serviceRegistrations {
+			services = append(services, reg.service)
 			if reg.hoisted {
 				// Hoisted: add RPC commands directly to root level
 				for _, rpcCmd := range reg.service.Command.Commands {
@@ -167,9 +175,12 @@ func RootCommand(appName string, opts ...RootOption) (*cli.Command, error) {
 			}
 		}
 	} else {
-		// Fallback to old behavior if type assertion fails
-		for _, svc := range services {
-			commands = append(commands, svc.Command)
+		// Fallback: extract concrete services from the interface slice
+		for _, svc := range options.CLIServices() {
+			if cs, ok := svc.(*ServiceCLI); ok {
+				services = append(services, cs)
+			}
+			commands = append(commands, svc.CLICommand())
 		}
 	}
 
@@ -272,11 +283,29 @@ func RootCommand(appName string, opts ...RootOption) (*cli.Command, error) {
 		},
 	}
 
+	if options.TUIProvider() != nil {
+		globalFlags = append(globalFlags, &cli.BoolFlag{
+			Name:  "interactive",
+			Usage: "Run in interactive TUI mode",
+		})
+	}
+
 	rootCmd := &cli.Command{
 		Name:     appName,
 		Usage:    fmt.Sprintf("%s - gRPC service CLI", appName),
 		Flags:    globalFlags,
 		Commands: commands,
+	}
+
+	// Store the TUI launch function in root command metadata so generated service
+	// and method commands can trigger the TUI via InvokeTUI with deep-link options.
+	if options.TUIProvider() != nil {
+		if rootCmd.Metadata == nil {
+			rootCmd.Metadata = make(map[string]interface{})
+		}
+		rootCmd.Metadata[tuiLaunchKey] = TUILaunchFn(func(ctx context.Context, rootCmd *cli.Command, opts ...TUIRunOption) error {
+			return options.TUIProvider().Run(ctx, rootCmd, options.TUIServices(), opts...)
+		})
 	}
 
 	// Add Before hook to setup slog for non-daemon commands
@@ -290,6 +319,18 @@ func RootCommand(appName string, opts ...RootOption) (*cli.Command, error) {
 		// Decorate context with auth metadata if configured
 		if authCfg != nil {
 			ctx = cliauth.DecorateContext(ctx, authCfg)
+		}
+
+		// Launch interactive TUI if --interactive flag is set on the root command
+		// (deep-link cases are handled by generated Before hooks on service/method commands)
+		if options.TUIProvider() != nil && cmd.Root().Bool("interactive") {
+			if cmd.Args().Len() > 0 {
+				return ctx, cli.Exit(fmt.Sprintf("unsupported argument: %q", cmd.Args().Get(0)), 3)
+			}
+			if err := InvokeTUI(ctx, cmd); err != nil {
+				return ctx, err
+			}
+			return ctx, cli.Exit("", 0)
 		}
 
 		return ctx, nil

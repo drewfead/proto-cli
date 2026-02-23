@@ -6,6 +6,25 @@ import "google/protobuf/descriptor.proto";
 
 option go_package = "github.com/drewfead/proto-cli/proto/cli/v1;cli";
 
+// TUI-specific options for an RPC method command.
+message TUICommandOptions {
+  // Display name for this method in TUI method lists and breadcrumbs.
+  // Defaults to the Go method name (e.g. "GetUser") if not set.
+  string name = 1;
+
+  // When true, this command is hidden from the TUI even if service tui=true.
+  bool hidden = 2;
+}
+
+// TUI-specific options for a message field.
+message TUIFlagOptions {
+  // Display label for this field in TUI forms (defaults to flag name).
+  string label = 1;
+
+  // When true, this field is hidden from TUI forms.
+  bool hidden = 2;
+}
+
 // CLI command annotation for RPC methods
 // Customizes command name and help text following urfave/cli v3 best practices
 message CommandOptions {
@@ -33,6 +52,9 @@ message CommandOptions {
   // Note: the method is still available on the gRPC server if the service is
   // registered; local_only only affects the generated CLI layer.
   bool local_only = 6;
+
+  // TUI-specific overrides for this command.
+  TUICommandOptions tui = 10;
 }
 
 // CLI flag annotation for message fields
@@ -50,6 +72,23 @@ message FlagOptions {
   // Long-form description for detailed documentation
   // Used in config file comments, extended help text, and generated docs
   string description = 6;
+
+  // TUI-specific overrides for this field.
+  TUIFlagOptions tui = 10;
+
+  // Default value for this flag, as a string.
+  // Parsed to the appropriate Go type at code-generation time for CLI flags,
+  // and used directly to pre-populate TUI form fields.
+  string default_value = 12;
+}
+
+// TUI-specific options for a service.
+// The presence of this message on a service enables it in the interactive TUI.
+// Set to {} to enable with all defaults, or set name to customize the display name.
+message TUIServiceOptions {
+  // Display name for this service in TUI tab bars and headings.
+  // Defaults to the Go type name (e.g. "UserService") if not set.
+  string name = 1;
 }
 
 // Service options annotation
@@ -71,6 +110,11 @@ message ServiceOptions {
 
   // Description of arguments this service accepts
   string args_usage = 5;
+
+  // TUI-specific options. Presence of this field includes the service in the
+  // interactive TUI. Use {} to enable with defaults, or set name to customize
+  // the display name shown in tab bars and headings.
+  TUIServiceOptions tui = 10;
 }
 
 // Service config annotation

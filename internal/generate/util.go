@@ -1,6 +1,7 @@
 package generate
 
 import (
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -60,6 +61,19 @@ func toKebabCase(s string) string {
 		result.WriteRune(unicode.ToLower(r))
 	}
 	return result.String()
+}
+
+// toTitleCase converts a kebab-case or snake_case identifier to Title Case.
+// Each word separated by '-' or '_' is capitalised and words are joined with spaces.
+// Examples: send-at → "Send At", name → "Name", color_hex → "Color Hex".
+func toTitleCase(s string) string {
+	words := strings.FieldsFunc(s, func(r rune) bool { return r == '-' || r == '_' })
+	for i, w := range words {
+		if len(w) > 0 {
+			words[i] = strings.ToUpper(w[:1]) + w[1:]
+		}
+	}
+	return strings.Join(words, " ")
 }
 
 // stripServiceSuffix removes "Service" suffix from service names to avoid redundancy.
@@ -182,6 +196,48 @@ func enumParserFuncName(service *protogen.Service, enumTypeName string) string {
 // Example: UserService, GetUser → "localServerStream_UserService_GetUser"
 func streamWrapperTypeName(service *protogen.Service, method *protogen.Method) string {
 	return "localServerStream_" + service.GoName + "_" + method.GoName
+}
+
+// defaultValueCode returns a jen.Code literal for the given default string in
+// the appropriate Go type for the flag kind, or nil if the string is empty or
+// cannot be parsed. Used when emitting the Value field of urfave/cli flag structs.
+func defaultValueCode(kind protoreflect.Kind, defaultStr string) jen.Code {
+	if defaultStr == "" {
+		return nil
+	}
+	switch kind {
+	case protoreflect.StringKind, protoreflect.BytesKind, protoreflect.EnumKind:
+		return jen.Lit(defaultStr)
+	case protoreflect.BoolKind:
+		if b, err := strconv.ParseBool(defaultStr); err == nil {
+			return jen.Lit(b)
+		}
+	case protoreflect.Int32Kind, protoreflect.Sint32Kind, protoreflect.Sfixed32Kind:
+		if n, err := strconv.ParseInt(defaultStr, 10, 32); err == nil {
+			return jen.Lit(int32(n))
+		}
+	case protoreflect.Int64Kind, protoreflect.Sint64Kind, protoreflect.Sfixed64Kind:
+		if n, err := strconv.ParseInt(defaultStr, 10, 64); err == nil {
+			return jen.Lit(n)
+		}
+	case protoreflect.Uint32Kind, protoreflect.Fixed32Kind:
+		if n, err := strconv.ParseUint(defaultStr, 10, 32); err == nil {
+			return jen.Lit(uint32(n))
+		}
+	case protoreflect.Uint64Kind, protoreflect.Fixed64Kind:
+		if n, err := strconv.ParseUint(defaultStr, 10, 64); err == nil {
+			return jen.Lit(n)
+		}
+	case protoreflect.FloatKind:
+		if f, err := strconv.ParseFloat(defaultStr, 32); err == nil {
+			return jen.Lit(float32(f))
+		}
+	case protoreflect.DoubleKind:
+		if f, err := strconv.ParseFloat(defaultStr, 64); err == nil {
+			return jen.Lit(f)
+		}
+	}
+	return nil
 }
 
 // getFieldFlagOptions extracts the (cli.flag) annotation from a field

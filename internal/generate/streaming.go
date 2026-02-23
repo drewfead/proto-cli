@@ -19,6 +19,16 @@ func generateServerStreamingCommand(service *protogen.Service, method *protogen.
 
 	var localOnly bool
 
+	// Determine whether the parent service is TUI-enabled (for --interactive flag generation).
+	serviceOpts := getServiceOptions(service)
+	tuiEnabled := serviceOpts != nil && serviceOpts.GetTui() != nil
+
+	// Derive the service CLI name (mirrors generateServiceCommands logic).
+	serviceCLIName := toKebabCase(service.GoName)
+	if serviceOpts != nil && serviceOpts.Name != "" {
+		serviceCLIName = serviceOpts.Name
+	}
+
 	cmdOpts := getMethodCommandOptions(method)
 	if cmdOpts != nil {
 		if cmdOpts.Name != "" {
@@ -131,6 +141,20 @@ func generateServerStreamingCommand(service *protogen.Service, method *protogen.
 		jen.Line(),
 	)
 
+	// For TUI-enabled services, add an --interactive flag so users can deep-link
+	// into the TUI at this streaming method's request form.
+	if tuiEnabled {
+		statements = append(statements,
+			jen.Id("flags_"+cmdVarName).Op("=").Append(
+				jen.Id("flags_"+cmdVarName),
+				jen.Op("&").Qual("github.com/urfave/cli/v3", "BoolFlag").Values(jen.Dict{
+					jen.Id("Name"):  jen.Lit("interactive"),
+					jen.Id("Usage"): jen.Lit("Open the interactive TUI at this method's form"),
+				}),
+			),
+		)
+	}
+
 	// Build command dict with help fields
 	cmdDict := jen.Dict{
 		jen.Id("Name"):  jen.Lit(cmdName),
@@ -142,6 +166,12 @@ func generateServerStreamingCommand(service *protogen.Service, method *protogen.
 		).Error().Block(
 			generateServerStreamingActionBody(file, service, method, configMessageType, localOnly)...,
 		),
+	}
+
+	// For TUI-enabled services, add a Before hook that intercepts --interactive
+	// and deep-links into the TUI at this streaming method's request form.
+	if tuiEnabled {
+		cmdDict[jen.Id("Before")] = generateTUIBeforeHook(method, serviceCLIName, cmdName)
 	}
 
 	// Add optional help fields if provided
@@ -170,6 +200,21 @@ func generateServerStreamingCommand(service *protogen.Service, method *protogen.
 // generateServerStreamingActionBody generates the action body for server streaming commands
 func generateServerStreamingActionBody(file *protogen.File, service *protogen.Service, method *protogen.Method, configMessageType string, localOnly bool) []jen.Code {
 	var statements []jen.Code
+
+	// Reject extra positional arguments.
+	statements = append(statements,
+		jen.If(
+			jen.Id("cmd").Dot("Args").Call().Dot("Len").Call().Op(">").Lit(0),
+		).Block(
+			jen.Return(
+				jen.Qual("fmt", "Errorf").Call(
+					jen.Lit("unsupported argument: %s"),
+					jen.Id("cmd").Dot("Args").Call().Dot("Get").Call(jen.Lit(0)),
+				),
+			),
+		),
+		jen.Line(),
+	)
 
 	// Defer after hooks in reverse order (LIFO)
 	// IMPORTANT: Register defer FIRST so it runs even if before hooks fail

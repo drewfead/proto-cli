@@ -1,0 +1,395 @@
+syntax = "proto3";
+
+package tui_example;
+
+import "proto/cli/v1/cli.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/drewfead/proto-cli/examples/tui";
+
+// GreetRequest asks for a greeting.
+message GreetRequest {
+  string name = 1 [(cli.v1.flag) = {
+    name: "name"
+    usage: "Name to greet"
+    required: true
+  }];
+
+  int32 repeat = 2 [(cli.v1.flag) = {
+    name: "repeat"
+    usage: "Number of times to repeat the greeting"
+    default_value: "1"
+  }];
+
+  bool loud = 3 [(cli.v1.flag) = {
+    name: "loud"
+    usage: "Whether to greet loudly (all caps)"
+    default_value: "true"
+  }];
+}
+
+// GreetResponse contains the greeting.
+message GreetResponse {
+  string message = 1;
+}
+
+// ListGreetingsRequest asks for a list of greetings.
+message ListGreetingsRequest {
+  repeated string names = 1 [(cli.v1.flag) = {
+    name: "names"
+    usage: "Names to greet (comma-separated in TUI)"
+  }];
+}
+
+// ListGreetingsResponse contains a list of greetings.
+message ListGreetingsResponse {
+  repeated string messages = 1;
+}
+
+// FarewellRequest asks for a farewell.
+message FarewellRequest {
+  string name = 1 [(cli.v1.flag) = {
+    name: "name"
+    usage: "Name to bid farewell"
+    required: true
+  }];
+
+  bool formal = 2 [(cli.v1.flag) = {
+    name: "formal"
+    usage: "Use a formal farewell"
+  }];
+}
+
+// FarewellResponse contains the farewell message.
+message FarewellResponse {
+  string message = 1;
+}
+
+// FarewellManyRequest asks for farewells to multiple people.
+message FarewellManyRequest {
+  repeated string names = 1 [(cli.v1.flag) = {
+    name: "names"
+    usage: "Names to bid farewell (comma-separated in TUI)"
+  }];
+}
+
+// FarewellManyResponse contains a list of farewell messages.
+message FarewellManyResponse {
+  repeated string messages = 1;
+}
+
+// CountdownFarewellRequest asks for a dramatic countdown farewell.
+message CountdownFarewellRequest {
+  string name = 1 [(cli.v1.flag) = {
+    name: "name"
+    usage: "Name to bid farewell"
+    required: true
+  }];
+
+  int32 from = 2 [(cli.v1.flag) = {
+    name: "from"
+    usage: "Countdown starting number"
+    default_value: "5"
+  }];
+
+  int32 delay_ms = 3 [(cli.v1.flag) = {
+    name: "delay-ms"
+    usage: "Milliseconds between countdown ticks"
+    default_value: "500"
+  }];
+}
+
+// CountdownFarewellResponse carries one tick of the countdown, or the
+// final farewell message when the count reaches zero.
+message CountdownFarewellResponse {
+  string message = 1;
+}
+
+// DeliveryAddress holds a postal address, used to demonstrate nested message flattening in the TUI.
+message DeliveryAddress {
+  string street = 1 [(cli.v1.flag) = {
+    name: "street"
+    usage: "Street address"
+  }];
+
+  string city = 2 [(cli.v1.flag) = {
+    name: "city"
+    usage: "City"
+  }];
+}
+
+// ScheduledFarewellRequest asks for a farewell at a specific time, delivered to an address.
+// Demonstrates WKT (Timestamp) and nested message flattening.
+message ScheduledFarewellRequest {
+  string name = 1 [(cli.v1.flag) = {
+    name: "name"
+    usage: "Name to bid farewell"
+    required: true
+  }];
+
+  // send_at is when to deliver the farewell. Demonstrates google.protobuf.Timestamp WKT support.
+  google.protobuf.Timestamp send_at = 2 [(cli.v1.flag) = {
+    name: "send-at"
+    usage: "When to send the farewell (RFC3339)"
+  }];
+
+  // address is where to deliver the farewell. Demonstrates nested message flattening in the TUI.
+  DeliveryAddress address = 3 [(cli.v1.flag) = {
+    name: "address"
+    tui: { label: "Delivery Address" }
+  }];
+}
+
+// ScheduledFarewellResponse contains the scheduled farewell.
+message ScheduledFarewellResponse {
+  string message = 1;
+  string scheduled_for = 2;
+  string delivery_address = 3;
+}
+
+// RgbColor holds an RGB color value. Used to demonstrate custom TUI form controls.
+message RgbColor {
+  int32 r = 1 [(cli.v1.flag) = {
+    name: "r"
+    usage: "Red channel (0-255)"
+    tui: { label: "Red" }
+  }];
+
+  int32 g = 2 [(cli.v1.flag) = {
+    name: "g"
+    usage: "Green channel (0-255)"
+    tui: { label: "Green" }
+  }];
+
+  int32 b = 3 [(cli.v1.flag) = {
+    name: "b"
+    usage: "Blue channel (0-255)"
+    tui: { label: "Blue" }
+  }];
+}
+
+// ColoredGreetRequest asks for a greeting rendered in a chosen color.
+// Demonstrates registering a custom TUI form control for RgbColor.
+message ColoredGreetRequest {
+  string name = 1 [(cli.v1.flag) = {
+    name: "name"
+    usage: "Name to greet"
+    required: true
+  }];
+
+  RgbColor color = 2 [(cli.v1.flag) = {
+    name: "color"
+    tui: { label: "Color" }
+    usage: "Greeting color as R,G,B"
+  }];
+}
+
+// ColoredGreetResponse contains the greeting along with a hex color code.
+message ColoredGreetResponse {
+  string message = 1;
+  string color_hex = 2;
+}
+
+// NoteRequest demonstrates a freeform JSON editor TUI control.
+message NoteRequest {
+  string name = 1 [(cli.v1.flag) = {
+    name: "name"
+    usage: "Name to address the note to"
+    required: true
+  }];
+
+  // metadata is free-form JSON attached to the note.
+  // In the TUI this field uses the JSON editor control.
+  string metadata = 2 [(cli.v1.flag) = {
+    name: "metadata"
+    usage: "Free-form JSON metadata"
+    tui: { label: "Metadata (JSON)" }
+  }];
+}
+
+// NoteResponse contains the echoed note.
+message NoteResponse {
+  string message = 1;
+  string metadata = 2;
+}
+
+// FarewellService demonstrates a second TUI-enabled service.
+service FarewellService {
+  option (cli.v1.service) = {
+    name: "farewell"
+    description: "Farewell commands"
+    tui: { name: "Farewell" }
+  };
+
+  // Farewell bids goodbye to a person.
+  rpc Farewell(FarewellRequest) returns (FarewellResponse) {
+    option (cli.v1.command) = {
+      name: "farewell"
+      description: "Say goodbye to someone"
+      tui: { name: "Bid Farewell" }
+    };
+  }
+
+  // FarewellMany bids goodbye to multiple people.
+  rpc FarewellMany(FarewellManyRequest) returns (FarewellManyResponse) {
+    option (cli.v1.command) = {
+      name: "farewell-many"
+      description: "Say goodbye to multiple people"
+      tui: { name: "Bid Farewell to Many" }
+    };
+  }
+
+  // ScheduledFarewell schedules a farewell for a future time at an address.
+  // Demonstrates WKT (Timestamp) and nested message flattening in the TUI.
+  rpc ScheduledFarewell(ScheduledFarewellRequest) returns (ScheduledFarewellResponse) {
+    option (cli.v1.command) = {
+      name: "scheduled-farewell"
+      description: "Schedule a goodbye for a specific time and place"
+      tui: { name: "Schedule a Farewell" }
+    };
+  }
+
+  // LeaveNote attaches a free-form JSON note to a farewell.
+  // Demonstrates the JSON editor TUI control.
+  rpc LeaveNote(NoteRequest) returns (NoteResponse) {
+    option (cli.v1.command) = {
+      name: "leave-note"
+      description: "Attach a JSON note to a farewell"
+    };
+  }
+
+  // CountdownFarewell streams a dramatic countdown before the final goodbye.
+  // Demonstrates server-streaming in the TUI.
+  rpc CountdownFarewell(CountdownFarewellRequest) returns (stream CountdownFarewellResponse) {
+    option (cli.v1.command) = {
+      name: "countdown-farewell"
+      description: "Count down to a dramatic goodbye"
+      tui: { name: "Countdown Farewell" }
+    };
+  }
+}
+
+// ScheduleCallRequest books a call at a user-supplied time.
+// The `when` field is a google.protobuf.Timestamp. The TUI picker accepts
+// the time in the system's local timezone and normalises it to UTC on submit.
+// Compare with ScheduledFarewell which also uses Timestamp but with UTC input.
+message ScheduleCallRequest {
+  string with = 1 [(cli.v1.flag) = {
+    name: "with"
+    usage: "Who to call"
+    required: true
+  }];
+
+  // when is when to schedule the call. In the TUI this field is rendered as a
+  // date-time picker that accepts local time (SystemTimezone) and normalises
+  // to UTC for the Timestamp wire format.
+  google.protobuf.Timestamp when = 2 [(cli.v1.flag) = {
+    name: "when"
+    usage: "When to call — enter in local time"
+    required: true
+  }];
+}
+
+// ScheduleCallResponse echoes the scheduled call time in both the server's
+// local timezone and UTC, demonstrating that the TUI picker's local-time
+// entry round-trips correctly through the Timestamp wire format.
+message ScheduleCallResponse {
+  string message = 1;
+  // when_local is the call time in the server's local timezone.
+  string when_local = 2;
+  // when_utc is the same instant expressed in UTC.
+  string when_utc = 3;
+}
+
+// PersonCard describes one person in the directory who can be greeted.
+message PersonCard {
+  string name = 1;
+  string bio  = 2;
+}
+
+// ListPeopleRequest asks for the list of contacts available to greet.
+message ListPeopleRequest {
+  // filter narrows results to names starting with the given prefix.
+  // Leave empty to list everyone.
+  string filter = 1 [(cli.v1.flag) = {
+    name: "filter"
+    usage: "Filter by name prefix (leave empty for all)"
+  }];
+}
+
+// DirectoryService streams a list of contacts you can greet.
+// Selecting a contact in the TUI navigates directly to the greeter form
+// with the recipient's name pre-populated.
+service DirectoryService {
+  option (cli.v1.service) = {
+    name: "directory"
+    description: "Contact directory"
+    tui: { name: "Directory" }
+  };
+
+  // ListPeople streams the contact directory, one card per person.
+  rpc ListPeople(ListPeopleRequest) returns (stream PersonCard) {
+    option (cli.v1.command) = {
+      name: "list-people"
+      description: "Browse the contact directory"
+      tui: { name: "Browse Directory" }
+    };
+  }
+}
+
+// GreeterService demonstrates TUI-enabled gRPC service methods.
+service GreeterService {
+  option (cli.v1.service) = {
+    name: "greeter"
+    description: "Greeting commands"
+    tui: { name: "Greeter" }
+  };
+
+  // Greet says hello to a person.
+  rpc Greet(GreetRequest) returns (GreetResponse) {
+    option (cli.v1.command) = {
+      name: "greet"
+      description: "Say hello to someone"
+      tui: { name: "Say Hello" }
+    };
+  }
+
+  // ListGreetings says hello to multiple people.
+  rpc ListGreetings(ListGreetingsRequest) returns (ListGreetingsResponse) {
+    option (cli.v1.command) = {
+      name: "list-greetings"
+      description: "Say hello to multiple people"
+      tui: { name: "Greet Many" }
+    };
+  }
+
+  // HiddenMethod is hidden from the TUI but still accessible via CLI.
+  rpc HiddenMethod(GreetRequest) returns (GreetResponse) {
+    option (cli.v1.command) = {
+      name: "hidden"
+      description: "A method hidden from the TUI"
+      tui: { hidden: true }
+    };
+  }
+
+  // ColoredGreet says hello with a custom color.
+  // Demonstrates registering a custom TUI form control for RgbColor.
+  rpc ColoredGreet(ColoredGreetRequest) returns (ColoredGreetResponse) {
+    option (cli.v1.command) = {
+      name: "colored-greet"
+      description: "Say hello in a chosen color"
+    };
+  }
+
+  // ScheduleCall books a call at a time in the caller's local timezone.
+  // Demonstrates WithCustomControlForField overriding WithTimestampControl:
+  // the "when" Timestamp field uses a date-time picker with SystemTimezone
+  // so the user enters local time that is normalised to UTC on submit.
+  rpc ScheduleCall(ScheduleCallRequest) returns (ScheduleCallResponse) {
+    option (cli.v1.command) = {
+      name: "schedule-call"
+      description: "Book a call in your local timezone"
+      tui: { name: "Schedule a Call" }
+    };
+  }
+}

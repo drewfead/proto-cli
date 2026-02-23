@@ -183,6 +183,10 @@ func StreamingServiceCommand(ctx context.Context, implOrFactory interface{}, opt
 
 	commands = append(commands, &v3.Command{
 		Action: func(cmdCtx context.Context, cmd *v3.Command) error {
+			if cmd.Args().Len() > 0 {
+				return fmt.Errorf("unsupported argument: %s", cmd.Args().Get(0))
+			}
+
 			defer func() {
 				hooks := options.AfterCommandHooks()
 				for i := len(hooks) - 1; i >= 0; i-- {
@@ -444,6 +448,10 @@ func StreamingServiceCommand(ctx context.Context, implOrFactory interface{}, opt
 
 	commands = append(commands, &v3.Command{
 		Action: func(cmdCtx context.Context, cmd *v3.Command) error {
+			if cmd.Args().Len() > 0 {
+				return fmt.Errorf("unsupported argument: %s", cmd.Args().Get(0))
+			}
+
 			defer func() {
 				hooks := options.AfterCommandHooks()
 				for i := len(hooks) - 1; i >= 0; i-- {
@@ -723,6 +731,10 @@ func StreamingServiceCommandsFlat(ctx context.Context, implOrFactory interface{}
 
 	commands = append(commands, &v3.Command{
 		Action: func(cmdCtx context.Context, cmd *v3.Command) error {
+			if cmd.Args().Len() > 0 {
+				return fmt.Errorf("unsupported argument: %s", cmd.Args().Get(0))
+			}
+
 			defer func() {
 				hooks := options.AfterCommandHooks()
 				for i := len(hooks) - 1; i >= 0; i-- {
@@ -984,6 +996,10 @@ func StreamingServiceCommandsFlat(ctx context.Context, implOrFactory interface{}
 
 	commands = append(commands, &v3.Command{
 		Action: func(cmdCtx context.Context, cmd *v3.Command) error {
+			if cmd.Args().Len() > 0 {
+				return fmt.Errorf("unsupported argument: %s", cmd.Args().Get(0))
+			}
+
 			defer func() {
 				hooks := options.AfterCommandHooks()
 				for i := len(hooks) - 1; i >= 0; i-- {

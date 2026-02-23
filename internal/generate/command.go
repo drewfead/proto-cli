@@ -47,6 +47,16 @@ func generateMethodCommand(service *protogen.Service, method *protogen.Method, c
 
 	var localOnly bool
 
+	// Determine whether the parent service is TUI-enabled (for --interactive flag generation).
+	serviceOpts := getServiceOptions(service)
+	tuiEnabled := serviceOpts != nil && serviceOpts.GetTui() != nil
+
+	// Derive the service CLI name (mirrors generateServiceCommands logic).
+	serviceCLIName := toKebabCase(service.GoName)
+	if serviceOpts != nil && serviceOpts.Name != "" {
+		serviceCLIName = serviceOpts.Name
+	}
+
 	cmdOpts := getMethodCommandOptions(method)
 	if cmdOpts != nil {
 		// Use custom command name if provided
@@ -154,6 +164,20 @@ func generateMethodCommand(service *protogen.Service, method *protogen.Method, c
 		jen.Line(),
 	)
 
+	// For TUI-enabled services, add an --interactive flag to every method command so
+	// users can deep-link: `myapp farewell leave-note --interactive`.
+	if tuiEnabled {
+		statements = append(statements,
+			jen.Id("flags_"+cmdVarName).Op("=").Append(
+				jen.Id("flags_"+cmdVarName),
+				jen.Op("&").Qual("github.com/urfave/cli/v3", "BoolFlag").Values(jen.Dict{
+					jen.Id("Name"):  jen.Lit("interactive"),
+					jen.Id("Usage"): jen.Lit("Open the interactive TUI at this method's form"),
+				}),
+			),
+		)
+	}
+
 	// Build command dict with help fields
 	cmdDict := jen.Dict{
 		jen.Id("Name"):  jen.Lit(cmdName),
@@ -165,6 +189,12 @@ func generateMethodCommand(service *protogen.Service, method *protogen.Method, c
 		).Error().Block(
 			generateActionBodyWithHooks(file, service, method, configMessageType, localOnly)...,
 		),
+	}
+
+	// For TUI-enabled services, add a Before hook that intercepts --interactive and
+	// deep-links into the TUI at this method's request form.
+	if tuiEnabled {
+		cmdDict[jen.Id("Before")] = generateTUIBeforeHook(method, serviceCLIName, cmdName)
 	}
 
 	// Add optional help fields if provided
@@ -237,7 +267,13 @@ func generateFlag(field *protogen.Field) jen.Code {
 		return dict
 	}
 
-	// Handle repeated (list) fields — use slice flag types
+	// defaultStr is the annotation default_value, used to set the flag's Value field.
+	var defaultStr string
+	if flagOpts != nil {
+		defaultStr = flagOpts.GetDefaultValue()
+	}
+
+	// Handle repeated (list) fields — use slice flag types (no default Value for slices)
 	if field.Desc.IsList() {
 		if field.Desc.Kind() == protoreflect.EnumKind {
 			usage = usage + " [" + getEnumValuesPiped(field.Enum) + "]"
@@ -245,10 +281,15 @@ func generateFlag(field *protogen.Field) jen.Code {
 		if ft, ok := scalarFlagTypes[field.Desc.Kind()]; ok {
 			return cliFlagRef(ft.SliceFlag, buildFlagDict())
 		}
-		// MessageKind falls through to singular handling; other unknown kinds return nil
-		if field.Desc.Kind() != protoreflect.MessageKind {
-			return nil
+		if field.Desc.Kind() == protoreflect.MessageKind {
+			messageType := field.Message
+			fullyQualifiedName := string(messageType.Desc.FullName())
+			if flagOpts == nil || flagOpts.Usage == "" {
+				usage = fmt.Sprintf("%s (%s)", field.GoName, fullyQualifiedName)
+			}
+			return cliFlagRef("StringSliceFlag", buildFlagDict())
 		}
+		return nil
 	}
 
 	// Append valid enum values to usage text for singular enums
@@ -256,7 +297,11 @@ func generateFlag(field *protogen.Field) jen.Code {
 		usage = usage + " [" + getEnumValuesPiped(field.Enum) + "]"
 	}
 	if ft, ok := scalarFlagTypes[field.Desc.Kind()]; ok {
-		return cliFlagRef(ft.SingularFlag, buildFlagDict())
+		dict := buildFlagDict()
+		if dv := defaultValueCode(field.Desc.Kind(), defaultStr); dv != nil {
+			dict[jen.Id("Value")] = dv
+		}
+		return cliFlagRef(ft.SingularFlag, dict)
 	}
 
 	switch field.Desc.Kind() {
@@ -271,7 +316,11 @@ func generateFlag(field *protogen.Field) jen.Code {
 			usage = fmt.Sprintf("%s (%s)", field.GoName, fullyQualifiedName)
 		}
 
-		return jen.Op("&").Qual("github.com/urfave/cli/v3", "StringFlag").Values(buildFlagDict())
+		dict := buildFlagDict()
+		if defaultStr != "" {
+			dict[jen.Id("Value")] = jen.Lit(defaultStr)
+		}
+		return jen.Op("&").Qual("github.com/urfave/cli/v3", "StringFlag").Values(dict)
 	case protoreflect.GroupKind:
 		// GroupKind is deprecated in proto3 and not supported
 		fmt.Fprintf(os.Stderr, "WARNING: Field %s uses deprecated GroupKind and will not generate a CLI flag\n", field.Desc.FullName())
@@ -448,7 +497,59 @@ func generateRequestFieldAssignments(file *protogen.File, service *protogen.Serv
 					),
 				)
 			case protoreflect.MessageKind:
-				// Repeated messages need deserializers — fall through to singular handling
+				// Repeated messages: iterate over each StringSlice element and deserialize
+				messageType := field.Message
+				fullyQualifiedName := string(messageType.Desc.FullName())
+				goTypeName := messageType.GoIdent.GoName
+				qualifiedType := qualifyType(file, messageType, true)
+
+				statements = append(statements,
+					jen.If(
+						jen.List(jen.Id("fieldDeserializer"), jen.Id("hasFieldDeserializer")).Op(":=").Id("options").Dot("FlagDeserializer").Call(
+							jen.Lit(fullyQualifiedName),
+						),
+						jen.Id("hasFieldDeserializer"),
+					).Block(
+						jen.For(
+							jen.List(jen.Id("_"), jen.Id("s")).Op(":=").Range().Id("cmd").Dot("StringSlice").Call(jen.Lit(flagName)),
+						).Block(
+							jen.Id("elemFlags").Op(":=").Qual("github.com/drewfead/proto-cli", "NewStringValueFlagContainer").Call(
+								jen.Id("s"),
+								jen.Id("cmd"),
+							),
+							jen.List(jen.Id("elemMsg"), jen.Id("elemErr")).Op(":=").Id("fieldDeserializer").Call(
+								jen.Id("cmdCtx"),
+								jen.Id("elemFlags"),
+							),
+							jen.If(jen.Id("elemErr").Op("!=").Nil()).Block(
+								jen.Return(jen.Qual("fmt", "Errorf").Call(
+									jen.Lit(fmt.Sprintf("failed to deserialize element for --%s: %%w", flagName)),
+									jen.Id("elemErr"),
+								)),
+							),
+							jen.If(jen.Id("elemMsg").Op("!=").Nil()).Block(
+								jen.List(jen.Id("typedElem"), jen.Id("elemOk")).Op(":=").Id("elemMsg").Assert(qualifiedType),
+								jen.If(jen.Op("!").Id("elemOk")).Block(
+									jen.Return(jen.Qual("fmt", "Errorf").Call(
+										jen.Lit(fmt.Sprintf("custom deserializer for %s returned wrong type: expected *%s, got %%T", fullyQualifiedName, goTypeName)),
+										jen.Id("elemMsg"),
+									)),
+								),
+								jen.Id("req").Dot(field.GoName).Op("=").Append(
+									jen.Id("req").Dot(field.GoName),
+									jen.Id("typedElem"),
+								),
+							),
+						),
+					).Else().Block(
+						jen.If(jen.Id("cmd").Dot("IsSet").Call(jen.Lit(flagName))).Block(
+							jen.Return(jen.Qual("fmt", "Errorf").Call(
+								jen.Lit(fmt.Sprintf("flag --%s requires a custom deserializer for %s (register with protocli.WithFlagDeserializer)", flagName, fullyQualifiedName)),
+							)),
+						),
+					),
+				)
+				continue
 			default:
 				// Direct slice assignment for numeric and string types
 				if ft, ok := scalarFlagTypes[field.Desc.Kind()]; ok {
@@ -457,9 +558,7 @@ func generateRequestFieldAssignments(file *protogen.File, service *protogen.Serv
 					)
 				}
 			}
-			if field.Desc.Kind() != protoreflect.MessageKind {
-				continue
-			}
+			continue
 		}
 
 		switch field.Desc.Kind() {
@@ -771,7 +870,60 @@ func generateRequestFieldOverrides(file *protogen.File, service *protogen.Servic
 					),
 				)
 			case protoreflect.MessageKind:
-				// Repeated messages need deserializers — fall through to singular handling
+				// Repeated messages: iterate over each StringSlice element and deserialize
+				messageType := field.Message
+				fullyQualifiedName := string(messageType.Desc.FullName())
+				goTypeName := messageType.GoIdent.GoName
+				qualifiedType := qualifyType(file, messageType, true)
+
+				statements = append(statements,
+					jen.If(jen.Id("cmd").Dot("IsSet").Call(jen.Lit(flagName))).Block(
+						jen.If(
+							jen.List(jen.Id("fieldDeserializer"), jen.Id("hasFieldDeserializer")).Op(":=").Id("options").Dot("FlagDeserializer").Call(
+								jen.Lit(fullyQualifiedName),
+							),
+							jen.Id("hasFieldDeserializer"),
+						).Block(
+							jen.Id("req").Dot(field.GoName).Op("=").Nil(),
+							jen.For(
+								jen.List(jen.Id("_"), jen.Id("s")).Op(":=").Range().Id("cmd").Dot("StringSlice").Call(jen.Lit(flagName)),
+							).Block(
+								jen.Id("elemFlags").Op(":=").Qual("github.com/drewfead/proto-cli", "NewStringValueFlagContainer").Call(
+									jen.Id("s"),
+									jen.Id("cmd"),
+								),
+								jen.List(jen.Id("elemMsg"), jen.Id("elemErr")).Op(":=").Id("fieldDeserializer").Call(
+									jen.Id("cmdCtx"),
+									jen.Id("elemFlags"),
+								),
+								jen.If(jen.Id("elemErr").Op("!=").Nil()).Block(
+									jen.Return(jen.Qual("fmt", "Errorf").Call(
+										jen.Lit(fmt.Sprintf("failed to deserialize element for --%s: %%w", flagName)),
+										jen.Id("elemErr"),
+									)),
+								),
+								jen.If(jen.Id("elemMsg").Op("!=").Nil()).Block(
+									jen.List(jen.Id("typedElem"), jen.Id("elemOk")).Op(":=").Id("elemMsg").Assert(qualifiedType),
+									jen.If(jen.Op("!").Id("elemOk")).Block(
+										jen.Return(jen.Qual("fmt", "Errorf").Call(
+											jen.Lit(fmt.Sprintf("custom deserializer for %s returned wrong type: expected *%s, got %%T", fullyQualifiedName, goTypeName)),
+											jen.Id("elemMsg"),
+										)),
+									),
+									jen.Id("req").Dot(field.GoName).Op("=").Append(
+										jen.Id("req").Dot(field.GoName),
+										jen.Id("typedElem"),
+									),
+								),
+							),
+						).Else().Block(
+							jen.Return(jen.Qual("fmt", "Errorf").Call(
+								jen.Lit(fmt.Sprintf("flag --%s requires a custom deserializer for %s (register with protocli.WithFlagDeserializer)", flagName, fullyQualifiedName)),
+							)),
+						),
+					),
+				)
+				continue
 			default:
 				// Direct slice assignment for numeric and string types
 				if ft, ok := scalarFlagTypes[field.Desc.Kind()]; ok {
@@ -782,9 +934,7 @@ func generateRequestFieldOverrides(file *protogen.File, service *protogen.Servic
 					)
 				}
 			}
-			if field.Desc.Kind() != protoreflect.MessageKind {
-				continue
-			}
+			continue
 		}
 
 		switch field.Desc.Kind() {
@@ -1044,6 +1194,24 @@ func generateOutputWriterOpening(service *protogen.Service) []jen.Code {
 
 func generateActionBodyWithHooks(file *protogen.File, service *protogen.Service, method *protogen.Method, configMessageType string, localOnly bool) []jen.Code {
 	var statements []jen.Code
+
+	// Reject extra positional arguments.
+	statements = append(statements,
+		jen.If(
+			jen.Id("cmd").Dot("Args").Call().Dot("Len").Call().Op(">").Lit(0),
+		).Block(
+			jen.Return(
+				jen.Qual("github.com/urfave/cli/v3", "Exit").Call(
+					jen.Qual("fmt", "Sprintf").Call(
+						jen.Lit("unsupported argument: %q"),
+						jen.Id("cmd").Dot("Args").Call().Dot("Get").Call(jen.Lit(0)),
+					),
+					jen.Lit(3),
+				),
+			),
+		),
+		jen.Line(),
+	)
 
 	// Defer after hooks in reverse order (LIFO)
 	// IMPORTANT: Register defer FIRST so it runs even if before hooks fail
@@ -1335,4 +1503,132 @@ func generateLocalCallLogic(service *protogen.Service, method *protogen.Method, 
 	}
 
 	return statements
+}
+
+// generateTUIBeforeHook returns a jen func literal for the Before hook that
+// intercepts --interactive, collects explicitly-set flag values into a prefill
+// map, and calls InvokeTUI with StartAtMethod + WithPrefillFields.
+func generateTUIBeforeHook(method *protogen.Method, serviceCLIName, cmdName string) jen.Code {
+	// Build the statements that populate the prefill map.
+	var prefillStmts []jen.Code
+	prefillStmts = append(prefillStmts,
+		jen.Id("prefill").Op(":=").Map(jen.String()).String().Values(),
+	)
+	for _, field := range method.Input.Fields {
+		if field.Desc.IsList() {
+			continue // skip repeated fields; Appender handles multi-value inputs
+		}
+		flagName := toKebabCase(field.GoName)
+		flagOpts := getFieldFlagOptions(field)
+		if flagOpts != nil && flagOpts.Name != "" {
+			flagName = flagOpts.Name
+		}
+		valExpr := flagToStringExpr(field)
+		if valExpr == nil {
+			continue
+		}
+		prefillStmts = append(prefillStmts,
+			jen.If(jen.Id("cmd").Dot("IsSet").Call(jen.Lit(flagName))).Block(
+				jen.Id("prefill").Index(jen.Lit(flagName)).Op("=").Add(valExpr),
+			),
+		)
+	}
+
+	// Build the InvokeTUI call arguments.
+	invokeArgs := []jen.Code{
+		jen.Id("ctx"),
+		jen.Id("cmd"),
+		jen.Qual("github.com/drewfead/proto-cli", "StartAtMethod").Call(
+			jen.Lit(serviceCLIName),
+			jen.Lit(cmdName),
+		),
+		jen.Qual("github.com/drewfead/proto-cli", "WithPrefillFields").Call(jen.Id("prefill")),
+	}
+
+	interactiveBlock := append(
+		prefillStmts,
+		jen.If(
+			jen.Err().Op(":=").Qual("github.com/drewfead/proto-cli", "InvokeTUI").Call(invokeArgs...),
+			jen.Err().Op("!=").Nil(),
+		).Block(jen.Return(jen.Id("ctx"), jen.Err())),
+		jen.Return(jen.Id("ctx"), jen.Qual("github.com/urfave/cli/v3", "Exit").Call(jen.Lit(""), jen.Lit(0))),
+	)
+
+	argsCheck := jen.If(
+		jen.Id("cmd").Dot("Args").Call().Dot("Len").Call().Op(">").Lit(0),
+	).Block(
+		jen.Return(
+			jen.Id("ctx"),
+			jen.Qual("github.com/urfave/cli/v3", "Exit").Call(
+				jen.Qual("fmt", "Sprintf").Call(
+					jen.Lit("unsupported argument: %q"),
+					jen.Id("cmd").Dot("Args").Call().Dot("Get").Call(jen.Lit(0)),
+				),
+				jen.Lit(3),
+			),
+		),
+	)
+
+	return jen.Func().Params(
+		jen.Id("ctx").Qual("context", "Context"),
+		jen.Id("cmd").Op("*").Qual("github.com/urfave/cli/v3", "Command"),
+	).Params(jen.Qual("context", "Context"), jen.Error()).Block(
+		argsCheck,
+		jen.If(jen.Id("cmd").Dot("Bool").Call(jen.Lit("interactive"))).Block(interactiveBlock...),
+		jen.Return(jen.Id("ctx"), jen.Nil()),
+	)
+}
+
+// flagToStringExpr returns a jen expression that converts a (non-list) field's CLI
+// flag value to a string suitable for TUI form prefill. Returns nil for unsupported kinds.
+// Message, string, enum, and bytes fields are read directly as strings from their StringFlag.
+func flagToStringExpr(field *protogen.Field) jen.Code {
+	flagName := toKebabCase(field.GoName)
+	flagOpts := getFieldFlagOptions(field)
+	if flagOpts != nil && flagOpts.Name != "" {
+		flagName = flagOpts.Name
+	}
+
+	switch field.Desc.Kind() {
+	case protoreflect.StringKind, protoreflect.EnumKind, protoreflect.MessageKind, protoreflect.BytesKind:
+		return jen.Id("cmd").Dot("String").Call(jen.Lit(flagName))
+	case protoreflect.BoolKind:
+		return jen.Qual("strconv", "FormatBool").Call(jen.Id("cmd").Dot("Bool").Call(jen.Lit(flagName)))
+	case protoreflect.Int32Kind, protoreflect.Sint32Kind, protoreflect.Sfixed32Kind:
+		return jen.Qual("strconv", "FormatInt").Call(
+			jen.Int64().Call(jen.Id("cmd").Dot("Int32").Call(jen.Lit(flagName))),
+			jen.Lit(10),
+		)
+	case protoreflect.Int64Kind, protoreflect.Sint64Kind, protoreflect.Sfixed64Kind:
+		return jen.Qual("strconv", "FormatInt").Call(
+			jen.Id("cmd").Dot("Int64").Call(jen.Lit(flagName)),
+			jen.Lit(10),
+		)
+	case protoreflect.Uint32Kind, protoreflect.Fixed32Kind:
+		return jen.Qual("strconv", "FormatUint").Call(
+			jen.Uint64().Call(jen.Id("cmd").Dot("Uint32").Call(jen.Lit(flagName))),
+			jen.Lit(10),
+		)
+	case protoreflect.Uint64Kind, protoreflect.Fixed64Kind:
+		return jen.Qual("strconv", "FormatUint").Call(
+			jen.Id("cmd").Dot("Uint64").Call(jen.Lit(flagName)),
+			jen.Lit(10),
+		)
+	case protoreflect.FloatKind:
+		return jen.Qual("strconv", "FormatFloat").Call(
+			jen.Float64().Call(jen.Id("cmd").Dot("Float32").Call(jen.Lit(flagName))),
+			jen.LitRune('g'),
+			jen.Lit(-1),
+			jen.Lit(32),
+		)
+	case protoreflect.DoubleKind:
+		return jen.Qual("strconv", "FormatFloat").Call(
+			jen.Id("cmd").Dot("Float64").Call(jen.Lit(flagName)),
+			jen.LitRune('g'),
+			jen.Lit(-1),
+			jen.Lit(64),
+		)
+	default:
+		return nil
+	}
 }

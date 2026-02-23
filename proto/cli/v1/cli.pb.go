@@ -22,6 +22,117 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// TUI-specific options for an RPC method command.
+type TUICommandOptions struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Display name for this method in TUI method lists and breadcrumbs.
+	// Defaults to the Go method name (e.g. "GetUser") if not set.
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// When true, this command is hidden from the TUI even if service tui=true.
+	Hidden        bool `protobuf:"varint,2,opt,name=hidden,proto3" json:"hidden,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TUICommandOptions) Reset() {
+	*x = TUICommandOptions{}
+	mi := &file_proto_cli_v1_cli_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TUICommandOptions) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TUICommandOptions) ProtoMessage() {}
+
+func (x *TUICommandOptions) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_cli_v1_cli_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TUICommandOptions.ProtoReflect.Descriptor instead.
+func (*TUICommandOptions) Descriptor() ([]byte, []int) {
+	return file_proto_cli_v1_cli_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *TUICommandOptions) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *TUICommandOptions) GetHidden() bool {
+	if x != nil {
+		return x.Hidden
+	}
+	return false
+}
+
+// TUI-specific options for a message field.
+type TUIFlagOptions struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Display label for this field in TUI forms (defaults to flag name).
+	Label string `protobuf:"bytes,1,opt,name=label,proto3" json:"label,omitempty"`
+	// When true, this field is hidden from TUI forms.
+	Hidden        bool `protobuf:"varint,2,opt,name=hidden,proto3" json:"hidden,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TUIFlagOptions) Reset() {
+	*x = TUIFlagOptions{}
+	mi := &file_proto_cli_v1_cli_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TUIFlagOptions) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TUIFlagOptions) ProtoMessage() {}
+
+func (x *TUIFlagOptions) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_cli_v1_cli_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TUIFlagOptions.ProtoReflect.Descriptor instead.
+func (*TUIFlagOptions) Descriptor() ([]byte, []int) {
+	return file_proto_cli_v1_cli_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *TUIFlagOptions) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+func (x *TUIFlagOptions) GetHidden() bool {
+	if x != nil {
+		return x.Hidden
+	}
+	return false
+}
+
 // CLI command annotation for RPC methods
 // Customizes command name and help text following urfave/cli v3 best practices
 type CommandOptions struct {
@@ -44,14 +155,16 @@ type CommandOptions struct {
 	// The --remote flag is suppressed entirely for this command.
 	// Note: the method is still available on the gRPC server if the service is
 	// registered; local_only only affects the generated CLI layer.
-	LocalOnly     bool `protobuf:"varint,6,opt,name=local_only,json=localOnly,proto3" json:"local_only,omitempty"`
+	LocalOnly bool `protobuf:"varint,6,opt,name=local_only,json=localOnly,proto3" json:"local_only,omitempty"`
+	// TUI-specific overrides for this command.
+	Tui           *TUICommandOptions `protobuf:"bytes,10,opt,name=tui,proto3" json:"tui,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CommandOptions) Reset() {
 	*x = CommandOptions{}
-	mi := &file_proto_cli_v1_cli_proto_msgTypes[0]
+	mi := &file_proto_cli_v1_cli_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -63,7 +176,7 @@ func (x *CommandOptions) String() string {
 func (*CommandOptions) ProtoMessage() {}
 
 func (x *CommandOptions) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_cli_v1_cli_proto_msgTypes[0]
+	mi := &file_proto_cli_v1_cli_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -76,7 +189,7 @@ func (x *CommandOptions) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CommandOptions.ProtoReflect.Descriptor instead.
 func (*CommandOptions) Descriptor() ([]byte, []int) {
-	return file_proto_cli_v1_cli_proto_rawDescGZIP(), []int{0}
+	return file_proto_cli_v1_cli_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *CommandOptions) GetName() string {
@@ -121,6 +234,13 @@ func (x *CommandOptions) GetLocalOnly() bool {
 	return false
 }
 
+func (x *CommandOptions) GetTui() *TUICommandOptions {
+	if x != nil {
+		return x.Tui
+	}
+	return nil
+}
+
 // CLI flag annotation for message fields
 // Maps message fields to CLI flags
 type FlagOptions struct {
@@ -134,14 +254,20 @@ type FlagOptions struct {
 	Placeholder string `protobuf:"bytes,5,opt,name=placeholder,proto3" json:"placeholder,omitempty"`
 	// Long-form description for detailed documentation
 	// Used in config file comments, extended help text, and generated docs
-	Description   string `protobuf:"bytes,6,opt,name=description,proto3" json:"description,omitempty"`
+	Description string `protobuf:"bytes,6,opt,name=description,proto3" json:"description,omitempty"`
+	// TUI-specific overrides for this field.
+	Tui *TUIFlagOptions `protobuf:"bytes,10,opt,name=tui,proto3" json:"tui,omitempty"`
+	// Default value for this flag, as a string.
+	// Parsed to the appropriate Go type at code-generation time for CLI flags,
+	// and used directly to pre-populate TUI form fields.
+	DefaultValue  string `protobuf:"bytes,12,opt,name=default_value,json=defaultValue,proto3" json:"default_value,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *FlagOptions) Reset() {
 	*x = FlagOptions{}
-	mi := &file_proto_cli_v1_cli_proto_msgTypes[1]
+	mi := &file_proto_cli_v1_cli_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -153,7 +279,7 @@ func (x *FlagOptions) String() string {
 func (*FlagOptions) ProtoMessage() {}
 
 func (x *FlagOptions) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_cli_v1_cli_proto_msgTypes[1]
+	mi := &file_proto_cli_v1_cli_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -166,7 +292,7 @@ func (x *FlagOptions) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FlagOptions.ProtoReflect.Descriptor instead.
 func (*FlagOptions) Descriptor() ([]byte, []int) {
-	return file_proto_cli_v1_cli_proto_rawDescGZIP(), []int{1}
+	return file_proto_cli_v1_cli_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *FlagOptions) GetName() string {
@@ -211,6 +337,69 @@ func (x *FlagOptions) GetDescription() string {
 	return ""
 }
 
+func (x *FlagOptions) GetTui() *TUIFlagOptions {
+	if x != nil {
+		return x.Tui
+	}
+	return nil
+}
+
+func (x *FlagOptions) GetDefaultValue() string {
+	if x != nil {
+		return x.DefaultValue
+	}
+	return ""
+}
+
+// TUI-specific options for a service.
+// The presence of this message on a service enables it in the interactive TUI.
+// Set to {} to enable with all defaults, or set name to customize the display name.
+type TUIServiceOptions struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Display name for this service in TUI tab bars and headings.
+	// Defaults to the Go type name (e.g. "UserService") if not set.
+	Name          string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TUIServiceOptions) Reset() {
+	*x = TUIServiceOptions{}
+	mi := &file_proto_cli_v1_cli_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TUIServiceOptions) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TUIServiceOptions) ProtoMessage() {}
+
+func (x *TUIServiceOptions) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_cli_v1_cli_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TUIServiceOptions.ProtoReflect.Descriptor instead.
+func (*TUIServiceOptions) Descriptor() ([]byte, []int) {
+	return file_proto_cli_v1_cli_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *TUIServiceOptions) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
 // Service options annotation
 // Defines CLI customization for a service following urfave/cli v3 best practices
 type ServiceOptions struct {
@@ -226,14 +415,18 @@ type ServiceOptions struct {
 	// Custom usage text to override the auto-generated USAGE line
 	UsageText string `protobuf:"bytes,4,opt,name=usage_text,json=usageText,proto3" json:"usage_text,omitempty"`
 	// Description of arguments this service accepts
-	ArgsUsage     string `protobuf:"bytes,5,opt,name=args_usage,json=argsUsage,proto3" json:"args_usage,omitempty"`
+	ArgsUsage string `protobuf:"bytes,5,opt,name=args_usage,json=argsUsage,proto3" json:"args_usage,omitempty"`
+	// TUI-specific options. Presence of this field includes the service in the
+	// interactive TUI. Use {} to enable with defaults, or set name to customize
+	// the display name shown in tab bars and headings.
+	Tui           *TUIServiceOptions `protobuf:"bytes,10,opt,name=tui,proto3" json:"tui,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ServiceOptions) Reset() {
 	*x = ServiceOptions{}
-	mi := &file_proto_cli_v1_cli_proto_msgTypes[2]
+	mi := &file_proto_cli_v1_cli_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -245,7 +438,7 @@ func (x *ServiceOptions) String() string {
 func (*ServiceOptions) ProtoMessage() {}
 
 func (x *ServiceOptions) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_cli_v1_cli_proto_msgTypes[2]
+	mi := &file_proto_cli_v1_cli_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -258,7 +451,7 @@ func (x *ServiceOptions) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServiceOptions.ProtoReflect.Descriptor instead.
 func (*ServiceOptions) Descriptor() ([]byte, []int) {
-	return file_proto_cli_v1_cli_proto_rawDescGZIP(), []int{2}
+	return file_proto_cli_v1_cli_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ServiceOptions) GetName() string {
@@ -296,6 +489,13 @@ func (x *ServiceOptions) GetArgsUsage() string {
 	return ""
 }
 
+func (x *ServiceOptions) GetTui() *TUIServiceOptions {
+	if x != nil {
+		return x.Tui
+	}
+	return nil
+}
+
 // Service config annotation
 // Defines the configuration message type for a service
 type ServiceConfigOptions struct {
@@ -308,7 +508,7 @@ type ServiceConfigOptions struct {
 
 func (x *ServiceConfigOptions) Reset() {
 	*x = ServiceConfigOptions{}
-	mi := &file_proto_cli_v1_cli_proto_msgTypes[3]
+	mi := &file_proto_cli_v1_cli_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -320,7 +520,7 @@ func (x *ServiceConfigOptions) String() string {
 func (*ServiceConfigOptions) ProtoMessage() {}
 
 func (x *ServiceConfigOptions) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_cli_v1_cli_proto_msgTypes[3]
+	mi := &file_proto_cli_v1_cli_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -333,7 +533,7 @@ func (x *ServiceConfigOptions) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ServiceConfigOptions.ProtoReflect.Descriptor instead.
 func (*ServiceConfigOptions) Descriptor() ([]byte, []int) {
-	return file_proto_cli_v1_cli_proto_rawDescGZIP(), []int{3}
+	return file_proto_cli_v1_cli_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ServiceConfigOptions) GetConfigMessage() string {
@@ -356,7 +556,7 @@ type EnumValueOptions struct {
 
 func (x *EnumValueOptions) Reset() {
 	*x = EnumValueOptions{}
-	mi := &file_proto_cli_v1_cli_proto_msgTypes[4]
+	mi := &file_proto_cli_v1_cli_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -368,7 +568,7 @@ func (x *EnumValueOptions) String() string {
 func (*EnumValueOptions) ProtoMessage() {}
 
 func (x *EnumValueOptions) ProtoReflect() protoreflect.Message {
-	mi := &file_proto_cli_v1_cli_proto_msgTypes[4]
+	mi := &file_proto_cli_v1_cli_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -381,7 +581,7 @@ func (x *EnumValueOptions) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnumValueOptions.ProtoReflect.Descriptor instead.
 func (*EnumValueOptions) Descriptor() ([]byte, []int) {
-	return file_proto_cli_v1_cli_proto_rawDescGZIP(), []int{4}
+	return file_proto_cli_v1_cli_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *EnumValueOptions) GetName() string {
@@ -464,7 +664,13 @@ var File_proto_cli_v1_cli_proto protoreflect.FileDescriptor
 
 const file_proto_cli_v1_cli_proto_rawDesc = "" +
 	"\n" +
-	"\x16proto/cli/v1/cli.proto\x12\x06cli.v1\x1a google/protobuf/descriptor.proto\"\xce\x01\n" +
+	"\x16proto/cli/v1/cli.proto\x12\x06cli.v1\x1a google/protobuf/descriptor.proto\"?\n" +
+	"\x11TUICommandOptions\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
+	"\x06hidden\x18\x02 \x01(\bR\x06hidden\">\n" +
+	"\x0eTUIFlagOptions\x12\x14\n" +
+	"\x05label\x18\x01 \x01(\tR\x05label\x12\x16\n" +
+	"\x06hidden\x18\x02 \x01(\bR\x06hidden\"\xfb\x01\n" +
 	"\x0eCommandOptions\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12)\n" +
@@ -474,14 +680,21 @@ const file_proto_cli_v1_cli_proto_rawDesc = "" +
 	"\n" +
 	"args_usage\x18\x05 \x01(\tR\targsUsage\x12\x1d\n" +
 	"\n" +
-	"local_only\x18\x06 \x01(\bR\tlocalOnly\"\xb5\x01\n" +
+	"local_only\x18\x06 \x01(\bR\tlocalOnly\x12+\n" +
+	"\x03tui\x18\n" +
+	" \x01(\v2\x19.cli.v1.TUICommandOptionsR\x03tui\"\x84\x02\n" +
 	"\vFlagOptions\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1c\n" +
 	"\tshorthand\x18\x02 \x01(\tR\tshorthand\x12\x14\n" +
 	"\x05usage\x18\x03 \x01(\tR\x05usage\x12\x1a\n" +
 	"\brequired\x18\x04 \x01(\bR\brequired\x12 \n" +
 	"\vplaceholder\x18\x05 \x01(\tR\vplaceholder\x12 \n" +
-	"\vdescription\x18\x06 \x01(\tR\vdescription\"\xaf\x01\n" +
+	"\vdescription\x18\x06 \x01(\tR\vdescription\x12(\n" +
+	"\x03tui\x18\n" +
+	" \x01(\v2\x16.cli.v1.TUIFlagOptionsR\x03tui\x12#\n" +
+	"\rdefault_value\x18\f \x01(\tR\fdefaultValue\"'\n" +
+	"\x11TUIServiceOptions\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\"\xdc\x01\n" +
 	"\x0eServiceOptions\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12)\n" +
@@ -489,7 +702,9 @@ const file_proto_cli_v1_cli_proto_rawDesc = "" +
 	"\n" +
 	"usage_text\x18\x04 \x01(\tR\tusageText\x12\x1d\n" +
 	"\n" +
-	"args_usage\x18\x05 \x01(\tR\targsUsage\"=\n" +
+	"args_usage\x18\x05 \x01(\tR\targsUsage\x12+\n" +
+	"\x03tui\x18\n" +
+	" \x01(\v2\x19.cli.v1.TUIServiceOptionsR\x03tui\"=\n" +
 	"\x14ServiceConfigOptions\x12%\n" +
 	"\x0econfig_message\x18\x01 \x01(\tR\rconfigMessage\"&\n" +
 	"\x10EnumValueOptions\x12\x12\n" +
@@ -513,34 +728,40 @@ func file_proto_cli_v1_cli_proto_rawDescGZIP() []byte {
 	return file_proto_cli_v1_cli_proto_rawDescData
 }
 
-var file_proto_cli_v1_cli_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_proto_cli_v1_cli_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_proto_cli_v1_cli_proto_goTypes = []any{
-	(*CommandOptions)(nil),                // 0: cli.v1.CommandOptions
-	(*FlagOptions)(nil),                   // 1: cli.v1.FlagOptions
-	(*ServiceOptions)(nil),                // 2: cli.v1.ServiceOptions
-	(*ServiceConfigOptions)(nil),          // 3: cli.v1.ServiceConfigOptions
-	(*EnumValueOptions)(nil),              // 4: cli.v1.EnumValueOptions
-	(*descriptorpb.MethodOptions)(nil),    // 5: google.protobuf.MethodOptions
-	(*descriptorpb.FieldOptions)(nil),     // 6: google.protobuf.FieldOptions
-	(*descriptorpb.ServiceOptions)(nil),   // 7: google.protobuf.ServiceOptions
-	(*descriptorpb.EnumValueOptions)(nil), // 8: google.protobuf.EnumValueOptions
+	(*TUICommandOptions)(nil),             // 0: cli.v1.TUICommandOptions
+	(*TUIFlagOptions)(nil),                // 1: cli.v1.TUIFlagOptions
+	(*CommandOptions)(nil),                // 2: cli.v1.CommandOptions
+	(*FlagOptions)(nil),                   // 3: cli.v1.FlagOptions
+	(*TUIServiceOptions)(nil),             // 4: cli.v1.TUIServiceOptions
+	(*ServiceOptions)(nil),                // 5: cli.v1.ServiceOptions
+	(*ServiceConfigOptions)(nil),          // 6: cli.v1.ServiceConfigOptions
+	(*EnumValueOptions)(nil),              // 7: cli.v1.EnumValueOptions
+	(*descriptorpb.MethodOptions)(nil),    // 8: google.protobuf.MethodOptions
+	(*descriptorpb.FieldOptions)(nil),     // 9: google.protobuf.FieldOptions
+	(*descriptorpb.ServiceOptions)(nil),   // 10: google.protobuf.ServiceOptions
+	(*descriptorpb.EnumValueOptions)(nil), // 11: google.protobuf.EnumValueOptions
 }
 var file_proto_cli_v1_cli_proto_depIdxs = []int32{
-	5,  // 0: cli.v1.command:extendee -> google.protobuf.MethodOptions
-	6,  // 1: cli.v1.flag:extendee -> google.protobuf.FieldOptions
-	7,  // 2: cli.v1.service:extendee -> google.protobuf.ServiceOptions
-	7,  // 3: cli.v1.service_config:extendee -> google.protobuf.ServiceOptions
-	8,  // 4: cli.v1.enum_value:extendee -> google.protobuf.EnumValueOptions
-	0,  // 5: cli.v1.command:type_name -> cli.v1.CommandOptions
-	1,  // 6: cli.v1.flag:type_name -> cli.v1.FlagOptions
-	2,  // 7: cli.v1.service:type_name -> cli.v1.ServiceOptions
-	3,  // 8: cli.v1.service_config:type_name -> cli.v1.ServiceConfigOptions
-	4,  // 9: cli.v1.enum_value:type_name -> cli.v1.EnumValueOptions
-	10, // [10:10] is the sub-list for method output_type
-	10, // [10:10] is the sub-list for method input_type
-	5,  // [5:10] is the sub-list for extension type_name
-	0,  // [0:5] is the sub-list for extension extendee
-	0,  // [0:0] is the sub-list for field type_name
+	0,  // 0: cli.v1.CommandOptions.tui:type_name -> cli.v1.TUICommandOptions
+	1,  // 1: cli.v1.FlagOptions.tui:type_name -> cli.v1.TUIFlagOptions
+	4,  // 2: cli.v1.ServiceOptions.tui:type_name -> cli.v1.TUIServiceOptions
+	8,  // 3: cli.v1.command:extendee -> google.protobuf.MethodOptions
+	9,  // 4: cli.v1.flag:extendee -> google.protobuf.FieldOptions
+	10, // 5: cli.v1.service:extendee -> google.protobuf.ServiceOptions
+	10, // 6: cli.v1.service_config:extendee -> google.protobuf.ServiceOptions
+	11, // 7: cli.v1.enum_value:extendee -> google.protobuf.EnumValueOptions
+	2,  // 8: cli.v1.command:type_name -> cli.v1.CommandOptions
+	3,  // 9: cli.v1.flag:type_name -> cli.v1.FlagOptions
+	5,  // 10: cli.v1.service:type_name -> cli.v1.ServiceOptions
+	6,  // 11: cli.v1.service_config:type_name -> cli.v1.ServiceConfigOptions
+	7,  // 12: cli.v1.enum_value:type_name -> cli.v1.EnumValueOptions
+	13, // [13:13] is the sub-list for method output_type
+	13, // [13:13] is the sub-list for method input_type
+	8,  // [8:13] is the sub-list for extension type_name
+	3,  // [3:8] is the sub-list for extension extendee
+	0,  // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_proto_cli_v1_cli_proto_init() }
@@ -554,7 +775,7 @@ func file_proto_cli_v1_cli_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_cli_v1_cli_proto_rawDesc), len(file_proto_cli_v1_cli_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   5,
+			NumMessages:   8,
 			NumExtensions: 5,
 			NumServices:   0,
 		},

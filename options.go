@@ -88,6 +88,40 @@ func NewFlagContainer(cmd *cli.Command, flagName string) FlagContainer {
 	return &flagContainer{cmd: cmd, flagName: flagName}
 }
 
+// stringValueFlagContainer implements FlagContainer for a single string value.
+// Used when deserializing individual elements of a repeated message field —
+// String() returns the element value directly; Named accessors delegate to cmd.
+type stringValueFlagContainer struct {
+	value string
+	cmd   *cli.Command
+}
+
+func (f *stringValueFlagContainer) String() string        { return f.value }
+func (f *stringValueFlagContainer) Int() int              { return 0 }
+func (f *stringValueFlagContainer) Int64() int64          { return 0 }
+func (f *stringValueFlagContainer) Uint() uint            { return 0 }
+func (f *stringValueFlagContainer) Uint64() uint64        { return 0 }
+func (f *stringValueFlagContainer) Bool() bool            { return false }
+func (f *stringValueFlagContainer) Float() float64        { return 0 }
+func (f *stringValueFlagContainer) StringSlice() []string { return []string{f.value} }
+func (f *stringValueFlagContainer) IsSet() bool           { return true }
+
+func (f *stringValueFlagContainer) StringNamed(name string) string        { return f.cmd.String(name) }
+func (f *stringValueFlagContainer) IntNamed(name string) int              { return f.cmd.Int(name) }
+func (f *stringValueFlagContainer) Int64Named(name string) int64          { return int64(f.cmd.Int(name)) }
+func (f *stringValueFlagContainer) BoolNamed(name string) bool            { return f.cmd.Bool(name) }
+func (f *stringValueFlagContainer) FloatNamed(name string) float64        { return f.cmd.Float(name) }
+func (f *stringValueFlagContainer) StringSliceNamed(name string) []string { return f.cmd.StringSlice(name) }
+func (f *stringValueFlagContainer) IsSetNamed(name string) bool           { return f.cmd.IsSet(name) }
+func (f *stringValueFlagContainer) FlagName() string                      { return "" }
+
+// NewStringValueFlagContainer creates a FlagContainer whose primary String() accessor
+// returns value directly. Named accessors delegate to cmd.
+// Used to pass individual repeated-message elements to a FlagDeserializer.
+func NewStringValueFlagContainer(value string, cmd *cli.Command) FlagContainer {
+	return &stringValueFlagContainer{value: value, cmd: cmd}
+}
+
 // FlagDeserializer builds a proto message from CLI flags
 // This allows users to implement custom logic for constructing complex messages
 // from simple CLI flags. The FlagContainer provides type-safe access to the flag value
@@ -139,10 +173,17 @@ type ServiceConfig interface {
 	FlagDeserializer(messageName string) (FlagDeserializer, bool)
 }
 
+// CLIService is the interface for services registered in the root CLI command.
+type CLIService interface {
+	CLIName() string
+	CLICommand() *cli.Command
+}
+
 // RootConfig is the configuration returned by ApplyRootOptions.
 // Used by RootCommand.
 type RootConfig interface {
-	Services() []*ServiceCLI
+	CLIServices() []CLIService
+	TUIServices() []TUIService
 	GRPCServerOptions() []grpc.ServerOption
 	EnableTranscoding() bool
 	TranscodingPort() int
@@ -159,6 +200,7 @@ type RootConfig interface {
 	IgnoreLocalOnly() bool
 	LoginProvider() cliauth.LoginProvider
 	AuthOptions() []cliauth.Option
+	TUIProvider() TUIProvider
 }
 
 // HelpCustomization holds options for customizing help text display.
@@ -277,8 +319,9 @@ func (c *slogConfigContext) Level() slog.Level {
 // rootCommandOptions holds configuration for the root CLI command.
 // serviceRegistration tracks a service and how it should be registered.
 type serviceRegistration struct {
-	service *ServiceCLI
-	hoisted bool // If true, RPC commands added to root instead of nested
+	service    *ServiceCLI
+	hoisted    bool  // If true, RPC commands added to root instead of nested
+	tuiEnabled *bool // nil = use TUIDescriptor presence; true/false = explicit override
 }
 
 type rootCommandOptions struct {
@@ -306,6 +349,7 @@ type rootCommandOptions struct {
 	ignoreLocalOnly         bool                  // If true, skip local-only interceptors in daemon mode
 	loginProvider           cliauth.LoginProvider // Auth login provider
 	authOptions             []cliauth.Option      // Auth configuration options
+	tuiProvider             TUIProvider           // Interactive TUI provider (nil if not configured)
 }
 
 // AddBeforeCommand adds a before command hook.
@@ -333,18 +377,32 @@ func (o *rootCommandOptions) AddService(service *ServiceCLI, hoisted bool) {
 	})
 }
 
-// Services returns the registered services.
-func (o *rootCommandOptions) Services() []*ServiceCLI {
-	services := make([]*ServiceCLI, 0, len(o.serviceRegistrations))
+// CLIServices returns the registered services as CLIService interfaces.
+func (o *rootCommandOptions) CLIServices() []CLIService {
+	services := make([]CLIService, 0, len(o.serviceRegistrations))
 	for _, reg := range o.serviceRegistrations {
 		services = append(services, reg.service)
 	}
 	return services
 }
 
-// ServiceRegistrations returns the service registrations (for internal use by RootCommand).
-func (o *rootCommandOptions) ServiceRegistrations() []*serviceRegistration {
-	return o.serviceRegistrations
+// TUIServices returns the TUIService interfaces for services that should appear
+// in the interactive TUI, respecting WithTUI/WithoutTUI registration overrides.
+func (o *rootCommandOptions) TUIServices() []TUIService {
+	var result []TUIService
+	for _, reg := range o.serviceRegistrations {
+		svc := reg.service
+		// Explicit WithTUI/WithoutTUI override takes priority over the
+		// proto annotation default (TUIDescriptor presence).
+		if reg.tuiEnabled != nil {
+			if *reg.tuiEnabled && svc.TUIDescriptor != nil {
+				result = append(result, tuiServiceWrapper{desc: svc.TUIDescriptor})
+			}
+		} else if svc.TUIDescriptor != nil {
+			result = append(result, tuiServiceWrapper{desc: svc.TUIDescriptor})
+		}
+	}
+	return result
 }
 
 // BeforeCommandHooks returns the before command hooks.
@@ -453,6 +511,11 @@ func (o *rootCommandOptions) LoginProvider() cliauth.LoginProvider {
 // AuthOptions returns the configured auth options.
 func (o *rootCommandOptions) AuthOptions() []cliauth.Option {
 	return o.authOptions
+}
+
+// TUIProvider returns the configured interactive TUI provider.
+func (o *rootCommandOptions) TUIProvider() TUIProvider {
+	return o.tuiProvider
 }
 
 // slogLevelToString converts an slog.Level to the CLI verbosity string format.
@@ -616,6 +679,25 @@ type ServiceRegistrationOption func(*serviceRegistration)
 func Hoisted() ServiceRegistrationOption {
 	return func(reg *serviceRegistration) {
 		reg.hoisted = true
+	}
+}
+
+// WithTUI explicitly includes this service in the interactive TUI, even if its
+// proto annotation does not opt it in. Has no effect if the service has no
+// TUIDescriptor (i.e. it was generated without tui=true and none was set in code).
+func WithTUI() ServiceRegistrationOption {
+	enabled := true
+	return func(reg *serviceRegistration) {
+		reg.tuiEnabled = &enabled
+	}
+}
+
+// WithoutTUI explicitly excludes this service from the interactive TUI, even if
+// its proto annotation opts it in via tui=true.
+func WithoutTUI() ServiceRegistrationOption {
+	enabled := false
+	return func(reg *serviceRegistration) {
+		reg.tuiEnabled = &enabled
 	}
 }
 
@@ -933,6 +1015,20 @@ func WithGlobalConfigPath(path string) RootOnlyOption {
 func WithLocalConfigPath(path string) RootOnlyOption {
 	return RootOnlyOption(func(o *rootCommandOptions) {
 		o.localConfigPath = path
+	})
+}
+
+// WithInteractive registers an interactive TUI provider and enables the --interactive flag.
+// When --interactive is passed at runtime, the provider's Run method is called with
+// all services that have TUIDescriptor set (i.e., tui=true in their proto annotation).
+// Type-safe: only works with RootOptions.
+//
+// Example:
+//
+//	protocli.WithInteractive(tui.New())
+func WithInteractive(provider TUIProvider) RootOnlyOption {
+	return RootOnlyOption(func(o *rootCommandOptions) {
+		o.tuiProvider = provider
 	})
 }
 

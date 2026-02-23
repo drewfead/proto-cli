@@ -144,6 +144,10 @@ func UserServiceCommand(ctx context.Context, implOrFactory interface{}, opts ...
 
 	commands = append(commands, &v3.Command{
 		Action: func(cmdCtx context.Context, cmd *v3.Command) error {
+			if cmd.Args().Len() > 0 {
+				return v3.Exit(fmt.Sprintf("unsupported argument: %q", cmd.Args().Get(0)), 3)
+			}
+
 			defer func() {
 				hooks := options.AfterCommandHooks()
 				for i := len(hooks) - 1; i >= 0; i-- {
@@ -401,6 +405,10 @@ func UserServiceCommand(ctx context.Context, implOrFactory interface{}, opts ...
 
 	commands = append(commands, &v3.Command{
 		Action: func(cmdCtx context.Context, cmd *v3.Command) error {
+			if cmd.Args().Len() > 0 {
+				return v3.Exit(fmt.Sprintf("unsupported argument: %q", cmd.Args().Get(0)), 3)
+			}
+
 			defer func() {
 				hooks := options.AfterCommandHooks()
 				for i := len(hooks) - 1; i >= 0; i-- {
@@ -779,6 +787,10 @@ func UserServiceCommandsFlat(ctx context.Context, implOrFactory interface{}, opt
 
 	commands = append(commands, &v3.Command{
 		Action: func(cmdCtx context.Context, cmd *v3.Command) error {
+			if cmd.Args().Len() > 0 {
+				return v3.Exit(fmt.Sprintf("unsupported argument: %q", cmd.Args().Get(0)), 3)
+			}
+
 			defer func() {
 				hooks := options.AfterCommandHooks()
 				for i := len(hooks) - 1; i >= 0; i-- {
@@ -1036,6 +1048,10 @@ func UserServiceCommandsFlat(ctx context.Context, implOrFactory interface{}, opt
 
 	commands = append(commands, &v3.Command{
 		Action: func(cmdCtx context.Context, cmd *v3.Command) error {
+			if cmd.Args().Len() > 0 {
+				return v3.Exit(fmt.Sprintf("unsupported argument: %q", cmd.Args().Get(0)), 3)
+			}
+
 			defer func() {
 				hooks := options.AfterCommandHooks()
 				for i := len(hooks) - 1; i >= 0; i-- {
@@ -1389,6 +1405,10 @@ func AdminServiceCommand(ctx context.Context, implOrFactory interface{}, opts ..
 
 	commands = append(commands, &v3.Command{
 		Action: func(cmdCtx context.Context, cmd *v3.Command) error {
+			if cmd.Args().Len() > 0 {
+				return v3.Exit(fmt.Sprintf("unsupported argument: %q", cmd.Args().Get(0)), 3)
+			}
+
 			defer func() {
 				hooks := options.AfterCommandHooks()
 				for i := len(hooks) - 1; i >= 0; i-- {
@@ -1570,6 +1590,10 @@ func AdminServiceCommandsFlat(ctx context.Context, implOrFactory interface{}, op
 
 	commands = append(commands, &v3.Command{
 		Action: func(cmdCtx context.Context, cmd *v3.Command) error {
+			if cmd.Args().Len() > 0 {
+				return v3.Exit(fmt.Sprintf("unsupported argument: %q", cmd.Args().Get(0)), 3)
+			}
+
 			defer func() {
 				hooks := options.AfterCommandHooks()
 				for i := len(hooks) - 1; i >= 0; i-- {
