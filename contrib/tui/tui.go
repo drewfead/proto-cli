@@ -217,9 +217,27 @@ func WithCustomControlForField(fieldName string, factory bubbles.ControlFactory)
 //	    bubbles.WithInputTimezone(bubbles.UserProvidedTimezone),
 //	    bubbles.WithTZNormalization(bubbles.RetainSourceTimezone),
 //	)
+//
+// WithOptionalTimestampControl is a variant that starts empty instead of
+// defaulting to the current time. Prefer it for optional filter fields (e.g.
+// "after", "before") where leaving the field blank should mean "no filter".
 func WithTimestampControl(opts ...bubbles.DateTimeControlOption) Option {
 	return WithCustomControl("google.protobuf.Timestamp", func(field protocli.TUIFieldDescriptor, styles bubbles.Styles) bubbles.FormControl {
 		return bubbles.NewDateTimeControl(field.DefaultValue, styles, opts...)
+	})
+}
+
+// WithOptionalTimestampControl is identical to WithTimestampControl but
+// prepends WithOptionalDefault so the picker starts empty (Value returns "")
+// rather than pre-filled with the current time. Submitting the form without
+// touching the field leaves the timestamp unset — useful for optional filter
+// fields such as "after" and "before" on a list-events request.
+func WithOptionalTimestampControl(opts ...bubbles.DateTimeControlOption) Option {
+	return WithCustomControl("google.protobuf.Timestamp", func(field protocli.TUIFieldDescriptor, styles bubbles.Styles) bubbles.FormControl {
+		allOpts := make([]bubbles.DateTimeControlOption, 0, len(opts)+1)
+		allOpts = append(allOpts, bubbles.WithOptionalDefault())
+		allOpts = append(allOpts, opts...)
+		return bubbles.NewDateTimeControl(field.DefaultValue, styles, allOpts...)
 	})
 }
 

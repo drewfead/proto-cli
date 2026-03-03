@@ -243,6 +243,15 @@ func WithTZNormalization(n TimestampNormalization) DateTimeControlOption {
 	return func(c *dateTimeControl) { c.normalization = n }
 }
 
+// WithOptionalDefault makes the control start in an unset (empty) state rather
+// than defaulting to the current time. Value() returns "" until the user first
+// interacts with the picker, so submitting the form without touching the field
+// leaves it unset. A non-empty defaultValue passed to NewDateTimeControl takes
+// precedence: the control starts pre-populated and is considered set.
+func WithOptionalDefault() DateTimeControlOption {
+	return func(c *dateTimeControl) { c.optional = true }
+}
+
 type dtSeg int
 
 const (
@@ -274,6 +283,9 @@ type dateTimeControl struct {
 	normalization TimestampNormalization
 	tzInput       textinput.Model // only used when inputTZ == UserProvidedTimezone
 	tzFocused     bool            // true when the timezone text field has focus
+
+	optional bool // when true, Value() returns "" until the user first interacts
+	unset    bool // tracks whether the user has engaged with the picker yet
 }
 
 // NewDateTimeControl returns a date+time picker FormControl.
@@ -304,6 +316,11 @@ func NewDateTimeControl(defaultValue string, styles Styles, opts ...DateTimeCont
 			c.year, c.month, c.day = t.Year(), int(t.Month()), t.Day()
 			c.hour, c.min, c.sec = t.Hour(), t.Minute(), t.Second()
 		}
+	} else if c.optional {
+		// No explicit default: start unset. The underlying date/time fields
+		// hold time.Now() as a ready-to-edit starting point for when the user
+		// first interacts, but Value() returns "" until then.
+		c.unset = true
 	}
 
 	return c
@@ -332,7 +349,12 @@ func (c *dateTimeControl) Blur() {
 
 // Value returns an RFC3339 string. When normalization is ToUTC (default) the
 // output is in UTC; RetainSourceTimezone preserves the input timezone offset.
+// Returns "" when the control was created with WithOptionalDefault and the user
+// has not yet interacted with the picker.
 func (c *dateTimeControl) Value() string {
+	if c.unset {
+		return ""
+	}
 	t := time.Date(c.year, time.Month(c.month), c.day, c.hour, c.min, c.sec, 0, c.inputLoc())
 	if c.normalization == RetainSourceTimezone {
 		return t.Format(time.RFC3339)
@@ -341,6 +363,14 @@ func (c *dateTimeControl) Value() string {
 }
 
 func (c *dateTimeControl) View() string {
+	if c.unset {
+		placeholder := c.styles.DateSegment.Render("(not set)")
+		if c.focused {
+			return placeholder + "\n" + c.styles.Help.Render("0-9: type a date  +/-: adjust  ←→: move between fields")
+		}
+		return placeholder
+	}
+
 	buf := c.digitBuf
 	active := c.focused && !c.tzFocused
 
@@ -405,6 +435,18 @@ func (c *dateTimeControl) Update(msg tea.Msg) tea.Cmd {
 		var cmd tea.Cmd
 		c.tzInput, cmd = c.tzInput.Update(msg)
 		return cmd
+	}
+
+	// Any interaction activates an optional (unset) control.
+	if c.unset {
+		switch key.String() {
+		case "left", "right", "+", "-", "backspace":
+			c.unset = false
+		default:
+			if len(key.String()) == 1 && key.String()[0] >= '0' && key.String()[0] <= '9' {
+				c.unset = false
+			}
+		}
 	}
 
 	// Normal datetime segment handling.
